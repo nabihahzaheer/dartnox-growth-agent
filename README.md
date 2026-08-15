@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Growth Agent — operator console
 
-## Getting Started
+Frontend-only prototype of the operator-facing product for an AI content agent. The agent
+plans a content calendar from a client's brand pillars, drafts channel-specific posts,
+routes them through human approval, schedules publishing, and feeds per-post performance
+back into future drafting.
 
-First, run the development server:
+Built for a technical assessment, August 2026. This is not a Dartnox product and is not
+affiliated with any live system.
+
+## Running it
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Built against Node 25 locally and deployed on Vercel's current LTS runtime. Nothing here
+depends on a specific Node version.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## What is simulated
 
-## Learn More
+All of it. There is no backend, no API routes, no keys and no network calls. Every piece
+of state lives client-side.
 
-To learn more about Next.js, take a look at the following resources:
+Every piece of data is served by `lib/agentClient.ts` — the single module standing in for
+a real API client. Its functions are `async`, resolve after a delay that varies by
+operation, and can be made to fail deliberately, so loading and error states in the UI are
+honest rather than staged locally in each component. No component imports a fixture file
+directly. Fixtures live in `fixtures/` as versioned, typed data and are read by that one
+module and nowhere else.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+That module is the entire migration path. Replacing it with a real HTTP client is the
+whole job, and the type signatures on its functions are the API contract you would hand a
+backend engineer on day one.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Structure
 
-## Deploy on Vercel
+```
+app/          routes, one directory per screen
+components/   shared UI
+lib/          types.ts (the data contract), agentClient.ts (the simulated API)
+fixtures/     typed, versioned dummy data — imported only by agentClient.ts
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`fixtures/` sits beside `lib/` rather than inside it on purpose: it is a separate layer
+with exactly one permitted consumer, and the file tree should say so.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## What I would do differently with more time
+
+Filled in at submission.
