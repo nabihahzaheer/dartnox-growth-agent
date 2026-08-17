@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agent instruction files
+# `next dev` writes AGENTS.md and CLAUDE.md itself whenever it detects an AI coding
+# agent, and re-creates them if deleted — see
+# node_modules/next/dist/server/lib/generate-agent-files.js. They are generated tool
+# config, not part of this project's documentation, so they stay out of the repo and
+# out of the diff. README.md is the only documentation here.
+AGENTS.md
+CLAUDE.md
