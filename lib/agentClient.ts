@@ -57,6 +57,7 @@ import type {
   FixtureSet,
   GuardrailEvent,
   GuardrailEventId,
+  QueueItem,
   RejectionReasonCode,
   MetricDescriptor,
   Pillar,
@@ -274,12 +275,23 @@ export async function getRunSummaries(): Promise<RunSummary[]> {
       if (run.type === 'poll') {
         return { run, title: 'Check replies', detail: 'Posts under 48h' };
       }
-      // Draft runs. The parent of a batch has no draft of its own.
+      // Draft runs with no draft of their own: either the parent of a batch, or a run that has
+      // not produced one yet.
       if (!draft) {
+        /**
+         * A batch is identified by *having children*, not by lacking a parent. The first version
+         * used "no parent" and so labelled every redraft — which is parentless, because a rejection
+         * queues it directly — as "Weekly drafting batch". Visible in the rail the moment a
+         * rejection landed.
+         */
+        const isBatchParent = world.runs.some((r) => r.parent_run_id === run.id);
+        if (isBatchParent) return { run, title: 'Weekly drafting batch', detail: '8 posts' };
+
+        if (run.state === 'queued') return { run, title: 'Redraft', detail: 'Queued after a rejection' };
         return {
-          run: run,
-          title: run.parent_run_id ? 'Draft' : 'Weekly drafting batch',
-          detail: run.state === 'parked_transient' ? 'Source unavailable' : '8 posts',
+          run,
+          title: 'Draft',
+          detail: run.state === 'parked_transient' ? 'Source unavailable' : 'No draft produced',
         };
       }
       return {
@@ -310,6 +322,70 @@ export async function submitBrief(text: string, author: string): Promise<BriefRe
   submittedBriefs.unshift(brief);
   return brief;
 }
+
+/**
+ * THE WORK QUEUE.
+ *
+ * A union, not an array of drafts (D-033). Two of the things a person has to clear never became
+ * drafts: a run quarantined at the input guardrail halts before the drafting node, and a run
+ * parked on a failure needs a human even though it produced nothing. A queue typed `Draft[]`
+ * silently drops the two most interesting items in the system.
+ *
+ * SORTING IS A-09'S RULE, AND IT IS THE WHOLE OF WHAT "ESCALATE TO OPERATOR" MEANS IN v1. Since
+ * every post already reaches a human, a low score or a guardrail warning cannot change *whether*
+ * an item is seen. What it changes is how it arrives: flagged, and at the top. That is the entire
+ * behavioural difference, and it lives here rather than in the component because it is a rule
+ * about the work, not about the rendering.
+ */
+export async function getQueue(): Promise<QueueItem[]> {
+  return read(LATENCY_MS.list, () => {
+    const threshold = world.settings.score_threshold;
+
+    const draftItems: QueueItem[] = world.drafts
+      .filter((d) => d.state === 'awaiting_approval')
+      .map((draft) => ({
+        kind: 'draft' as const,
+        draft,
+        approval:
+          world.approvals.find(
+            (a) => a.draft_version_id === draft.current_version_id && a.decided_at === null,
+          ) ?? null,
+        events: world.guardrailEvents.filter((e) => e.draft_id === draft.id),
+      }));
+
+    /** Quarantined and parked runs. Both need clearing; neither is a draft. */
+    const runItems: QueueItem[] = world.runs
+      .filter((r) => r.state === 'quarantined' || r.state.startsWith('parked'))
+      .map((run) => ({
+        kind: 'run' as const,
+        run,
+        events: world.guardrailEvents.filter((e) => e.run_id === run.id),
+      }));
+
+    const flagged = (item: QueueItem): boolean =>
+      item.kind === 'run' ||
+      item.draft.composite_score < threshold ||
+      item.events.some((e) => e.result !== 'pass');
+
+    const waitingSince = (item: QueueItem): number =>
+      item.kind === 'draft' ? (item.approval?.queued_at ?? 0) : (item.run.started_at as number);
+
+    return [...draftItems, ...runItems].sort((a, b) => {
+      if (flagged(a) !== flagged(b)) return flagged(a) ? -1 : 1;
+      // Oldest first within a group: the queue-age p95 is what this ordering protects.
+      return waitingSince(a) - waitingSince(b);
+    });
+  });
+}
+
+/**
+ * Rejection reasons the operator has given, newest first.
+ *
+ * A-04 bounds what reaches a drafting prompt to the last five reasons or thirty days, because an
+ * unbounded list of grievances is not context, it is noise. The bound is applied here rather than
+ * at the prompt so the console shows exactly what the agent would receive.
+ */
+const rejectionsGiven: { code: RejectionReasonCode; label: string }[] = [];
 
 /**
  * Idempotency keys already spent.
@@ -387,9 +463,14 @@ export async function submitReview(
     case 'approve_with_edits':
       patch = approve(world, draftId, ctx, { text: decision.text, editTags: decision.editTags });
       break;
-    case 'reject':
+    case 'reject': {
       patch = reject(world, draftId, decision.reasonCode, decision.note, ctx);
+      const label =
+        world.settings.rejection_reason_set.find((r) => r.code === decision.reasonCode)?.label ??
+        decision.reasonCode;
+      rejectionsGiven.unshift({ code: decision.reasonCode, label });
       break;
+    }
     case 'escalate':
       patch = escalate(world, draftId, decision.tier, decision.detail, ctx);
       break;
@@ -478,11 +559,33 @@ export function streamRun(
      * The limit, which belongs in the README: the drafted *text* is still pre-written. What is
      * real is which input the run consumed.
      */
-    .map((step) =>
-      step.brief_ref && submittedBriefs.length > 0
-        ? { ...step, brief_ref: submittedBriefs[0] }
-        : step,
-    );
+    .map((step) => {
+      if (!step.brief_ref && step.applied_inputs.length === 0) return step;
+
+      /**
+       * The brief's hardest queue clause: a rejection must "visibly change what the agent does
+       * next". It does, here — the next drafting step lists the rejection it consumed, alongside
+       * the settings and rules it read.
+       *
+       * Assembled at emit time from what is in the store *now*, not baked into the fixture. That
+       * single property is what makes both this and the settings controls demonstrable rather than
+       * claimed, and it is why `run_now` had to exist at all.
+       */
+      const consumedRejections = rejectionsGiven.slice(0, 5).map((r) => ({
+        kind: 'rejection_reason' as const,
+        id: r.code,
+        label: `Avoiding: ${r.label}`,
+      }));
+
+      return {
+        ...step,
+        brief_ref: step.brief_ref && submittedBriefs.length > 0 ? submittedBriefs[0] : step.brief_ref,
+        applied_inputs:
+          step.applied_inputs.length > 0
+            ? [...consumedRejections, ...step.applied_inputs]
+            : step.applied_inputs,
+      };
+    });
 
   const history = steps.filter((s) => s.seq <= fromSeq);
   const pending = steps.filter((s) => s.seq > fromSeq);

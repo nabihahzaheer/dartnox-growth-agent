@@ -19,7 +19,10 @@ import type { RunId } from '@/lib/types';
 import { Badge, RUN_STATE_LABEL, runStateTone } from '@/components/Badge';
 import { formatRelative } from '@/lib/time';
 
-const SCREENS = [{ href: '/console', label: 'Console' }] as const;
+const SCREENS = [
+  { href: '/console', label: 'Console' },
+  { href: '/queue', label: 'Queue' },
+] as const;
 
 export function Rail({
   selectedRunId,
