@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check": "node --experimental-strip-types scripts/check.ts",
+    "check": "node --experimental-strip-types scripts/check.mts",
     "verify": "npm run check && tsc --noEmit && eslint && next build"
   },
   "dependencies": {

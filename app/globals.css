@@ -1,26 +1,133 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/**
+ * VISUAL LANGUAGE (D-039)
+ *
+ * An operator console is a dense, information-first surface. The failure mode is five screens that
+ * look like five products, so the vocabulary is fixed here and every screen resolves through it.
+ *
+ * One accent, used only for the current nav item and primary actions. State is carried by a token
+ * per record state rather than by decoration, so a state cannot be styled two ways on two screens.
+ * Two type sizes. Monospace for identifiers, timestamps and trace content — the cheapest available
+ * signal that this is an engineering surface, and it makes a run id scannable when a reviewer is
+ * asked to follow one between screens.
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --bg: #fbfbfa;
+  --surface: #ffffff;
+  --surface-sunk: #f4f4f2;
+  --border: #e2e2df;
+  --border-strong: #cfcfca;
+  --text: #1a1a19;
+  --text-muted: #6b6b66;
+  --text-faint: #96968f;
+  --accent: #1f5aa8;
+  --accent-soft: #e8f0fa;
+
+  /* Record states. Named for the state, never for the sentiment, so the mapping is one lookup. */
+  --state-running: #1f5aa8;
+  --state-running-bg: #e8f0fa;
+  --state-awaiting: #9a6700;
+  --state-awaiting-bg: #fdf5e2;
+  --state-approved: #1e7a46;
+  --state-approved-bg: #e6f4ec;
+  --state-blocked: #c0392b;
+  --state-blocked-bg: #fbeae8;
+  --state-parked: #a04f18;
+  --state-parked-bg: #fdefe4;
+  --state-neutral: #6b6b66;
+  --state-neutral-bg: #f0f0ee;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #131314;
+    --surface: #1a1a1c;
+    --surface-sunk: #101011;
+    --border: #2c2c2f;
+    --border-strong: #3d3d41;
+    --text: #ececea;
+    --text-muted: #9a9a95;
+    --text-faint: #6e6e69;
+    --accent: #7aa9e8;
+    --accent-soft: #17253a;
+
+    --state-running: #7aa9e8;
+    --state-running-bg: #17253a;
+    --state-awaiting: #e0b25c;
+    --state-awaiting-bg: #33280f;
+    --state-approved: #6cc48d;
+    --state-approved-bg: #14301f;
+    --state-blocked: #ef8a7c;
+    --state-blocked-bg: #351915;
+    --state-parked: #e0a06a;
+    --state-parked-bg: #33220f;
+    --state-neutral: #9a9a95;
+    --state-neutral-bg: #232326;
   }
 }
 
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text);
   font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Never removed, never restyled to invisibility. D-025 declined the component library that would
+   have handled focus for us, so it is handled deliberately instead. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/**
+ * A step arriving in the feed.
+ *
+ * REDUCED MOTION IS NOT "TURN THE FEATURE OFF". Steps appearing is the content of this product,
+ * not decoration, so the reduced-motion rule strips the movement and keeps the appearance. A
+ * reader who prefers less motion still needs to see the agent work.
+ */
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.step-enter {
+  animation: step-in 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-enter {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -37,12 +37,14 @@
  */
 
 import { fixtures } from '@/fixtures';
+import { NOW } from '@/lib/time';
 import type {
   Client,
   ConsoleError,
   Draft,
   DraftId,
   FixtureSet,
+  GuardrailEvent,
   MetricDescriptor,
   Pillar,
   Run,
@@ -192,6 +194,40 @@ export async function getActiveRun(): Promise<Run> {
     if (waiting) return waiting;
     return world.runs.at(-1) ?? fail({ kind: 'not_found' });
   });
+}
+
+/** The guardrail events raised by a run, so the console can render each check at its position in
+ *  the stream. Attached by `run_step_id` rather than looked up by run: L4 events belong to the
+ *  *publish* run, so a join through `run_id` would silently miss them. */
+export async function getGuardrailEvents(id: RunId): Promise<GuardrailEvent[]> {
+  return read(LATENCY_MS.list, () => world.guardrailEvents.filter((e) => e.run_id === id));
+}
+
+/* ================================================================================================
+ * WRITES — only one for now
+ * ==============================================================================================*/
+
+/**
+ * Halt a run. The console's single write, and the only operator action that reaches this module
+ * before the queue exists.
+ *
+ * C6: the architecture named an `abandoned` state and nothing that produced one. Three producers
+ * were then named, and this is the one a person can reach — mapped onto `abandoned` with
+ * `end_reason: 'operator_halt'` rather than inventing a separate `halted` state, which is what
+ * makes the state reachable through the reviewer's own action rather than only in prose.
+ *
+ * The draft it was producing stays in `drafting` and surfaces as orphaned. That is deliberate: a
+ * halt mid-run leaves real debris, and tidying it away would misrepresent what stopping costs.
+ */
+export async function haltRun(id: RunId): Promise<Run> {
+  await sleep(LATENCY_MS.list);
+  const run = world.runs.find((r) => r.id === id);
+  if (!run) fail({ kind: 'not_found' });
+
+  run.state = 'abandoned';
+  run.end_reason = 'operator_halt';
+  run.ended_at = NOW;
+  return run;
 }
 
 /* ================================================================================================
