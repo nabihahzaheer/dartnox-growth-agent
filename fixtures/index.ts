@@ -51,6 +51,16 @@ import {
   runSteps,
   runs,
 } from './pipeline.ts';
+import {
+  historyApprovals,
+  historyDrafts,
+  historyEvents,
+  historyPosts,
+  historyRuns,
+  historySlots,
+  historySnapshots,
+  historySteps,
+} from './history.ts';
 
 export const schemaVersion: FixtureSchemaVersion = FIXTURE_SCHEMA_VERSION;
 
@@ -70,15 +80,21 @@ export const fixtures: FixtureSet = {
 
   client,
   pillars,
-  calendarSlots,
-  drafts,
-  approvals,
-  posts: [],
-  metricSnapshots: [],
+
+  /**
+   * Live pipeline first, then settled history. Order is not load-bearing — every consumer filters
+   * or aggregates — but keeping the two groups adjacent makes the set readable, and readable
+   * fixtures are the ones that get corrected when they are wrong.
+   */
+  calendarSlots: [...calendarSlots, ...historySlots],
+  drafts: [...drafts, ...historyDrafts],
+  approvals: [...approvals, ...historyApprovals],
+  posts: historyPosts,
+  metricSnapshots: historySnapshots,
   guardrailRules,
-  guardrailEvents,
-  runs,
-  runSteps,
+  guardrailEvents: [...guardrailEvents, ...historyEvents],
+  runs: [...runs, ...historyRuns],
+  runSteps: [...runSteps, ...historySteps],
   reflectionRules,
   settings,
   metricDescriptors,
