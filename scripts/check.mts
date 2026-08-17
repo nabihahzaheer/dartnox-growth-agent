@@ -296,7 +296,46 @@ check('fixture set declares the schema version', fixtures.schemaVersion === '1')
 
 section('Transitions');
 
-const { approve, reject, escalate, contentDigest } = await import('../lib/world.ts');
+const { approve, reject, escalate, contentDigest, workingDaysUntil } = await import(
+  '../lib/world.ts'
+);
+
+/**
+ * The runway arithmetic, checked directly.
+ *
+ * This decides whether a rejected slot slips or is dropped, so getting it wrong silently changes
+ * a business outcome. The first implementation was right only because the epoch happens to fall on
+ * the same weekday as the anchor, and ignored its own `now` argument entirely — the kind of defect
+ * that passes every test you did not write.
+ *
+ * The anchor is a Thursday, so day 0 is Thursday, day 1 Friday, day 2 Saturday, day 3 Sunday.
+ */
+const DAY_MIN = 24 * 60;
+const off = (d: number) => (d * DAY_MIN) as never;
+
+check('runway · Thu -> Fri is 1 working day', workingDaysUntil(off(0), off(1)) === 1);
+check('runway · Thu -> Sat is 1 (Saturday does not count)', workingDaysUntil(off(0), off(2)) === 1);
+check('runway · Thu -> Sun is 1 (nor Sunday)', workingDaysUntil(off(0), off(3)) === 1);
+check('runway · Thu -> Mon is 2', workingDaysUntil(off(0), off(4)) === 2);
+check('runway · Thu -> next Thu is 5', workingDaysUntil(off(0), off(7)) === 5);
+check('runway · a slot already past has no runway', workingDaysUntil(off(3), off(1)) === 0);
+
+/**
+ * The cases that actually separate the correct implementation from the broken one.
+ *
+ * The first version always walked the weekday sequence forward from the epoch — Friday, Saturday,
+ * Sunday… — no matter what `now` was. So it only differs from the truth when the decision is taken
+ * on a day that is not a multiple of seven from the anchor, and the first three cases below happen
+ * to agree under both. These do not.
+ *
+ * Written after the earlier assertions passed against the broken version, which made them look
+ * like a guard while guarding nothing.
+ */
+// Friday to Sunday: the only days in between are Saturday and Sunday, so zero working days.
+// The broken version counted one, by starting its weekday walk at Friday regardless.
+check('runway · Fri -> Sun is 0', workingDaysUntil(off(1), off(3)) === 0);
+// Tuesday to the following Saturday spans Wed, Thu, Fri — three. The broken version said two.
+check('runway · Tue -> Sat is 3', workingDaysUntil(off(5), off(9)) === 3);
 
 const ctx = {
   now: 0 as never,

@@ -11,7 +11,7 @@
  * Four lines removes a class of hydration bug and gives exactly the format intended.
  */
 
-import { CLIENT_TIMEZONE, computeAnchorIso } from './anchor.ts';
+import { CLIENT_TIMEZONE } from './anchor.ts';
 import type { MinutesFromAnchor } from './types.ts';
 
 export { CLIENT_TIMEZONE };
@@ -99,10 +99,6 @@ export function msFromNow(offset: MinutesFromAnchor): number {
   return offset * MINUTE_MS;
 }
 
-export function isPast(offset: MinutesFromAnchor): boolean {
-  return offset < 0;
-}
-
 /* ------------------------------------------------------------------------------ formatting --- */
 
 function clockAt(offset: MinutesFromAnchor) {
@@ -182,10 +178,4 @@ export function formatDuration(totalMinutes: number): string {
   const days = Math.floor(hours / 24);
   const remHours = hours % 24;
   return remHours === 0 ? `${days}d` : `${days}d ${remHours}h`;
-}
-
-/** Not used by the app. `scripts/check.ts` uses it to confirm the computed anchor and the
- *  committed fallback obey the same invariant. */
-export function anchorForNow(): string {
-  return computeAnchorIso(new Date());
 }

@@ -75,12 +75,7 @@ import type {
  * `sources`, `prereqs` — would still be shared with the module-scope fixtures, so a write that
  * touched one would reach back into the template. Deep by default is the only safe default here.
  */
-let world: FixtureSet = structuredClone(fixtures);
-
-/** Used by the failure drawer's reset, and by anything that needs a clean slate. */
-export function resetWorld(): void {
-  world = structuredClone(fixtures);
-}
+const world: FixtureSet = structuredClone(fixtures);
 
 /* ================================================================================================
  * SIMULATED TRANSPORT
@@ -314,10 +309,6 @@ export async function submitBrief(text: string, author: string): Promise<BriefRe
   const brief: BriefRef = { author, submitted_at: NOW, text };
   submittedBriefs.unshift(brief);
   return brief;
-}
-
-export function pendingBriefCount(): number {
-  return submittedBriefs.length;
 }
 
 /**

@@ -20,7 +20,6 @@
 
 import type {
   Approval,
-  ApprovalId,
   CalendarSlot,
   Draft,
   DraftId,
@@ -111,19 +110,34 @@ function slotFor(world: FixtureSet, draft: Draft): CalendarSlot | undefined {
   return world.calendarSlots.find((s) => s.id === draft.slot_id);
 }
 
+/** The anchor is a Thursday, and every offset in the system is measured from it. That makes any
+ *  day's weekday arithmetic rather than a date lookup — and it is the one assumption this file
+ *  makes about the calendar, so it is named rather than buried. */
+const ANCHOR_WEEKDAY = 4;
+const MINUTES_PER_DAY = 24 * 60;
+
 /**
- * Working days between now and a slot's publish time.
+ * Working days between two offsets.
  *
  * Working days, not elapsed days, because the runway rule is about whether a person can review a
  * redraft — and nobody reviews on Saturday. A Friday rejection for a Monday slot has one working
- * day, not three.
+ * day of runway, not three, which is the difference between slipping the slot and dropping it.
+ *
+ * Rewritten 17 Aug. The first version built a `new Date(0)` and walked forward from it, which was
+ * correct **by coincidence**: the epoch is a Thursday and so is the anchor. It also ignored `now`
+ * entirely — the loop always counted from the epoch — so any decision taken at a non-zero offset
+ * would have counted the wrong weekdays. Nothing failed, because every decision so far is taken at
+ * offset zero. That is the worst kind of bug to leave in: right today, wrong later, silent both
+ * times.
  */
-function workingDaysUntil(now: MinutesFromAnchor, publishAt: MinutesFromAnchor): number {
-  const start = new Date(0);
-  const days = Math.floor(((publishAt as number) - (now as number)) / (24 * 60));
+export function workingDaysUntil(now: MinutesFromAnchor, publishAt: MinutesFromAnchor): number {
+  const startDay = Math.floor((now as number) / MINUTES_PER_DAY);
+  const endDay = Math.floor((publishAt as number) / MINUTES_PER_DAY);
+
   let working = 0;
-  for (let i = 1; i <= Math.max(0, days); i++) {
-    const weekday = new Date(start.getTime() + i * 86_400_000).getUTCDay();
+  for (let day = startDay + 1; day <= endDay; day++) {
+    // `% 7` twice, because a negative offset — a slot in the past — gives a negative remainder.
+    const weekday = (((ANCHOR_WEEKDAY + day) % 7) + 7) % 7;
     if (weekday !== 0 && weekday !== 6) working++;
   }
   return working;
@@ -401,9 +415,4 @@ export function labelEscalation(
       },
     ],
   };
-}
-
-/** Exported for the check script, which asserts the approval id is stable across a replay. */
-export function approvalIdFor(draft: Draft): ApprovalId {
-  return `APR-${draft.id.replace('DRAFT-', '')}` as ApprovalId;
 }
