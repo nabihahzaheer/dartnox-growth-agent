@@ -101,7 +101,11 @@ export function Countdown({ deadline, expiredLabel = 'overdue', onExpire, classN
        *  obvious thing and would reintroduce the mismatch this component exists to avoid. */
       dateTime={at(deadline).toISOString()}
       title={formatDateTime(deadline)}
-      className={className}
+      /** `.tabular` is not optional here and is applied by the component rather than left to the
+       *  four call sites: this is the one string in the app that rewrites itself once a second, so
+       *  proportional digits would make the whole line jitter sideways on every tick. Callers keep
+       *  their own `className` for size and colour. */
+      className={className ? `tabular ${className}` : 'tabular'}
       /** Deliberately not a live region: announcing every second makes a screen reader unusable.
        *  The deadline is readable from `title` and `dateTime`; the ticking is visual. */
       aria-live="off"

@@ -40,10 +40,10 @@ export function BarChart({
         const content = (
           <>
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-                {bar.label}
-              </span>
-              <span className="font-mono text-[11px]">
+              <span className="t-label">{bar.label}</span>
+              {/* `.tabular` because these are a column: without it the value column shifts sideways
+                  as digits change width, and a chart whose labels move reads as unstable data. */}
+              <span className="t-body tabular font-mono">
                 {bar.value.toFixed(0)}
                 {unit}
               </span>
@@ -58,16 +58,22 @@ export function BarChart({
                 fill={selected ? 'var(--accent-text)' : 'var(--accent)'}
               />
             </svg>
-            {bar.caption && (
-              <div className="mt-0.5 text-[11px]" style={{ color: 'var(--text-faint)' }}>
-                {bar.caption}
-              </div>
-            )}
+            {bar.caption && <div className="t-meta tabular mt-0.5">{bar.caption}</div>}
           </>
         );
 
+        /* `aria-pressed` because selection was previously carried by the bar's fill alone, which is
+           invisible to a screen reader and to anyone who cannot separate the two blues. The button
+           was already a real `<button>`, so the focus ring and keyboard activation come free — the
+           only thing missing was the state. */
         return onSelect ? (
-          <button key={bar.id} type="button" onClick={() => onSelect(bar.id)} className="block w-full text-left">
+          <button
+            key={bar.id}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onSelect(bar.id)}
+            className="block w-full rounded text-left"
+          >
             {content}
           </button>
         ) : (

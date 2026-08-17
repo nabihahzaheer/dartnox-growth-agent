@@ -114,8 +114,8 @@ export function FailureDrawer() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded border px-2.5 py-1 font-mono text-xs"
-        style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+        className="t-label rounded border px-2.5 py-1 font-mono"
+        style={{ borderColor: 'var(--border)' }}
       >
         break something
       </button>
@@ -132,10 +132,10 @@ export function FailureDrawer() {
       >
         <div className="space-y-3 p-4">
           <div>
-            <h2 id="failure-drawer-title" className="text-sm font-semibold">
+            <h2 id="failure-drawer-title" className="t-section">
               Break something on purpose
             </h2>
-            <p className="mt-1 text-[13px] text-[var(--text-muted)]">
+            <p className="t-label mt-1">
               A demo control, not a product feature. In production the equivalents are a staging
               environment, fault injection in CI, and a replay tool.
             </p>
@@ -155,8 +155,8 @@ export function FailureDrawer() {
                     className="mt-1"
                   />
                   <span>
-                    <span className="block text-[13px] font-medium">{item.label}</span>
-                    <span className="mt-0.5 block text-[13px] text-[var(--text-muted)]">
+                    <span className="t-body block font-medium">{item.label}</span>
+                    <span className="t-label mt-0.5 block">
                       {item.effect}
                     </span>
                   </span>
@@ -169,7 +169,7 @@ export function FailureDrawer() {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded border px-2.5 py-1 text-sm"
+              className="t-body rounded border px-2.5 py-1"
               style={{ borderColor: 'var(--border-strong)' }}
             >
               Close

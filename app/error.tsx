@@ -25,19 +25,21 @@ export default function RouteError({
         className="rounded border px-4 py-4"
         style={{ borderColor: 'var(--state-blocked)', background: 'var(--state-blocked-bg)' }}
       >
-        <h1 className="text-sm font-semibold">This screen crashed</h1>
-        <p className="mt-1 text-[13px]">
-          Something threw while rendering. That is a bug rather than a transient failure, and the
-          state on this screen is gone — reloading starts from the fixture data again.
-        </p>
-        <p className="mt-2 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+        {/* `.t-title` rather than `.t-section`: this route renders no top bar, so this line is the
+            screen name as well as the heading — the one place the title role appears here. */}
+        <h1 className="t-title">This screen crashed</h1>
+        {/* Cut from three clauses to one. It still says both things that change what the operator
+            does — it is a bug, and the state is gone — and an error panel is the last place a
+            product should be explaining itself at length. */}
+        <p className="t-body mt-1">A bug, not a transient failure. Reloading restarts from the fixtures.</p>
+        <p className="t-meta mt-2 font-mono" style={{ color: 'var(--text-muted)' }}>
           {error.message}
           {error.digest ? ` · ${error.digest}` : ''}
         </p>
         <button
           type="button"
           onClick={reset}
-          className="mt-3 rounded border px-2.5 py-1 text-sm font-medium"
+          className="t-body mt-3 rounded border px-2.5 py-1 font-medium"
           style={{ borderColor: 'var(--border-strong)' }}
         >
           Try rendering again

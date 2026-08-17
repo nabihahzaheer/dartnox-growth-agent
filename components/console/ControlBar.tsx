@@ -30,6 +30,7 @@ export function ControlBar({
   onBackToLive,
   canHalt,
   viewingPast,
+  runActive,
   busy,
 }: {
   onSubmitBrief: (text: string) => Promise<void>;
@@ -39,6 +40,8 @@ export function ControlBar({
   canHalt: boolean;
   /** Looking at a run that already finished, rather than following the live one. */
   viewingPast: boolean;
+  /** A run is streaming, or has stopped and is waiting on a person. */
+  runActive: boolean;
   busy: boolean;
 }) {
   const [composing, setComposing] = useState(false);
@@ -83,7 +86,7 @@ export function ControlBar({
               }}
               rows={3}
               placeholder="Finished the Bergen Street job — owner wanted full electrification, we talked them down to traps and air sealing…"
-              className="w-full resize-none rounded border px-2.5 py-2 text-[13px] leading-relaxed outline-none placeholder:text-[var(--text-faint)]"
+              className="t-body w-full resize-none rounded border px-2.5 py-2 outline-none placeholder:text-[var(--text-faint)]"
               style={{ borderColor: 'var(--border-strong)', background: 'var(--surface)' }}
             />
             <div className="mt-1.5 flex items-center gap-2">
@@ -91,20 +94,20 @@ export function ControlBar({
                 type="button"
                 onClick={() => void submit()}
                 disabled={!text.trim() || sending}
-                className="rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-30"
-                style={{ background: 'var(--accent)', color: '#fff' }}
+                className="t-body rounded px-2.5 py-1 font-medium disabled:opacity-30"
+                style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
               >
                 {sending ? 'Adding…' : 'Add brief'}
               </button>
               <button
                 type="button"
                 onClick={() => setComposing(false)}
-                className="rounded border px-2.5 py-1 text-[13px]"
+                className="t-body rounded border px-2.5 py-1"
                 style={{ borderColor: 'var(--border-strong)' }}
               >
                 Cancel
               </button>
-              <span className="ml-auto font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>
+              <span className="t-meta ml-auto font-mono">
                 ⌘↵ to add
               </span>
             </div>
@@ -114,18 +117,38 @@ export function ControlBar({
         <div className="flex items-center gap-1.5">
           {/*
             "Start a new run", not "Run now".
-            
+
             It was the latter, and the label was actively misleading: after clicking a past run in
             the rail, pressing it appeared to re-run *that* run and in fact started an unrelated
             one. The verb now says what happens, and the back-to-live control below gives the
             action people were actually reaching for.
+
+            AND IT IS ONLY THE PRIMARY BUTTON WHEN NOTHING IS RUNNING.
+
+            It was always accent-filled, including while a run was streaming — so the loudest
+            control on a screen whose whole subject is an agent already working was "start another
+            one". That is what made "what is the point of a Start button if the run starts on its
+            own?" a fair question: the answer is that the agent runs on a schedule and this is the
+            manual entry point, but the styling was asserting it was the thing to do next.
+
+            The button is not hidden or disabled while a run is live. Starting one on demand is
+            §6b's unlock — it is how any "next draft" setting becomes demonstrable — so removing it
+            would cost a real capability to fix a weighting problem. It steps back instead.
           */}
           <button
             type="button"
             onClick={onRunNow}
             disabled={busy}
-            className="rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-40"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            className={
+              runActive
+                ? 't-body rounded border px-2.5 py-1 disabled:opacity-40'
+                : 't-body rounded px-2.5 py-1 font-medium disabled:opacity-40'
+            }
+            style={
+              runActive
+                ? { borderColor: 'var(--border-strong)' }
+                : { background: 'var(--accent)', color: 'var(--accent-ink)' }
+            }
           >
             Start a new run
           </button>
@@ -134,7 +157,7 @@ export function ControlBar({
               type="button"
               onClick={onBackToLive}
               disabled={busy}
-              className="rounded border px-2.5 py-1 text-[13px] disabled:opacity-40"
+              className="t-body rounded border px-2.5 py-1 disabled:opacity-40"
               style={{ borderColor: 'var(--border-strong)' }}
             >
               ← Back to the latest run
@@ -145,7 +168,7 @@ export function ControlBar({
             type="button"
             onClick={onHalt}
             disabled={!canHalt}
-            className="rounded border px-2.5 py-1 text-[13px] disabled:opacity-30"
+            className="t-body rounded border px-2.5 py-1 disabled:opacity-30"
             style={{ borderColor: 'var(--border-strong)' }}
           >
             Halt
@@ -154,7 +177,7 @@ export function ControlBar({
             <button
               type="button"
               onClick={() => setComposing(true)}
-              className="rounded border px-2.5 py-1 text-[13px]"
+              className="t-body rounded border px-2.5 py-1"
               style={{ borderColor: 'var(--border-strong)' }}
             >
               Add brief

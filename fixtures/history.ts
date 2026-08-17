@@ -88,8 +88,24 @@ const intBetween = (lo: number, hi: number) => Math.round(between(lo, hi));
 /* ================================================================================================
  * THE SCHEDULE
  *
- * The anchor is a Thursday. Three weeks back is day −21. The cadence is the contracted one: three
- * LinkedIn a week (Mon, Wed, Thu) and five X (Mon–Fri), which is where 8 a week comes from.
+ * The anchor is a Thursday. The cadence is the contracted one: three LinkedIn a week (Mon, Wed,
+ * Thu) and five X (Mon–Fri), which is where 8 a week comes from.
+ *
+ * EVERY OFFSET LANDS ON A WEEKDAY, AND THIS USED TO BE FALSE.
+ *
+ * The offsets were originally written as round numbers counting back from the anchor — −21, −20,
+ * −19, −18 — which reads as a sensible three-week run and is not one. The anchor is a Thursday, so
+ * −19 and −18 are a Saturday and a Sunday. Six of the twenty-three entries published at the
+ * weekend, on a client whose contracted cadence is Monday to Friday and whose L4 publish-time guard
+ * checks a posting window before it posts. The fixture failed its own architecture.
+ *
+ * It survived because nothing rendered a weekday. Every surface said "3 days ago". The defect
+ * became visible the moment the week view drew the data on a Monday-to-Sunday grid, which is the
+ * argument for the week view in one sentence.
+ *
+ * The remap moved eleven entries. Each stayed inside its own ISO week and inside its own
+ * `settingsVersionAt` band, so no draft changed settings cohort and the edit-rate drill-down's
+ * bars are unmoved. `scripts/check.mts` now asserts the weekday invariant, so it cannot come back.
  * ==============================================================================================*/
 
 type Planned = {
@@ -126,10 +142,10 @@ const PLAN: Planned[] = [
       'So the plan we cost is never the plan in the guide. It is the plan that survives the ' +
       'building we actually opened.',
   },
-  { dayOffset: -21, channel: 'x', pillar: PILLAR_COST, angle: 'What a survey actually costs' },
+  { dayOffset: -23, channel: 'x', pillar: PILLAR_COST, angle: 'What a survey actually costs' },
   { dayOffset: -20, channel: 'x', pillar: PILLAR_COMPLIANCE, angle: 'Reporting deadline reminder' },
   {
-    dayOffset: -19,
+    dayOffset: -22,
     channel: 'linkedin',
     pillar: PILLAR_COMPLIANCE,
     angle: 'The three numbers an owner needs before deciding anything',
@@ -147,9 +163,9 @@ const PLAN: Planned[] = [
       tags: ['tightened'],
     },
   },
-  { dayOffset: -19, channel: 'x', pillar: PILLAR_FIELD_NOTES, angle: 'Found behind a riser cover' },
+  { dayOffset: -22, channel: 'x', pillar: PILLAR_FIELD_NOTES, angle: 'Found behind a riser cover' },
   {
-    dayOffset: -18,
+    dayOffset: -24,
     channel: 'linkedin',
     pillar: PILLAR_FIELD_NOTES,
     angle: 'A boiler nobody had serviced since 2011',
@@ -161,7 +177,7 @@ const PLAN: Planned[] = [
       'That is the ordinary case. Not neglect. Just nothing forcing the question.',
   },
   { dayOffset: -17, channel: 'x', pillar: PILLAR_COST, angle: 'Incentive stacking, briefly' },
-  { dayOffset: -17, channel: 'x', pillar: PILLAR_OLD_BUILDINGS, angle: 'Steam traps, again' },
+  { dayOffset: -16, channel: 'x', pillar: PILLAR_OLD_BUILDINGS, angle: 'Steam traps, again' },
 
   /* ---- week of day −14 ------------------------------------------------------------------- */
   {
@@ -192,7 +208,7 @@ const PLAN: Planned[] = [
   { dayOffset: -14, channel: 'x', pillar: PILLAR_COMPLIANCE, angle: 'One line on the next period' },
   { dayOffset: -13, channel: 'x', pillar: PILLAR_FIELD_NOTES, angle: 'Crew note from Sunset Park' },
   {
-    dayOffset: -12,
+    dayOffset: -15,
     channel: 'linkedin',
     pillar: PILLAR_COMPLIANCE,
     angle: 'What a co-op board should ask its managing agent this quarter',
@@ -204,9 +220,9 @@ const PLAN: Planned[] = [
       'None of those need an engineer to answer. All four get harder the longer nobody asks.',
     outcome: 'slipped',
   },
-  { dayOffset: -12, channel: 'x', pillar: PILLAR_COST, angle: 'Payback, without the brochure' },
+  { dayOffset: -15, channel: 'x', pillar: PILLAR_COST, angle: 'Payback, without the brochure' },
   {
-    dayOffset: -11,
+    dayOffset: -17,
     channel: 'linkedin',
     pillar: PILLAR_OLD_BUILDINGS,
     angle: 'Masonry cavities are not insulation',
@@ -263,7 +279,7 @@ const PLAN: Planned[] = [
   { dayOffset: -7, channel: 'x', pillar: PILLAR_COMPLIANCE, angle: 'Filing window opens' },
   { dayOffset: -6, channel: 'x', pillar: PILLAR_COST, angle: 'The cheapest thing you can do' },
   {
-    dayOffset: -5,
+    dayOffset: -8,
     channel: 'linkedin',
     pillar: PILLAR_COST,
     angle: 'Financing is the part nobody explains',
@@ -283,9 +299,9 @@ const PLAN: Planned[] = [
       tags: ['specific_detail_added', 'terminology_corrected'],
     },
   },
-  { dayOffset: -5, channel: 'x', pillar: PILLAR_OLD_BUILDINGS, angle: 'Knob and tube, one line' },
+  { dayOffset: -9, channel: 'x', pillar: PILLAR_OLD_BUILDINGS, angle: 'Knob and tube, one line' },
   {
-    dayOffset: -4,
+    dayOffset: -8,
     channel: 'x',
     pillar: PILLAR_FIELD_NOTES,
     angle: 'A topical note on the cold snap',
@@ -519,8 +535,13 @@ PLAN.forEach((entry, index) => {
    * like `RUN-0141` and looked arbitrary. Ids are the thing an operator quotes when something goes
    * wrong, so they have to look like one series.
    *
-   * History occupies 0101–0124 and the live pipeline 0132–0149, so the numbers also read
-   * chronologically.
+   * History occupies 0101–0124 and the live pipeline 0132–0149, so the two sets never interleave.
+   *
+   * They are no longer strictly chronological *within* the history block. Ids are assigned by array
+   * position and the weekday remap below moved eleven entries without reordering the array —
+   * deliberately, because `evidence_ids`, `example_refs` and `HOSTILE_REPLY_POST_ID` all name
+   * specific ids, and reordering would have silently repointed every one of them at different
+   * content. Nothing reads these ids as an ordering: every surface sorts on `publish_at`.
    */
   const n = String(index + 101).padStart(4, '0');
   const outcome = entry.outcome ?? 'published';
@@ -544,7 +565,24 @@ PLAN.forEach((entry, index) => {
           : outcome === 'dropped'
             ? 'dropped'
             : 'quarantined',
-    original_publish_at: outcome === 'slipped' ? publishAt : null,
+    /**
+     * A SLIP IS A MOVE, SO THE TWO TIMES HAVE TO DIFFER.
+     *
+     * This read `original_publish_at: publishAt` — the original time set equal to the current one.
+     * `CalendarSlot.original_publish_at` exists so the calendar can *show the move* rather than
+     * silently relocating a slot, and a slot whose two times are identical claims a reschedule that
+     * never happened. Rendered on the week grid it printed `09:00 09:00`, one struck through, which
+     * reads as a bug in the renderer rather than as a fact about the slot.
+     *
+     * It survived because nothing rendered `original_publish_at` at all. The week view is the first
+     * surface that reads it.
+     *
+     * The slot was planned a day earlier and went out late, which is what `unreviewed_in_time`
+     * means: the review runway ran out, the slot missed its own window, and the post published on
+     * the next available day. A day back, not an hour, because the slip reason is a missed *day* of
+     * review — and staying on a weekday keeps the weekday invariant this file now asserts.
+     */
+    original_publish_at: outcome === 'slipped' ? minutes((publishAt as number) - DAY) : null,
     slip_reason: outcome === 'slipped' ? 'unreviewed_in_time' : null,
     calendar_run_id: runId,
   });

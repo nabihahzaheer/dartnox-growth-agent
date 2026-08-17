@@ -49,6 +49,11 @@
 
   /* The blue, unchanged, used as a fill: squares, markers, the active nav chip. */
   --accent: #2e5cff;
+  /* Text and marks sitting ON the accent fill. Added because six primary buttons across four
+     screens each hardcoded `#fff`, which is the shape a token exists to prevent: the one value the
+     palette cannot be restyled without hunting. White is right against #2E5CFF at 8.6:1 — the token
+     is about having one owner, not about the colour being in doubt. */
+  --accent-ink: #ffffff;
   /* Lifted for text on ink, where #2E5CFF alone sits too dark against the background. Same hue. */
   --accent-text: #7d97ff;
   --accent-soft: #161d3a;
@@ -117,6 +122,139 @@ body {
 .font-mono {
   font-family: var(--font-mono);
   letter-spacing: 0.02em;
+}
+
+/**
+ * THE TYPE SCALE (D-045)
+ *
+ * WHY THIS EXISTS AS NAMED ROLES RATHER THAN AS SIZES AT CALL SITES.
+ *
+ * Before this block the app carried 201 explicit font-size utilities, every one of them between
+ * 10px and 13px, and no `h1` anywhere. The consequence was not that text was small — it was that
+ * the hierarchy inverted. A section heading was 10px mono uppercase in --text-faint; the field
+ * label directly beneath it was 12px sans in --text-muted. The heading was *smaller and fainter
+ * than the label it introduced*. That is not a taste call, it is backwards, and it happened
+ * because nothing named the roles, so each screen re-derived them and drifted.
+ *
+ * Five roles, and every piece of text on every screen is exactly one of them:
+ *
+ *   .t-title     15/600  --text        the screen, once, in the top bar
+ *   .t-section   14/600  --text        a section heading inside a screen
+ *   .t-body      13/400  --text        rows, controls, post text, everything unmarked
+ *   .t-label     12/400  --text-muted  a field label, a caption, secondary detail
+ *   .t-meta      11/400  --text-faint  timestamps, ids, counts — the things you glance at
+ *
+ * .t-field is the sixth and is deliberately not on that ladder: it is the PDF's Courier-caps FIELD
+ * role, used only for labels inside an expanded step. Reserving the mono-caps treatment for one
+ * job is what stopped headings and labels looking identical — previously both were mono caps.
+ *
+ * SEPARATION IS BY WEIGHT AND COLOUR, NOT BY SIZE. .t-section is one pixel larger than .t-body,
+ * which is what keeps an operator console dense. It reads as a heading because it is the only
+ * semibold full-contrast text in the column and because .section puts real space above it. A
+ * scale that separated by size alone would need 20px headings and would turn five dense screens
+ * into five documents — which is the failure mode this whole pass exists to remove.
+ *
+ * THE FLOOR IS 11px. Nothing renders at 10px any more. 10px carried timestamps, run ids and
+ * effect timings — the small print you actually squint at — and it was the wrong place to be
+ * economical, for the same reason D-039 raised --text-muted and --text-faint off the floor.
+ */
+.t-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.t-section {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+/**
+ * The rung between a section and its rows, added after Settings needed it and derived it locally.
+ *
+ * Settings groups nine panels under five headings, so a panel needs a head that outranks its rows
+ * and is outranked by its group. Every option on the ladder above was wrong: `.t-field` is reserved
+ * for value labels and using it here is exactly the mono-caps collision D-053 removed, and `.t-label`
+ * at 12px muted would have put the heading *below* its own rows again.
+ *
+ * So it is a weight step, not a size step — same 13px as body, semibold, full contrast. Making it a
+ * size step would have pushed `.t-section` to 16px and `.t-title` to 18px to keep the gaps, which is
+ * the document ladder this scale exists to avoid.
+ */
+.t-subsection {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.t-body {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.t-label {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.t-meta {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+
+/* The FIELD role from the assessment PDF: Courier-Bold caps, grey. One job only — labelling a
+   value inside an expanded step or a stat — so that it never competes with .t-section. */
+.t-field {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+/**
+ * Numbers that are read as quantities rather than as prose. `tabular-nums` is the whole point: a
+ * metric that reflows its own digits as it updates reads as a text field, not as an instrument.
+ */
+.t-metric {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* Anything carrying a time, a count, a score or an id. Stops columns of numbers jittering. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * SECTION RHYTHM.
+ *
+ * The other half of the hierarchy problem was spacing: sections were separated by the same gap
+ * that separated rows inside a section, so a screen read as one undifferentiated column. A
+ * heading needs more space above it than below it — that is what binds it to its own content
+ * rather than to the section before it. `:first-child` so the first section does not push the
+ * whole screen down from under the top bar.
+ */
+.section + .section {
+  margin-top: 28px;
+}
+
+.section > .t-section {
+  margin-bottom: 10px;
 }
 
 /**

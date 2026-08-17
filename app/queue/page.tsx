@@ -20,25 +20,26 @@
  * IT HOLDS A UNION, NOT A LIST OF DRAFTS (D-033). A run quarantined at the input guardrail halts
  * before a draft exists, and a parked run needs a human despite producing nothing. Both belong in
  * a work list. Typing this as `Draft[]` would have silently dropped them.
+ *
+ * THE FOUR DECISIONS ARE NOT WRITTEN HERE ANY MORE. They live in `components/DecisionControls.tsx`,
+ * which holds the only `submitReview` call site in the application, and the console renders the
+ * same component at a halted run's interrupt. This screen keeps what is genuinely its own: the
+ * work list, the selection, the keyboard, and the toast. Everything above still happens — through
+ * one implementation instead of the one that used to live in this file.
+ *
+ * WHAT THE QUEUE IS STILL FOR, now that a decision can be taken from the console: a week arrives
+ * in one batch on Wednesday, and clearing eight items in one sitting is a different job from
+ * deciding on the run you happen to be watching. That is why `j` / `k` exist.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  getQueue,
-  getSettings,
-  submitReview,
-  type ReviewDecision,
-} from '@/lib/agentClient';
-import type {
-  ConsoleError,
-  QueueItem,
-  RejectionReasonCode,
-  Settings,
-} from '@/lib/types';
+import { getQueue, getSettings } from '@/lib/agentClient';
+import type { ConsoleError, QueueItem, Settings } from '@/lib/types';
 import { Rail } from '@/components/Rail';
 import { QueueRow, draftOf, itemId } from '@/components/queue/QueueRow';
 import { ErrorPanel, NotFound } from '@/components/ErrorState';
-import { DecisionDialogs } from '@/components/queue/DecisionDialogs';
+import { DecisionControls, type DecisionHandle } from '@/components/DecisionControls';
+import { WeekView } from '@/components/queue/WeekView';
 
 export default function QueuePage() {
   const [items, setItems] = useState<QueueItem[]>([]);
@@ -47,10 +48,33 @@ export default function QueuePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ConsoleError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  /** Which dialog is open, if any. Both are decisions that need more than a click. */
-  const [dialog, setDialog] = useState<'reject' | 'edit' | null>(null);
   /** What just happened, so a decision is not a row silently vanishing. */
   const [lastAction, setLastAction] = useState<string | null>(null);
+
+  /**
+   * The selected row's decision surface, reached imperatively.
+   *
+   * `a` / `e` / `r` are bound on the window and act on whichever row is selected, and the buttons
+   * they stand for now live inside `DecisionControls`. The ref is attached to the selected row
+   * only, so this is always the right instance — and it is null on a parked-run row, which has no
+   * draft to decide against and therefore renders no controls. That null *is* the guard: the verbs
+   * skip an item the cursor can still reach.
+   */
+  const controls = useRef<DecisionHandle>(null);
+
+  /**
+   * List or week — the same work, seen two ways.
+   *
+   * Local state, not a route and not a query param: the calendar is a second reading of this
+   * screen's data, not a place you navigate to, and a `?view=` param would put view switching in the
+   * back button's history. Defaults to the list because the list is where decisions get made; the
+   * week answers "what is going out on Thursday", which is a different question asked less often.
+   */
+  const [view, setView] = useState<'list' | 'week'>('list');
+
+  /** The list column is a reading width; the week needs seven columns. One constant so the header
+   *  bar and the body below it stay aligned to the same edge in both views. */
+  const shell = view === 'week' ? 'max-w-6xl' : 'max-w-3xl';
 
   /**
    * When the current item was selected. A ref, not state: it is read at decision time and never
@@ -105,43 +129,19 @@ export default function QueuePage() {
     };
   }, [reloadNonce]);
 
-  const current = items[selected];
+  /* `const current = items[selected]` used to live here, so this screen could hand the selected
+     item's draft to its own `submitReview` call and to the dialogs it mounted once at the bottom.
+     Both went to `DecisionControls`, which each row builds for its own item — so the selection is
+     now expressed by which row holds the keyboard ref, and nothing needs to resolve it here. */
 
-  /**
-   * Every decision goes through here.
-   *
-   * `secondsOpen` is measured from when the item was selected, not from page load — it is the
-   * rubber-stamp clock, and A-17 watches the share of approvals decided in under fifteen seconds
-   * because that is how human-in-the-loop actually fails. Measuring it from page load would make
-   * every decision look considered.
-   */
-  const decide = useCallback(
-    async (decision: ReviewDecision, describe: string) => {
-      /**
-       * Two of the three arms are decidable and one is not: a parked or quarantined run has no
-       * draft to decide against, and clearing it is a different action. `draftOf` is the one place
-       * that branch lives, so a fourth arm would not mean auditing every handler.
-       */
-      const draft = current ? draftOf(current) : null;
-      if (!draft) return;
-      setBusy(itemId(current!));
-      try {
-        await submitReview(draft.id, draft.current_version_id, decision, {
-          // Derived from the draft and the decision, so a double click replays rather than
-          // producing a second approval.
-          idempotencyKey: `review:${draft.id}:${draft.current_version_id}:${decision.kind}`,
-          secondsOpen: Math.max(1, Math.round((Date.now() - selectedAt.current) / 1000)),
-        });
-        setLastAction(describe);
-        reload();
-      } catch (e) {
-        setError(e as ConsoleError);
-      } finally {
-        setBusy(null);
-        setDialog(null);
-      }
+  /** A decision landed. The message is the shared component's — it reads a rejection's real
+   *  outcome out of the returned `WorldPatch` rather than predicting it. */
+  const onDecided = useCallback(
+    (message: string) => {
+      setLastAction(message);
+      reload();
     },
-    [current, reload],
+    [reload],
   );
 
   /**
@@ -150,30 +150,33 @@ export default function QueuePage() {
    *
    * Ignored while a dialog is open or focus is in a text field — otherwise typing a rejection note
    * containing the letter "a" would approve something.
+   *
+   * `dialog[open]` is the open-modal test now that the dialogs belong to `DecisionControls`. The
+   * alternative was reporting each row's dialog state back up to this screen, which would have put
+   * the state the extraction just removed straight back into this file. A native modal is the
+   * platform's own record of "something is in front of the page", and the tag-name checks above
+   * were never sufficient on their own: focus inside the reject dialog can sit on a button, and
+   * `a` would have approved the item behind it.
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const typing =
-        target?.tagName === 'TEXTAREA' || target?.tagName === 'INPUT' || dialog !== null;
+        target?.tagName === 'TEXTAREA' ||
+        target?.tagName === 'INPUT' ||
+        document.querySelector('dialog[open]') !== null;
       if (typing) return;
 
       if (e.key === 'j') select(Math.min(selected + 1, items.length - 1));
       if (e.key === 'k') select(Math.max(selected - 1, 0));
 
-      /** Decidable means "has a draft behind it" — the draft arm and the returned-post arm. A
-       *  parked run is skipped by the verbs rather than by the cursor, so `j`/`k` still move
-       *  through everything. */
-      const decidable = current ? draftOf(current) !== null : false;
-      if (e.key === 'a' && decidable) {
-        void decide({ kind: 'approve' }, 'Approved · scheduled');
-      }
-      if (e.key === 'r' && decidable) setDialog('reject');
-      if (e.key === 'e' && decidable) setDialog('edit');
+      if (e.key === 'a') controls.current?.approve();
+      if (e.key === 'r') controls.current?.openReject();
+      if (e.key === 'e') controls.current?.openEdit();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [items.length, selected, current, dialog, decide, select]);
+  }, [items.length, selected, select]);
 
   return (
     <>
@@ -183,17 +186,41 @@ export default function QueuePage() {
           className="shrink-0 border-b px-4 py-2.5"
           style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
         >
-          <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="text-[13px] font-bold">Queue</span>
-            <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+          <div className={`mx-auto flex w-full ${shell} flex-wrap items-center gap-x-3 gap-y-1`}>
+            <span className="t-title">Queue</span>
+            <span className="t-label">
               {/* Three states. `loading ? … : count` claimed "0 waiting on you" on a failed
                   load — asserting an empty queue when the queue is simply unknown. */}
               {loading ? 'Loading…' : error ? 'could not load' : `${items.length} waiting on you`}
             </span>
-            <span
-              className="ml-auto font-mono text-[10px]"
-              style={{ color: 'var(--text-faint)' }}
-            >
+
+            {/* Two real buttons with `aria-pressed`, not a tab set: nothing is being navigated to
+                and no panel is being revealed, so the honest semantics are "this control is on". */}
+            <div className="flex overflow-hidden rounded border" style={{ borderColor: 'var(--border-strong)' }}>
+              {(['list', 'week'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={view === option}
+                  onClick={() => setView(option)}
+                  className="t-body px-2 py-0.5 capitalize"
+                  style={{
+                    background: view === option ? 'var(--accent-soft)' : 'transparent',
+                    color: view === option ? 'var(--accent-text)' : 'var(--text-muted)',
+                  }}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+
+            {/*
+              The hint stays visible in both views. The key handler is mounted on the window
+              regardless of which view is showing — that binding is contract and is not being
+              touched — so hiding the strip on the week would leave `a` silently approving the
+              selected item with nothing on screen saying so.
+            */}
+            <span className="t-meta ml-auto font-mono">
               j / k move · a approve · e edit · r reject
             </span>
 
@@ -201,10 +228,12 @@ export default function QueuePage() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl space-y-2 px-4 py-4">
+          <div className={`mx-auto w-full ${shell} space-y-2 px-4 py-4`}>
+            {/* Above the view switch, not inside the list: a decision taken by keyboard while the
+                week is showing still has to report itself. */}
             {lastAction && (
               <p
-                className="rounded px-2.5 py-1.5 text-[13px] font-bold"
+                className="t-body rounded px-2.5 py-1.5 font-bold"
                 style={{ background: 'var(--note-bg)', color: 'var(--note-ink)' }}
               >
                 {lastAction}
@@ -213,72 +242,61 @@ export default function QueuePage() {
 
             {error && <ErrorPanel error={error} onRetry={reload} />}
 
-            {loading && <LoadingRows />}
+            {view === 'week' && <WeekView />}
 
-            {!loading && items.length === 0 && !error && <NotFound
+            {view === 'list' && loading && <LoadingRows />}
+
+            {view === 'list' && !loading && items.length === 0 && !error && <NotFound
                 title="Nothing waiting"
                 detail="The next drafting batch runs Wednesday 06:00."
               />}
 
-            {!loading &&
-              items.map((item, index) => (
-                <QueueRow
-                  key={itemId(item)}
-                  item={item}
-                  threshold={settings?.score_threshold ?? 0.85}
-                  selected={index === selected}
-                  busy={busy === itemId(item)}
-                  onSelect={() => select(index)}
-                  onApprove={() =>
-                    void decide(
-                      { kind: 'approve' },
-                      item.kind === 'post'
-                        ? 'Approved again · rescheduled'
-                        : 'Approved · scheduled',
-                    )
-                  }
-                  onEdit={() => {
-                    select(index);
-                    setDialog('edit');
-                  }}
-                  onReject={() => {
-                    select(index);
-                    setDialog('reject');
-                  }}
-                  onEscalate={() =>
-                    void decide(
-                      { kind: 'escalate', tier: 'stakeholder', detail: 'Raised by the operator.' },
-                      'Escalated to the owner',
-                    )
-                  }
-                />
-              ))}
+            {view === 'list' &&
+              !loading &&
+              items.map((item, index) => {
+                const draft = draftOf(item);
+                return (
+                  <QueueRow
+                    key={itemId(item)}
+                    item={item}
+                    threshold={settings?.score_threshold ?? 0.85}
+                    selected={index === selected}
+                    busy={busy === itemId(item)}
+                    onSelect={() => select(index)}
+                    controls={
+                      /**
+                       * Two of the three arms are decidable and one is not: a parked or
+                       * quarantined run has no draft to decide against, and clearing it is a
+                       * different action. `draftOf` is the one place that branch lives.
+                       */
+                      draft && settings ? (
+                        <DecisionControls
+                          /** Only the selected row gets the ref, so the window keybindings act on
+                           *  the row the highlight is on. */
+                          ref={index === selected ? controls : null}
+                          draft={draft}
+                          reasons={settings.rejection_reason_set}
+                          openedAt={selectedAt}
+                          subject={item.kind === 'post' ? 'returned_post' : 'draft'}
+                          blocked={
+                            item.kind === 'draft' && item.events.some((e) => e.result === 'fail')
+                          }
+                          onDecided={onDecided}
+                          onError={setError}
+                          onBusyChange={(writing) => setBusy(writing ? itemId(item) : null)}
+                        />
+                      ) : null
+                    }
+                  />
+                );
+              })}
           </div>
         </div>
 
-        {settings && current && draftOf(current) && (
-          <DecisionDialogs
-            // Remount on a different draft, so its state initialises from that draft rather than
-            // being reset in an effect.
-            key={draftOf(current)!.id}
-            open={dialog}
-            draft={draftOf(current)!}
-            reasons={settings.rejection_reason_set}
-            onClose={() => setDialog(null)}
-            onReject={(code: RejectionReasonCode, note, label) =>
-              void decide(
-                { kind: 'reject', reasonCode: code, note },
-                `Rejected · ${label}. Redraft queued.`,
-              )
-            }
-            onSaveEdit={(text, tags) =>
-              void decide(
-                { kind: 'approve_with_edits', text, editTags: tags },
-                'Approved with your edits',
-              )
-            }
-          />
-        )}
+        {/* The reject dialog and the inline editor used to be mounted here, once, for the selected
+            item. They travelled with the buttons into `DecisionControls` — the two dialogs *are*
+            two of the four decisions, and leaving them behind would have split one surface across
+            two files again. */}
       </main>
     </>
   );

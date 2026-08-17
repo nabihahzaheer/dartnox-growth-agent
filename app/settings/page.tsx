@@ -35,6 +35,30 @@
  * no explanation reads as a bug, so every locked row carries the sentence saying why — loosening a
  * rule on the evidence of its own false positives is only safe where a false negative is
  * recoverable.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * THE SHAPE OF THE SCREEN (D-045)
+ *
+ * This screen was the worst case of the inverted hierarchy the type scale exists to fix: its
+ * section heading was 10px mono caps in --text-faint and the field label directly beneath it was
+ * 12px sans in --text-muted, so the heading was smaller and fainter than the label it introduced.
+ * Nine headings at that weight, separated by the same gap that separated rows inside them, is one
+ * undifferentiated wall.
+ *
+ * Two changes, and the second matters more than the first:
+ *
+ *   1. Headings are `.t-section` — 14/600, full contrast, the only semibold text in the column.
+ *   2. The nine sections became FIVE GROUPS. Tone · Review · Guardrails · Learned rules · History.
+ *      Threshold, approval rules, escalation triggers and auto-approve are one question — what
+ *      reaches a person — so they are four panels under one heading rather than four peers of it.
+ *      Guardrails are four panels, one per layer, because L1–L4 is the ordering the architecture
+ *      already uses and it was previously carried by a mono-caps line indistinguishable from a
+ *      section heading.
+ *
+ * The rung between `.t-section` and `.t-body` is `<SubHead>`, and it is a WEIGHT step rather than a
+ * size step: 13/600 full contrast over 13/400 rows. Making it a size step would have needed a 16px
+ * sub-heading and a 20px heading above it, which turns a dense operator screen into a document —
+ * the failure mode the scale's own comment in globals.css rejects.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -133,65 +157,100 @@ export default function SettingsPage() {
           className="shrink-0 border-b px-4 py-2.5"
           style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
         >
-          <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="text-[13px] font-bold">Settings</span>
+          <div className="mx-auto flex w-full max-w-3xl flex-wrap items-baseline gap-x-3 gap-y-1">
+            {/* The screen name, and the app's only `h1` on this route. It was a 13px bold span,
+                which is what a screen title looks like when no scale names the role. */}
+            <h1 className="t-title">Settings</h1>
             {/* Three states, not two. The first version read `data ? version : 'Loading…'`, which
                 left the header saying "Loading…" underneath a rendered error panel — caught by
                 looking at the page with the read deliberately broken, which is the only way it
                 could have been caught. */}
-            <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+            <span className="t-meta tabular">
               {data
                 ? `version ${data.settings.current_version_id}`
                 : error
                   ? 'could not load'
                   : 'Loading…'}
             </span>
-
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-4">
+          {/* No `space-y` here: the vertical rhythm between groups is `.section + .section` in
+              globals.css, and a utility gap on the container would fight it. The transient panels
+              above the groups carry their own margin instead. */}
+          <div className="mx-auto w-full max-w-3xl px-4 py-4">
             {note && (
               <p
-                className="rounded px-2.5 py-1.5 text-[13px] font-bold"
+                className="t-body mb-3 rounded px-2.5 py-1.5 font-semibold"
                 style={{ background: 'var(--note-bg)', color: 'var(--note-ink)' }}
               >
                 {note}
               </p>
             )}
 
-            {refusal && <RefusalPanel reason={refusal} onDismiss={() => setRefusal(null)} />}
-            {error && <ErrorPanel error={error} onRetry={reload} notFoundCopy="Those settings could not be found." />}
+            {refusal && (
+              <div className="mb-3">
+                <RefusalPanel reason={refusal} onDismiss={() => setRefusal(null)} />
+              </div>
+            )}
+            {error && (
+              <div className="mb-3">
+                <ErrorPanel
+                  error={error}
+                  onRetry={reload}
+                  notFoundCopy="Those settings could not be found."
+                />
+              </div>
+            )}
             {loading && <Skeleton />}
 
             {data && !loading && (
               <>
                 <Tone data={data} busy={busy} onWrite={write} />
-                <Threshold data={data} busy={busy} onWrite={write} />
-                <Rules
-                  title="Approval rules"
-                  caption="What forces an item in front of a person."
-                  rows={data.settings.approval_rules}
-                  kind="approval_rule"
-                  standing={data.settings.phase === 'v1_all_human'}
-                  busy={busy}
-                  onWrite={write}
-                />
-                <Rules
-                  title="Escalation triggers"
-                  caption="What raises an escalation, and to whom."
-                  rows={data.settings.escalation_triggers}
-                  kind="escalation_trigger"
-                  busy={busy}
-                  onWrite={write}
-                />
+
+                {/*
+                  THE REGROUPING, AND WHY THESE FOUR.
+
+                  Threshold, approval rules, escalation triggers and auto-approve all answer one
+                  question — what arrives in front of a person, and what does not. Rendered as four
+                  peer sections they read as four unrelated preferences; rendered as four panels
+                  under one heading the reader can see that turning auto-approve on and lowering the
+                  threshold pull in opposite directions on the same queue.
+                */}
+                <Group title="Review">
+                  <div className="space-y-2.5">
+                    <Threshold data={data} busy={busy} onWrite={write} />
+                    <Rules
+                      title="Approval rules"
+                      caption="What forces an item in front of a person."
+                      rows={data.settings.approval_rules}
+                      kind="approval_rule"
+                      standing={data.settings.phase === 'v1_all_human'}
+                      busy={busy}
+                      onWrite={write}
+                    />
+                    <Rules
+                      title="Escalation triggers"
+                      caption="What raises an escalation, and to whom."
+                      rows={data.settings.escalation_triggers}
+                      kind="escalation_trigger"
+                      busy={busy}
+                      onWrite={write}
+                    />
+                    <AutoApprove data={data} busy={busy} onWrite={write} />
+                  </div>
+                </Group>
+
+                <Group title="Spend" caption="What the agent may cost this client per month.">
+                  <Budget data={data} busy={busy} onWrite={write} />
+                </Group>
+
                 <Guardrails rules={data.guardrailRules} busy={busy} onWrite={write} />
-                <AutoApprove data={data} busy={busy} onWrite={write} />
                 <LearnedRules rules={data.reflectionRules} evidence={data.evidence} />
                 <VersionHistory data={data} />
 
-                <p className="pt-1 text-[11px]" style={{ color: 'var(--text-faint)' }}>
+                <p className="t-meta mt-7">
                   Cadence, allowlists, entities, terminology, budget and alerting are modelled and
                   not shown here. See the README.
                 </p>
@@ -208,6 +267,63 @@ export default function SettingsPage() {
  * SHARED FURNITURE
  * ==============================================================================================*/
 
+/**
+ * A group of the screen. `.section` is what earns the 28px above the heading and the 10px below it,
+ * and `.t-section` has to be its DIRECT child for `.section > .t-section` to bite — so the caption
+ * is a sibling of the heading rather than being wrapped with it in a header div.
+ *
+ * The caption's own 10px bottom margin matches the heading's, which makes heading · caption · body
+ * one evenly spaced block sitting 28px clear of the group before it. More space above than below is
+ * the whole mechanism: it binds the heading to its own content instead of to the previous group.
+ */
+function Group({
+  title,
+  caption,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="section">
+      <h2 className="t-section">{title}</h2>
+      {caption && <p className="t-label mb-2.5">{caption}</p>}
+      {children}
+    </section>
+  );
+}
+
+function Panel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="rounded border px-3 py-2.5"
+      style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The rung between `.t-section` and `.t-body`, and it is a weight step rather than a size step: a
+ * 13px semibold heading over 13px regular rows. A size step would have forced the group heading up
+ * to 16px and the screen title to 18px to stay ordered, which is how a dense console turns into a
+ * document.
+ *
+ * Deliberately NOT `.t-field`. Mono caps is reserved for labelling a value, and the reason section
+ * headings and field labels stopped looking identical is that only one of them may have it.
+ */
+function SubHead({ title, caption }: { title: string; caption?: string }) {
+  return (
+    <div className="mb-2">
+      <h3 className="t-subsection">{title}</h3>
+      {caption && <p className="t-label">{caption}</p>}
+    </div>
+  );
+}
+
+/** A one-panel group, for the four groups that hold a single block. */
 function Section({
   title,
   caption,
@@ -218,25 +334,9 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section>
-      <h2
-        className="font-mono text-[10px] font-bold uppercase"
-        style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}
-      >
-        {title}
-      </h2>
-      {caption && (
-        <p className="mb-2 mt-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          {caption}
-        </p>
-      )}
-      <div
-        className="rounded border px-3 py-2.5"
-        style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
-      >
-        {children}
-      </div>
-    </section>
+    <Group title={title} caption={caption}>
+      <Panel>{children}</Panel>
+    </Group>
   );
 }
 
@@ -244,24 +344,26 @@ function Section({
 function Timing({ timing }: { timing: EffectTiming }) {
   return (
     <span
-      className="font-mono text-[10px]"
-      style={{ color: timing === 'immediate' ? 'var(--state-approved)' : 'var(--text-faint)' }}
+      className="t-meta font-mono"
+      style={
+        timing === 'immediate' ? { color: 'var(--state-approved)' } : undefined
+      }
     >
       {TIMING_LABEL[timing]}
     </span>
   );
 }
 
-/** A row that cannot be changed, with the sentence saying why. Never a bare disabled control. */
+/** A row that cannot be changed, with the sentence saying why. Never a bare disabled control.
+ *  The reason sits at `.t-label` rather than at the old 11px: it is the row's justification, and
+ *  the small print was the thing an operator actually has to read. */
 function Locked({ reason }: { reason: string }) {
   return (
     <span className="flex items-baseline gap-1.5">
       <Badge tone="neutral" mono>
         fixed
       </Badge>
-      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-        {reason}
-      </span>
+      <span className="t-label">{reason}</span>
     </span>
   );
 }
@@ -298,14 +400,11 @@ function Tone({
   );
 
   return (
-    <Section
-      title="Tone"
-      caption="How the agent writes, and what it may not say."
-    >
+    <Section title="Tone" caption="How the agent writes, and what it may not say.">
       <div className="space-y-3">
         <div>
           <div className="flex items-baseline justify-between gap-2">
-            <label htmlFor="register" className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+            <label htmlFor="register" className="t-label">
               Register
             </label>
             <Timing timing={settings.field_meta['tone.register']?.effect_timing ?? 'next_draft'} />
@@ -315,35 +414,32 @@ function Tone({
               id="register"
               value={register}
               onChange={(e) => setRegister(e.target.value)}
-              className="min-w-0 flex-1 rounded border px-2 py-1 text-[13px] outline-none"
+              className="t-body min-w-0 flex-1 rounded border px-2 py-1 outline-none"
               style={{ borderColor: 'var(--border-strong)', background: 'var(--surface-sunk)' }}
             />
             <button
               type="button"
               disabled={register === settings.tone.register || busy !== null}
+              aria-busy={busy === 'register'}
               onClick={() =>
                 void onWrite('register', async () => {
                   await updateSettings({ kind: 'tone_register', value: register });
                   return 'Register saved · applies from the next draft';
                 })
               }
-              className="shrink-0 rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-30"
-              style={{ background: 'var(--accent)', color: '#fff' }}
+              className="t-body shrink-0 rounded px-2.5 py-1 font-medium disabled:opacity-30"
+              style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
             >
               Save
             </button>
           </div>
-          <p className="mt-1 text-[11px]" style={{ color: 'var(--text-faint)' }}>
-            Writes as “{settings.tone.person}”.
-          </p>
+          <p className="t-meta mt-1">Writes as “{settings.tone.person}”.</p>
         </div>
 
         {/* ---- banned phrases, and the sweep ---------------------------------------------- */}
         <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-              Banned phrases
-            </span>
+            <span className="t-label">Banned phrases</span>
             <Timing
               timing={settings.field_meta['tone.banned_phrases']?.effect_timing ?? 'next_guardrail_run'}
             />
@@ -366,12 +462,13 @@ function Tone({
               value={phrase}
               onChange={(e) => setPhrase(e.target.value)}
               placeholder="a phrase this client will not say"
-              className="min-w-0 flex-1 rounded border px-2 py-1 text-[13px] outline-none placeholder:text-[var(--text-faint)]"
+              className="t-body min-w-0 flex-1 rounded border px-2 py-1 outline-none placeholder:text-[var(--text-faint)]"
               style={{ borderColor: 'var(--border-strong)', background: 'var(--surface-sunk)' }}
             />
             <button
               type="button"
               disabled={trimmed.length === 0 || alreadyBanned || busy !== null}
+              aria-busy={busy === 'banned'}
               onClick={() =>
                 void onWrite('banned', async () => {
                   const result = await addBannedPhrase(trimmed);
@@ -381,8 +478,8 @@ function Tone({
                     : `“${trimmed}” banned · ${result.invalidated} of ${result.scanned} posts back in the queue`;
                 })
               }
-              className="shrink-0 rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-30"
-              style={{ background: 'var(--accent)', color: '#fff' }}
+              className="t-body shrink-0 rounded px-2.5 py-1 font-medium disabled:opacity-30"
+              style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
             >
               {busy === 'banned' ? 'Checking…' : 'Ban it'}
             </button>
@@ -392,8 +489,11 @@ function Tone({
             THE SIGNPOST. Three states, and all three are informative:
             already banned · matches nothing · matches something, with the count.
             A control that reports nothing until after you commit cannot be evaluated.
+
+            `.t-label` rather than the old 11px faint: this is the output of a live control, so it
+            is the one line here that must not read as small print.
           */}
-          <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          <p className="t-label tabular mt-1">
             {trimmed.length === 0 ? (
               <>Re-checks {scheduledCount} scheduled posts.</>
             ) : alreadyBanned ? (
@@ -413,8 +513,118 @@ function Tone({
 }
 
 /* ================================================================================================
- * THRESHOLD — the highest-value live control
+ * THRESHOLD — the highest-value live control. A panel inside `Review` rather than a section of its
+ * own: it is one of four answers to "what reaches a person".
  * ==============================================================================================*/
+
+/* ================================================================================================
+ * SPEND — the board's admission gate, made operable
+ *
+ * The gate sits between the job queue and the orchestrator and has an asymmetric consequence: at
+ * the cap, new drafting and planning wait and the owner is notified, already-approved posts still
+ * publish, and reply monitoring keeps running. The system degrades by stopping the expensive
+ * optional work, not by going dark on content already in the world.
+ *
+ * WHY THE CONTROL IS THE CAP AND NOT A READOUT. Spend is $121 of $400 — 30%. A readout of that is a
+ * number nobody acts on, and no fixture edit reaches the stop branch without inventing a month of
+ * spend. Moving the cap reaches it instead: `field_meta['budget.cap']` already declared the control
+ * immediate with a 50–2000 range and nothing had ever rendered it. Dragging it below spend puts the
+ * client into its own stop state in front of the reviewer, by their action — the same mechanism the
+ * banned-phrase sweep uses. A fifth failure switch would have demonstrated that the prototype can
+ * pretend; this demonstrates that the gate is wired to the number it gates on.
+ * ==============================================================================================*/
+
+function Budget({
+  data,
+  busy,
+  onWrite,
+}: {
+  data: SettingsScreen;
+  busy: string | null;
+  onWrite: (key: string, run: () => Promise<string>) => Promise<void>;
+}) {
+  const { settings, budget } = data;
+  const meta = settings.field_meta['budget.cap'];
+  const range = meta?.range ?? { min: 50, max: 2000 };
+
+  const [value, setValue] = useState(settings.budget.cap);
+
+  /**
+   * The consequence, computed as the slider moves and before anything is written — the same
+   * discipline as the threshold above. Recomputed against the dragged value rather than read off
+   * `budget.state`, which describes the committed cap.
+   */
+  const pct = value === 0 ? 0 : (budget.spent / value) * 100;
+  const wouldStop = pct >= settings.budget.stop_pct;
+  const wouldAlert = !wouldStop && pct >= settings.budget.alert_pct;
+
+  return (
+    <Panel>
+      <SubHead title="Monthly cap" caption="At the cap, drafting waits. Approved posts still go." />
+
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="t-label">Cap</span>
+        <Timing timing={meta?.effect_timing ?? 'immediate'} />
+      </div>
+
+      <div className="mt-1.5 flex items-center gap-3">
+        <input
+          type="range"
+          min={range.min}
+          max={range.max}
+          step={10}
+          value={value}
+          aria-label="Monthly cap"
+          onChange={(e) => setValue(Number(e.target.value))}
+          className="min-w-0 flex-1"
+          style={{ accentColor: 'var(--accent)' }}
+        />
+        <span className="t-body tabular w-14 shrink-0 text-right font-mono font-bold">
+          ${value}
+        </span>
+        <button
+          type="button"
+          disabled={value === settings.budget.cap || busy !== null}
+          aria-busy={busy === 'budget'}
+          onClick={() =>
+            void onWrite('budget', async () => {
+              await updateSettings({ kind: 'budget_cap', value });
+              return wouldStop
+                ? `Cap now $${value} · at the cap, drafting paused`
+                : `Cap now $${value}`;
+            })
+          }
+          className="t-body shrink-0 rounded px-2.5 py-1 font-medium disabled:opacity-30"
+          style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+        >
+          Save
+        </button>
+      </div>
+
+      {/* Spend is the denominator's other half and is not editable, so it sits with the range
+          rather than as a control. `sample_n` is there because a cost figure with no visible
+          basis is one nobody can challenge. */}
+      <p className="t-meta tabular mt-1 font-mono">
+        tunable ${range.min} – ${range.max} · spent ${budget.spent.toFixed(2)} over{' '}
+        {budget.sample_n} steps
+      </p>
+
+      {/* The preview, and the only place on this screen where a control announces a state change
+          before it is committed. Silent while the dragged cap is comfortable — a permanent line
+          saying "under the cap" is a row spent agreeing with itself. */}
+      {(wouldStop || wouldAlert) && (
+        <p
+          className="t-label mt-1.5"
+          style={{ color: wouldStop ? 'var(--state-blocked)' : 'var(--state-awaiting)' }}
+        >
+          {wouldStop
+            ? `Would stop new drafting · ${Math.round(pct)}% of cap`
+            : `Would pass the ${settings.budget.alert_pct}% alert`}
+        </p>
+      )}
+    </Panel>
+  );
+}
 
 function Threshold({
   data,
@@ -447,14 +657,11 @@ function Threshold({
   const willChange = flaggedNow.length !== flaggedCommitted.length;
 
   return (
-    <Section
-      title="Score threshold"
-      caption="Score a draft must clear to arrive unflagged."
-    >
+    <Panel>
+      <SubHead title="Score threshold" caption="Score a draft must clear to arrive unflagged." />
+
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-          Review threshold
-        </span>
+        <span className="t-label">Review threshold</span>
         <Timing timing={meta?.effect_timing ?? 'immediate'} />
       </div>
 
@@ -470,26 +677,29 @@ function Threshold({
           className="min-w-0 flex-1"
           style={{ accentColor: 'var(--accent)' }}
         />
-        <span className="w-12 shrink-0 text-right font-mono text-[13px] font-bold">
+        {/* The live value of the control being dragged, so it is a metric rather than a caption —
+            `.tabular` stops the digits reflowing under the cursor as it moves. */}
+        <span className="t-body tabular w-12 shrink-0 text-right font-mono font-bold">
           {value.toFixed(2)}
         </span>
         <button
           type="button"
           disabled={value === settings.score_threshold || busy !== null}
+          aria-busy={busy === 'threshold'}
           onClick={() =>
             void onWrite('threshold', async () => {
               await updateSettings({ kind: 'score_threshold', value });
               return `Threshold now ${value.toFixed(2)} · queue re-sorted`;
             })
           }
-          className="shrink-0 rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-30"
-          style={{ background: 'var(--accent)', color: '#fff' }}
+          className="t-body shrink-0 rounded px-2.5 py-1 font-medium disabled:opacity-30"
+          style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
         >
           Save
         </button>
       </div>
 
-      <p className="mt-1 font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>
+      <p className="t-meta tabular mt-1 font-mono">
         tunable {range.min} – {range.max} · saved value {settings.score_threshold.toFixed(2)}
       </p>
 
@@ -501,9 +711,9 @@ function Threshold({
           const wasFlagged = draft.composite_score < settings.score_threshold;
           const version = draft.versions.find((v) => v.id === draft.current_version_id);
           return (
-            <li key={draft.id} className="flex items-baseline gap-2 text-[12px]">
+            <li key={draft.id} className="t-body flex items-baseline gap-2">
               <span
-                className="w-11 shrink-0 font-mono text-[11px]"
+                className="t-meta tabular w-11 shrink-0 font-mono"
                 style={{ color: flagged ? 'var(--state-awaiting)' : 'var(--text-faint)' }}
               >
                 {draft.composite_score.toFixed(3)}
@@ -519,26 +729,22 @@ function Threshold({
                 {version?.text.split('\n')[0].slice(0, 60)}
               </Link>
               {flagged !== wasFlagged && (
-                <span className="shrink-0 font-mono text-[10px]" style={{ color: 'var(--accent-text)' }}>
+                <span className="t-meta shrink-0 font-mono" style={{ color: 'var(--accent-text)' }}>
                   changes
                 </span>
               )}
             </li>
           );
         })}
-        {awaitingDecision.length === 0 && (
-          <li className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-            Nothing waiting.
-          </li>
-        )}
+        {awaitingDecision.length === 0 && <li className="t-label">Nothing waiting.</li>}
       </ul>
 
       {willChange && (
-        <p className="mt-2 text-[11px]" style={{ color: 'var(--state-awaiting)' }}>
+        <p className="t-label tabular mt-2" style={{ color: 'var(--state-awaiting)' }}>
           Would flag {flaggedNow.length} of {awaitingDecision.length}, up from {flaggedCommitted.length}.
         </p>
       )}
-    </Section>
+    </Panel>
   );
 }
 
@@ -565,7 +771,8 @@ function Rules({
   onWrite: (key: string, run: () => Promise<string>) => Promise<void>;
 }) {
   return (
-    <Section title={title} caption={caption}>
+    <Panel>
+      <SubHead title={title} caption={caption} />
       <ul className="space-y-1.5">
         {/*
           THE RULE THE TYPE CANNOT EXPRESS, rendered rather than omitted.
@@ -582,7 +789,7 @@ function Rules({
             className="flex flex-wrap items-center gap-2 rounded px-2 py-1.5"
             style={{ background: 'var(--surface-sunk)' }}
           >
-            <span className="text-[13px] font-medium">Every post is reviewed by a person</span>
+            <span className="t-body font-medium">Every post is reviewed by a person</span>
             <span className="ml-auto">
               <Locked reason="Not a condition, so it has no toggle." />
             </span>
@@ -591,7 +798,7 @@ function Rules({
 
         {rows.map((row) => (
           <li key={row.trigger} className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px]">{row.trigger.replace(/_/g, ' ')}</span>
+            <span className="t-body">{row.trigger.replace(/_/g, ' ')}</span>
             <Badge tone={row.tier === 'stakeholder' ? 'blocked' : 'neutral'} mono>
               {row.tier === 'stakeholder' ? 'to the owner' : 'to you'}
             </Badge>
@@ -606,7 +813,7 @@ function Rules({
                   }
                 />
               ) : (
-                <label className="flex cursor-pointer items-center gap-1.5 text-[12px]">
+                <label className="t-label flex cursor-pointer items-center gap-1.5">
                   <input
                     type="checkbox"
                     checked={row.enabled}
@@ -622,16 +829,14 @@ function Rules({
                       })
                     }
                   />
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    {row.enabled ? 'on' : 'off'}
-                  </span>
+                  <span>{row.enabled ? 'on' : 'off'}</span>
                 </label>
               )}
             </span>
           </li>
         ))}
       </ul>
-    </Section>
+    </Panel>
   );
 }
 
@@ -656,28 +861,31 @@ function Guardrails({
   ];
 
   return (
-    <Section
-      title="Guardrail rules"
-      caption="Checks the agent cannot skip. Pass, warn or fail."
-    >
-      <div className="space-y-3">
+    <Group title="Guardrail rules" caption="Checks the agent cannot skip. Pass, warn or fail.">
+      {/*
+        ONE PANEL PER LAYER, rather than one panel with four mono-caps dividers inside it.
+
+        The dividers were the second worst instance of the inverted hierarchy on this screen: "L3 ·
+        content" was styled identically to the section heading above it, so four sub-groups and one
+        group all read at the same rank. L1–L4 is a real ordering — sources, shape, content,
+        pre-publish — and giving each its own panel is what makes thirteen rules scannable as four
+        stages rather than as a list of thirteen.
+      */}
+      <div className="space-y-2.5">
         {layers.map(({ layer, label }) => {
           const inLayer = rules.filter((r) => r.layer === layer);
           if (inLayer.length === 0) return null;
           return (
-            <div key={layer}>
-              <div
-                className="font-mono text-[10px] font-bold uppercase"
-                style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}
-              >
-                {layer} · {label}
-              </div>
-              <ul className="mt-1 space-y-1.5">
+            <Panel key={layer}>
+              <SubHead title={`${layer} · ${label}`} />
+              <ul className="space-y-2">
                 {inLayer.map((rule) => (
                   <li key={rule.id}>
                     <div className="flex flex-wrap items-baseline gap-2">
+                      {/* Regular weight, not medium: the semibold in this panel belongs to the
+                          layer heading, and two weights competing is what flattened it before. */}
                       <span
-                        className="text-[13px] font-medium"
+                        className="t-body"
                         style={{ color: rule.is_enabled ? 'var(--text)' : 'var(--text-faint)' }}
                       >
                         {rule.display_name}
@@ -691,7 +899,7 @@ function Guardrails({
                         {rule.is_fixed ? (
                           <Locked reason={rule.fixed_reason} />
                         ) : (
-                          <label className="flex cursor-pointer items-center gap-1.5 text-[12px]">
+                          <label className="t-label flex cursor-pointer items-center gap-1.5">
                             <input
                               type="checkbox"
                               checked={rule.is_enabled}
@@ -705,17 +913,13 @@ function Guardrails({
                                 })
                               }
                             />
-                            <span style={{ color: 'var(--text-muted)' }}>
-                              {rule.is_enabled ? 'on' : 'off'}
-                            </span>
+                            <span>{rule.is_enabled ? 'on' : 'off'}</span>
                           </label>
                         )}
                       </span>
                     </div>
 
-                    <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                      {rule.description}
-                    </p>
+                    <p className="t-label">{rule.description}</p>
 
                     {/*
                       The disabled-from marker, which is the reason `disabled_at` exists beside
@@ -724,18 +928,18 @@ function Guardrails({
                       without this date.
                     */}
                     {!rule.is_enabled && rule.disabled_at !== null && (
-                      <p className="text-[11px]" style={{ color: 'var(--state-parked)' }}>
+                      <p className="t-meta tabular" style={{ color: 'var(--state-parked)' }}>
                         Off since {formatDateTime(rule.disabled_at)}.
                       </p>
                     )}
                   </li>
                 ))}
               </ul>
-            </div>
+            </Panel>
           );
         })}
       </div>
-    </Section>
+    </Group>
   );
 }
 
@@ -756,12 +960,11 @@ function AutoApprove({
   const met = auto.prereqs.filter((p) => p.met).length;
 
   return (
-    <Section
-      title="Auto-approve"
-      caption="Off in v1. Every post is reviewed."
-    >
+    <Panel>
+      <SubHead title="Auto-approve" caption="Off in v1. Every post is reviewed." />
+
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[13px] font-medium">Publish without per-item review</span>
+        <span className="t-body font-medium">Publish without per-item review</span>
         {/*
           A CONTROL THAT REFUSES RATHER THAN A CONTROL THAT IS DEAD.
 
@@ -779,25 +982,24 @@ function AutoApprove({
         <button
           type="button"
           disabled={busy !== null}
+          aria-busy={busy === 'auto_approve'}
           onClick={() =>
             void onWrite('auto_approve', async () => {
               await updateSettings({ kind: 'auto_approve', value: true });
               return 'Auto-approve enabled';
             })
           }
-          className="rounded border px-2.5 py-1 text-[12px] disabled:opacity-40"
+          className="t-body rounded border px-2.5 py-1 disabled:opacity-40"
           style={{ borderColor: 'var(--border-strong)', color: 'var(--text-muted)' }}
         >
           Try to turn it on
         </button>
-        <span className="ml-auto font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>
+        <span className="t-meta tabular ml-auto font-mono">
           {met} of {auto.prereqs.length} client prerequisites met
         </span>
       </div>
 
-      <p className="mt-1.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
-        {auto.lock_reason}
-      </p>
+      <p className="t-label mt-1.5">{auto.lock_reason}</p>
 
       {/*
         The list is the point. A greyed toggle says "no"; a greyed toggle above six named
@@ -806,7 +1008,7 @@ function AutoApprove({
       */}
       <ul className="mt-2 space-y-1 border-t pt-2" style={{ borderColor: 'var(--border)' }}>
         {auto.prereqs.map((prereq) => (
-          <li key={prereq.key} className="flex items-baseline gap-2 text-[12px]">
+          <li key={prereq.key} className="t-body flex items-baseline gap-2">
             <Badge tone={prereq.met ? 'approved' : 'neutral'} mono>
               {prereq.met ? 'met' : 'not yet'}
             </Badge>
@@ -821,10 +1023,8 @@ function AutoApprove({
         threshold, all guardrails pass, not degraded, pillar not always-review — and rendering them
         here would show a green tick beside a draft that would not itself have qualified.
       */}
-      <p className="mt-2 text-[11px]" style={{ color: 'var(--text-faint)' }}>
-        Four more conditions are checked per draft, not here.
-      </p>
-    </Section>
+      <p className="t-meta mt-2">Four more conditions are checked per draft, not here.</p>
+    </Panel>
   );
 }
 
@@ -865,8 +1065,8 @@ function LearnedRules({
                 >
                   {rule.status}
                 </Badge>
-                <span className="text-[13px]">{rule.text}</span>
-                <span className="ml-auto font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>
+                <span className="t-body">{rule.text}</span>
+                <span className="t-meta ml-auto font-mono">
                   {rule.activated_at !== null
                     ? `since ${formatRelative(rule.activated_at)}`
                     : `review by ${formatRelative(rule.review_due)}`}
@@ -888,26 +1088,23 @@ function LearnedRules({
               */}
               {backing.length > 0 ? (
                 <details className="mt-0.5">
-                  <summary
-                    className="cursor-pointer font-mono text-[10px] font-bold uppercase"
-                    style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}
-                  >
+                  {/* `.t-label`, not the old 10px mono caps. A disclosure is a control, and a
+                      control set in the faintest, smallest treatment on the screen is one nobody
+                      finds — which would have made the evidence chain effectively invisible. */}
+                  <summary className="t-label tabular cursor-pointer font-mono">
                     {backing.length} edits behind this · {rule.evidence_tag.replace(/_/g, ' ')}
                   </summary>
                   <ul className="mt-1 space-y-1">
                     {backing.map((version) => (
                       <li
                         key={version.id}
-                        className="rounded px-2 py-1 text-[12px]"
+                        className="rounded px-2 py-1"
                         style={{ background: 'var(--surface-sunk)' }}
                       >
-                        <span
-                          className="font-mono text-[10px]"
-                          style={{ color: 'var(--text-faint)' }}
-                        >
+                        <span className="t-meta tabular font-mono">
                           {version.id} · {formatRelative(version.created_at)}
                         </span>
-                        <p className="mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                        <p className="t-label mt-0.5">
                           {version.text.split('\n')[0].slice(0, 120)}
                         </p>
                       </li>
@@ -915,9 +1112,7 @@ function LearnedRules({
                   </ul>
                 </details>
               ) : (
-                <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
-                  Evidence not retained.
-                </p>
+                <p className="t-meta">Evidence not retained.</p>
               )}
             </li>
           );
@@ -935,26 +1130,19 @@ function VersionHistory({ data }: { data: SettingsScreen }) {
   const versions = [...data.settings.versions].reverse();
 
   return (
-    <Section
-      title="Change history"
-      caption="Every change, dated, with what it changed."
-    >
+    <Section title="Change history" caption="Every change, dated, with what it changed.">
       <ul className="space-y-2">
         {versions.map((version, index) => (
           <li key={version.version_id}>
             <div className="flex flex-wrap items-baseline gap-2">
-              <span className="font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>
-                {version.version_id}
-              </span>
+              <span className="t-meta tabular font-mono">{version.version_id}</span>
               {index === 0 && (
                 <Badge tone="approved" mono>
                   current
                 </Badge>
               )}
-              <span className="text-[13px]">{version.change_summary}</span>
-              <span className="ml-auto font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>
-                {formatRelative(version.changed_at)}
-              </span>
+              <span className="t-body">{version.change_summary}</span>
+              <span className="t-meta ml-auto font-mono">{formatRelative(version.changed_at)}</span>
             </div>
             {/* The per-key diff, which is what makes a version reconstructible. A bare version
                 integer could not answer "what did version 3 say", so the comparison it exists to
@@ -964,7 +1152,7 @@ function VersionHistory({ data }: { data: SettingsScreen }) {
                 {version.diff.map((entry) => (
                   <li
                     key={entry.key}
-                    className="font-mono text-[10px]"
+                    className="t-meta tabular font-mono"
                     style={{ color: 'var(--text-muted)' }}
                   >
                     {entry.key}: {String(entry.from)} → {String(entry.to)}
@@ -976,7 +1164,7 @@ function VersionHistory({ data }: { data: SettingsScreen }) {
         ))}
       </ul>
 
-      <p className="mt-2 text-[11px]" style={{ color: 'var(--text-faint)' }}>
+      <p className="t-label mt-2">
         <Link href="/metrics" style={{ color: 'var(--accent-text)' }}>
           Edit rate by version →
         </Link>
@@ -1009,6 +1197,12 @@ function Skeleton() {
  * D-031's `forbidden` exists because the copy differs from every other error kind: nothing went
  * wrong, nothing needs retrying, and the reason is a design decision the operator is entitled to
  * read. Rendering it as an error would misreport a working guardrail as a broken one.
+ *
+ * The eyebrow is `.t-field`, which is the one call in this pass the scale did not answer cleanly.
+ * It is mono caps and it sits above the reason, so it looks like a heading — but it is not one:
+ * nothing is nested under it, and what it does is name the kind of the value below, which is
+ * exactly the FIELD role. A `Badge` would have been the alternative and loses, because every badge
+ * tone paints `--state-*-bg` and this panel is already on `--state-parked-bg`.
  */
 function RefusalPanel({ reason, onDismiss }: { reason: string; onDismiss: () => void }) {
   return (
@@ -1016,14 +1210,14 @@ function RefusalPanel({ reason, onDismiss }: { reason: string; onDismiss: () => 
       className="rounded border px-3 py-2.5"
       style={{ borderColor: 'var(--state-parked)', background: 'var(--state-parked-bg)' }}
     >
-      <p className="font-mono text-[10px] font-bold uppercase" style={{ color: 'var(--state-parked)', letterSpacing: '0.1em' }}>
+      <p className="t-field" style={{ color: 'var(--state-parked)' }}>
         fixed control
       </p>
-      <p className="mt-0.5 text-[13px]">{reason}</p>
+      <p className="t-body mt-0.5">{reason}</p>
       <button
         type="button"
         onClick={onDismiss}
-        className="mt-2 rounded border px-2.5 py-1 text-[13px]"
+        className="t-body mt-2 rounded border px-2.5 py-1"
         style={{ borderColor: 'var(--border-strong)' }}
       >
         Dismiss
@@ -1031,4 +1225,3 @@ function RefusalPanel({ reason, onDismiss }: { reason: string; onDismiss: () => 
     </div>
   );
 }
-

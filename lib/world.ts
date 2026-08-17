@@ -45,6 +45,10 @@ import type {
   SettingsVersion,
   SettingsVersionId,
 } from './types.ts';
+/** Calendar arithmetic only — no formatting. `time.ts` owns the client's timezone, so the runway
+ *  rule and the week grid resolve a weekday through the same code rather than through two
+ *  independent notions of what day it is. */
+import { isWorkingDay, localDay } from './time.ts';
 
 /**
  * A non-cryptographic digest, and the name says so.
@@ -132,10 +136,14 @@ function slotFor(world: FixtureSet, draft: Draft): CalendarSlot | undefined {
   return world.calendarSlots.find((s) => s.id === draft.slot_id);
 }
 
-/** The anchor is a Thursday, and every offset in the system is measured from it. That makes any
- *  day's weekday arithmetic rather than a date lookup — and it is the one assumption this file
- *  makes about the calendar, so it is named rather than buried. */
-const ANCHOR_WEEKDAY = 4;
+/**
+ * `ANCHOR_WEEKDAY = 4` used to live here, on the reasoning that the anchor is a Thursday and so any
+ * day's weekday is arithmetic rather than a date lookup. It was removed with the second rewrite of
+ * `workingDaysUntil`: the arithmetic was only sound if you also divided time into calendar days,
+ * and dividing by 1440 divides it into 24-hour blocks from mid-morning instead. Two different
+ * notions of "what day is it" in one codebase is what produced a Monday slot the runway rule read
+ * as a Sunday, so this file no longer has its own — it asks `lib/time.ts`.
+ */
 const MINUTES_PER_DAY = 24 * 60;
 
 /**
@@ -151,18 +159,59 @@ const MINUTES_PER_DAY = 24 * 60;
  * would have counted the wrong weekdays. Nothing failed, because every decision so far is taken at
  * offset zero. That is the worst kind of bug to leave in: right today, wrong later, silent both
  * times.
+ *
+ * REWRITTEN AGAIN, AND THE SECOND BUG WAS LIVE IN THE DEMO.
+ *
+ * That version still divided time with `Math.floor(offset / MINUTES_PER_DAY)`, which measures
+ * 24-hour blocks from the anchor's mid-morning rather than client-local calendar days. The anchor is
+ * Thursday ~10:00, so "day 3" ran Sunday 10:00 → Monday 10:00 — and next Monday's 09:00 slot, which
+ * is offset 5700, landed in it and was counted as a **Sunday**.
+ *
+ * The consequence was not academic. The showcase draft publishes Monday 09:00; rejecting it
+ * measured one working day of runway instead of two, took the `runway < 2` branch, and **dropped
+ * the slot instead of slipping it** — no redraft run queued, the slot gone from the calendar, while
+ * the queue's toast said "Redraft queued". The single most likely thing a reviewer clicks, doing
+ * the opposite of what it announced.
+ *
+ * Calendar days come from `lib/time.ts`, which resolves them in the client's timezone through the
+ * platform's own database. Same source as the week grid, so a slot cannot be Monday on the calendar
+ * and Sunday to the runway rule.
  */
 export function workingDaysUntil(now: MinutesFromAnchor, publishAt: MinutesFromAnchor): number {
-  const startDay = Math.floor((now as number) / MINUTES_PER_DAY);
-  const endDay = Math.floor((publishAt as number) / MINUTES_PER_DAY);
+  const start = localDay(now);
+  const end = localDay(publishAt);
 
   let working = 0;
-  for (let day = startDay + 1; day <= endDay; day++) {
-    // `% 7` twice, because a negative offset — a slot in the past — gives a negative remainder.
-    const weekday = (((ANCHOR_WEEKDAY + day) % 7) + 7) % 7;
-    if (weekday !== 0 && weekday !== 6) working++;
+  for (let day = start.index + 1; day <= end.index; day++) {
+    // `% 7` twice, because a slot in the past gives a negative difference.
+    const weekday = (((start.weekday + (day - start.index)) % 7) + 7) % 7;
+    if (isWorkingDay(weekday)) working++;
   }
   return working;
+}
+
+/**
+ * The next working day at or after an offset, preserving the time of day.
+ *
+ * A slipped slot has to actually move. `CalendarSlot.original_publish_at` exists so the calendar
+ * can show the move rather than silently relocating a slot, and the reject transition used to write
+ * `original_publish_at: slot.publish_at` while leaving `publish_at` alone — two identical times
+ * claiming a reschedule. On the week grid that renders as `09:00 09:00` with one struck through,
+ * which reads as a broken renderer rather than as a fact about the slot.
+ *
+ * Weekends are skipped for the same reason `workingDaysUntil` counts them out: the client's posting
+ * window is Monday to Friday and L4 checks that window before publishing, so slipping a Friday slot
+ * onto a Saturday would produce a slot that fails its own publish-time guard.
+ */
+function nextWorkingDayAfter(offset: MinutesFromAnchor): MinutesFromAnchor {
+  let at = ((offset as number) + MINUTES_PER_DAY) as MinutesFromAnchor;
+  /** Bounded rather than `while`: a timezone that somehow reported no weekday would spin forever,
+   *  and three days is the longest run of non-working days this calendar can produce. */
+  for (let guard = 0; guard < 7; guard++) {
+    if (isWorkingDay(localDay(at).weekday)) break;
+    at = ((at as number) + MINUTES_PER_DAY) as MinutesFromAnchor;
+  }
+  return at;
 }
 
 /* ================================================================================================
@@ -323,6 +372,10 @@ export function reject(
       {
         ...slot,
         state: dropped ? 'dropped' : 'slipped',
+        /** A dropped slot never runs again, so it keeps whatever move history it already had. A
+         *  slipped one moves to the next working day and records where it came from — see
+         *  `nextWorkingDayAfter`. */
+        publish_at: dropped ? slot.publish_at : nextWorkingDayAfter(slot.publish_at),
         original_publish_at: dropped ? slot.original_publish_at : slot.publish_at,
         slip_reason: dropped ? null : 'rejected_redraft',
       },
@@ -451,6 +504,16 @@ export type SettingUpdate =
    *  appear and clear as it moves. */
   | { kind: 'score_threshold'; value: number }
   | { kind: 'tone_register'; value: string }
+  /**
+   * The board's admission gate, made operable.
+   *
+   * The second control with an immediate effect and the only one whose effect is a *system state*
+   * rather than a record change: taking the cap below current spend puts the client into the
+   * cap-reached branch — new drafting and planning wait, approved posts still publish, reply
+   * monitoring keeps running. `field_meta['budget.cap']` already declared it immediate with a
+   * 50–2000 range and nothing rendered it.
+   */
+  | { kind: 'budget_cap'; value: number }
   /** Always refused. Present in the union rather than absent from it *because* it is refused —
    *  a control that cannot be operated still has to be expressible, or the screen would be
    *  rendering a toggle wired to nothing. */
@@ -465,6 +528,8 @@ function settingKeyPath(update: SettingUpdate): string {
       return 'score_threshold';
     case 'tone_register':
       return 'tone.register';
+    case 'budget_cap':
+      return 'budget.cap';
     case 'auto_approve':
       return 'auto_approve.enabled';
     case 'escalation_trigger':
@@ -560,6 +625,29 @@ export function updateSetting(
           [{ key: 'score_threshold', from: current.score_threshold, to: value }],
           (next) => {
             next.score_threshold = value;
+          },
+        ),
+      };
+    }
+
+    case 'budget_cap': {
+      /** Clamped to the declared range, for the same reason `score_threshold` is: the range is the
+       *  operator-facing promise and a caller is not a slider. */
+      const range = current.field_meta['budget.cap']?.range;
+      const value = Math.round(
+        range ? Math.min(range.max, Math.max(range.min, update.value)) : update.value,
+      );
+      return {
+        settings: withNewVersion(
+          current,
+          ctx,
+          `Monthly cap moved from $${current.budget.cap} to $${value}.`,
+          [{ key: 'budget.cap', from: current.budget.cap, to: value }],
+          (next) => {
+            /** A new object rather than a field write: `withNewVersion` spreads one level only, so
+             *  mutating `next.budget.cap` in place would also mutate the world's own settings and
+             *  break the purity every transition in this file is asserted on. */
+            next.budget = { ...current.budget, cap: value };
           },
         ),
       };

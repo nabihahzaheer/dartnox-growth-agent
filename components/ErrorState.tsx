@@ -90,14 +90,16 @@ export function ErrorPanel({
       className="rounded border px-3 py-2.5"
       style={{ borderColor: 'var(--state-blocked)', background: 'var(--state-blocked-bg)' }}
     >
-      <p className="text-[13px] font-medium">{errorCopy(error, notFoundCopy)}</p>
+      <p className="t-body font-medium">{errorCopy(error, notFoundCopy)}</p>
       {/* The kind itself, in monospace. An operator reading a trace to someone else needs the name,
           not only the sentence — and it is the cheapest possible proof that the taxonomy is real
-          rather than decorative. */}
-      <p
-        className="mt-1 font-mono text-[10px] font-bold uppercase"
-        style={{ color: 'var(--text-muted)', letterSpacing: '0.1em' }}
-      >
+          rather than decorative.
+
+          `.t-meta`, not `.t-field`. It was 10px mono caps, which is the FIELD treatment, and FIELD
+          labels a value rather than being one — this line IS the value. Dropping the caps also
+          stops it misreporting the name: the kind is `version_conflict`, and an operator reading it
+          out or grepping for it needs the string the code actually uses. */}
+      <p className="t-meta mt-1 font-mono" style={{ color: 'var(--text-muted)' }}>
         {error.kind}
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -105,7 +107,7 @@ export function ErrorPanel({
           <button
             type="button"
             onClick={onRetry}
-            className="rounded border px-2.5 py-1 text-[13px] font-medium"
+            className="t-body rounded border px-2.5 py-1 font-medium"
             style={{ borderColor: 'var(--border-strong)' }}
           >
             {retryLabel}
@@ -134,12 +136,10 @@ export function NotFound({
 }) {
   return (
     <div className="py-10 text-center">
-      <p className="text-[13px] font-medium">{title}</p>
-      {detail && (
-        <p className="mx-auto mt-1 max-w-sm text-[13px]" style={{ color: 'var(--text-muted)' }}>
-          {detail}
-        </p>
-      )}
+      {/* `.t-section`: an empty state has one heading and this is it. It was 13px medium, the same
+          treatment as the sentence beneath it, so the block had no top. */}
+      <p className="t-section">{title}</p>
+      {detail && <p className="t-label mx-auto mt-1 max-w-sm">{detail}</p>}
       {children && <div className="mt-3">{children}</div>}
     </div>
   );
@@ -148,7 +148,7 @@ export function NotFound({
 /** A back-link, used by the two screens you can arrive at directly with a bad id. */
 export function BackToQueue() {
   return (
-    <Link href="/queue" className="text-[13px]" style={{ color: 'var(--accent-text)' }}>
+    <Link href="/queue" className="t-body" style={{ color: 'var(--accent-text)' }}>
       Back to the queue
     </Link>
   );

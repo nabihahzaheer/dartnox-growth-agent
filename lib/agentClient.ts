@@ -38,6 +38,8 @@
 
 import { fixtures, LIVE_RUN_EMITTED_THROUGH_SEQ } from '@/fixtures';
 import { NOW } from '@/lib/time';
+import { buildWeek, defaultWeekIndex, describeRun, type Week } from '@/lib/week';
+import { budgetPosture, type BudgetPosture } from '@/lib/budget';
 import {
   addBannedClaim,
   approve,
@@ -76,6 +78,7 @@ import type {
   Run,
   RunId,
   RunStep,
+  RunStepId,
   RunVariant,
   Settings,
 } from '@/lib/types';
@@ -223,6 +226,9 @@ export type SettingsScreen = {
   awaitingDecision: Draft[];
   /** How many posts are scheduled, so "appears in 1 of 2 scheduled posts" has a denominator. */
   scheduledCount: number;
+  /** Current spend against the cap, so the cap control can show what moving it would do before it
+   *  is moved — the same discipline as the threshold and the banned-phrase field. */
+  budget: BudgetPosture;
   /** The versions each rule's suggestion was built from, resolved. Empty for a rule whose evidence
    *  predates the retained history window, which is a different thing from a rule with none. */
   evidence: Record<string, DraftVersion[]>;
@@ -247,6 +253,7 @@ export async function getSettingsScreen(): Promise<SettingsScreen> {
       reflectionRules: world.reflectionRules,
       awaitingDecision: world.drafts.filter((d) => d.state === 'awaiting_approval'),
       scheduledCount: world.posts.filter((p) => p.state === 'scheduled').length,
+      budget: budgetPosture(world),
       evidence,
     };
   });
@@ -314,6 +321,10 @@ export type DraftDetail = {
    *  not versions: channel fit is scored per channel and an approval binds one version to one
    *  publication. */
   sibling: Draft | null;
+  /** The bar the composite is judged against. Carried rather than fetched separately so the detail
+   *  view can say "below the 0.85 bar" instead of printing a bare number and leaving the reader to
+   *  work out whether it is good. */
+  threshold: number;
 };
 
 export async function getDraftDetail(id: DraftId): Promise<DraftDetail> {
@@ -337,6 +348,7 @@ export async function getDraftDetail(id: DraftId): Promise<DraftDetail> {
           : (world.drafts.find(
               (d) => d.variant_group_id === draft.variant_group_id && d.id !== draft.id,
             ) ?? null),
+      threshold: world.settings.score_threshold,
     };
   });
 }
@@ -459,6 +471,37 @@ export type RunSummary = {
   detail: string;
 };
 
+/**
+ * THE WEEK — the read every screen frames itself with.
+ *
+ * `list` latency rather than `trace`: it is a join across slots, drafts, posts and runs, but all of
+ * them are collections this module already holds. Treating it as a heavy query would put a
+ * half-second skeleton on the rail of every screen, which is the opposite of what a persistent
+ * frame should do.
+ *
+ * The projection itself is `lib/week.ts` and is pure. This function's whole job is to be the async
+ * seam D-002 requires, so that a real backend attaches here without a component changing.
+ */
+export async function getWeek(index: number): Promise<Week> {
+  return read(LATENCY_MS.list, () => buildWeek(world, index));
+}
+
+/**
+ * The admission gate's current posture. `config` latency: it is two sums over collections already
+ * in memory, and it renders in the rail's identity block on every screen — a skeleton there would
+ * flash on every navigation for a value that is quiet most of the time.
+ */
+export async function getBudget(): Promise<BudgetPosture> {
+  return read(LATENCY_MS.config, () => budgetPosture(world));
+}
+
+/** Which week to open on, decided from the data rather than from the calendar — see
+ *  `defaultWeekIndex`. Synchronous because the rail needs it before its first fetch, and it is a
+ *  read over the same world the next call will return. */
+export function initialWeekIndex(): number {
+  return defaultWeekIndex(world);
+}
+
 export async function getRunSummaries(): Promise<RunSummary[]> {
   return read(LATENCY_MS.list, () =>
     world.runs
@@ -476,47 +519,10 @@ export async function getRunSummaries(): Promise<RunSummary[]> {
        * about the run.
        */
       .filter((run) => world.runSteps.some((s) => s.run_id === run.id))
-      .map((run) => {
-      const draft = run.target_draft_id
-        ? world.drafts.find((d) => d.id === run.target_draft_id)
-        : undefined;
-      const slot = draft ? world.calendarSlots.find((s) => s.id === draft.slot_id) : undefined;
-      const pillar = draft ? world.pillars.find((p) => p.id === draft.pillar_id) : undefined;
-
-      if (run.type === 'planning') {
-        return { run, title: 'Plan next week', detail: 'Calendar · 8 slots' };
-      }
-      if (run.type === 'publish') {
-        return { run, title: 'Publish', detail: slot ? slot.angle : 'Scheduled post' };
-      }
-      if (run.type === 'poll') {
-        return { run, title: 'Check replies', detail: 'Posts under 48h' };
-      }
-      // Draft runs with no draft of their own: either the parent of a batch, or a run that has
-      // not produced one yet.
-      if (!draft) {
-        /**
-         * A batch is identified by *having children*, not by lacking a parent. The first version
-         * used "no parent" and so labelled every redraft — which is parentless, because a rejection
-         * queues it directly — as "Weekly drafting batch". Visible in the rail the moment a
-         * rejection landed.
-         */
-        const isBatchParent = world.runs.some((r) => r.parent_run_id === run.id);
-        if (isBatchParent) return { run, title: 'Weekly drafting batch', detail: '8 posts' };
-
-        if (run.state === 'queued') return { run, title: 'Redraft', detail: 'Queued after a rejection' };
-        return {
-          run,
-          title: 'Draft',
-          detail: run.state === 'parked_transient' ? 'Source unavailable' : 'No draft produced',
-        };
-      }
-      return {
-        run,
-        title: `Draft · ${pillar?.name ?? 'Unknown pillar'}`,
-        detail: `${draft.channel === 'linkedin' ? 'LinkedIn' : 'X'}${slot ? ` · ${slot.angle}` : ''}`,
-      };
-    }),
+      /** The labelling itself moved to `lib/week.ts` when the rail stopped being a run list. One
+       *  labeller, so the week's "about the week" group and this summary cannot describe the same
+       *  run two different ways. */
+      .map((run) => ({ run, ...describeRun(world, run) })),
   );
 }
 
@@ -662,6 +668,30 @@ const rejectionsGiven: { code: RejectionReasonCode; label: string }[] = [];
 const spentKeys = new Map<string, WorldPatch>();
 
 /** Applies a patch to the world in place. The only place the world is written. */
+/* ================================================================================================
+ * CHANGE NOTIFICATION
+ *
+ * The rail renders the week on all five screens, so a decision taken on the queue has to reach a
+ * component the queue does not own. Without this, approving a draft moved the queue and left the
+ * rail still saying "Needs you" for the slot that had just been approved — two views of one fact,
+ * disagreeing, on screen at the same time.
+ *
+ * Deliberately not Zustand or Context (D-022/D-038 rejected the store library, and there is no
+ * shared provider yet). A `Set` of callbacks is nine lines, no dependency, and it is exactly what a
+ * real client would expose so a cache could invalidate itself. Subscribers refetch through the same
+ * async reads as everyone else, so nothing gets a privileged synchronous view of the world.
+ * ==============================================================================================*/
+
+const listeners = new Set<() => void>();
+
+/** Returns its own unsubscribe, so an effect can hand it straight back to React. */
+export function subscribeToWorld(onChange: () => void): () => void {
+  listeners.add(onChange);
+  return () => {
+    listeners.delete(onChange);
+  };
+}
+
 function applyPatch(patch: WorldPatch): void {
   const merge = <T extends { id: string }>(collection: T[], changed?: T[]) => {
     if (!changed) return;
@@ -682,6 +712,10 @@ function applyPatch(patch: WorldPatch): void {
    *  special handling, and the alternative — inventing an id for a record there is exactly one of
    *  — would be worse. */
   if (patch.settings) world.settings = patch.settings;
+
+  /** Announced here rather than at each write, because this is the one function every write already
+   *  goes through. A per-call-site notify is the version that gets forgotten on the sixth write. */
+  for (const listener of listeners) listener();
 }
 
 export type ReviewDecision =
@@ -897,7 +931,14 @@ export type StreamEvent =
   /** Steps that had already happened when we attached. Delivered together, because that is what
    *  joining a stream in progress actually looks like. */
   | { type: 'history'; steps: RunStep[] }
+  /**
+   * A step that has STARTED. It is not finished, and the console must not render it as though it
+   * were — see `emitNext`.
+   */
   | { type: 'step'; step: RunStep }
+  /** That step finished. Carries the id rather than the step because nothing about the record
+   *  changed; what changed is that it is over. */
+  | { type: 'settled'; id: RunStepId }
   | { type: 'end'; reason: StreamEndReason };
 
 export type StreamHandle = {
@@ -922,6 +963,19 @@ export type StreamHandle = {
  * only. `stop()` clears the pending timer and sets a flag, because a callback can already be in
  * flight when cleanup runs.
  */
+/**
+ * ◆ DEMO AFFORDANCE — no production counterpart. Named as such in the README.
+ *
+ * `RunStep.playback_ms` is the fixture's own compression of `latency_ms`: a run whose steps really
+ * take four minutes is unwatchable, and a uniform 300ms tick is the faked streaming the brief
+ * rejects. The authored values land around 500–1600ms, which turned out to be too quick to read —
+ * a fourteen-step run was over in twelve seconds and registered as a flicker rather than as work.
+ *
+ * One multiplier here rather than eighty edited fixture values: the ratio to `latency_ms` is a
+ * property of the playback, not of any step, and it is the number the README quotes.
+ */
+const PLAYBACK_SCALE = 1.7;
+
 export function streamRun(
   runId: RunId,
   fromSeq: number,
@@ -1018,12 +1072,31 @@ export function streamRun(
       return;
     }
 
+    /**
+     * A STEP ARRIVES WHEN IT STARTS, NOT WHEN IT FINISHES.
+     *
+     * This used to wait `playback_ms` and then deliver the step complete — with its duration, its
+     * token counts and its cost already filled in. So the feed was a sequence of finished facts
+     * appearing at intervals, and the agent was never once seen *doing* anything. Watching it felt
+     * like a list being populated, because that is exactly what it was.
+     *
+     * Now the step is emitted immediately and marked settled after its own duration. The agent is
+     * visibly mid-step for the whole of that interval, which is the thing a person recognises as
+     * work happening. Same records, same order, same total elapsed time — the difference is
+     * entirely that there is now a present tense.
+     *
+     * It also makes the per-step duration legible for the first time: a 17-second drafting call
+     * visibly dwells where a 200ms guardrail check flicks past, and `playback_ms` finally means
+     * something on screen rather than just spacing the arrivals.
+     */
     const step = pending[index];
+    onEvent({ type: 'step', step });
+
     timer = setTimeout(() => {
       if (cancelled) return;
-      onEvent({ type: 'step', step });
+      onEvent({ type: 'settled', id: step.id });
       emitNext(index + 1);
-    }, step.playback_ms);
+    }, step.playback_ms * PLAYBACK_SCALE);
   }
 
   return { stop };

@@ -156,11 +156,101 @@ export function formatRelative(offset: MinutesFromAnchor): string {
 
 /** Whole client-local calendar days between two offsets. */
 export function calendarDaysBetween(a: MinutesFromAnchor, b: MinutesFromAnchor): number {
+  return Math.abs(signedCalendarDays(a, b));
+}
+
+/** As above, keeping direction: negative when `b` is before `a`. Days come from the client-local
+ *  calendar date rather than from dividing by 1440, so a daylight-saving boundary never adds one. */
+function signedCalendarDays(a: MinutesFromAnchor, b: MinutesFromAnchor): number {
   const ca = clockAt(a);
   const cb = clockAt(b);
   const dayA = Date.UTC(ca.year, ca.month - 1, ca.day);
   const dayB = Date.UTC(cb.year, cb.month - 1, cb.day);
-  return Math.abs(Math.round((dayB - dayA) / 86_400_000));
+  return Math.round((dayB - dayA) / 86_400_000);
+}
+
+/**
+ * An offset as a client-local calendar day: a whole-day index plus the weekday it falls on.
+ *
+ * The index is only meaningful against another value from this function — it exists so a caller can
+ * walk day by day. The weekday is the point: anything reasoning about working days, posting windows
+ * or a weekly grid has to agree with the calendar the client actually publishes against, and
+ * `Math.floor(offset / 1440)` does not. That divides time into 24-hour blocks measured from the
+ * anchor's mid-morning, so "day 3" spans Sunday morning to Monday morning and a Monday 09:00 slot
+ * gets attributed to Sunday.
+ */
+export function localDay(offset: MinutesFromAnchor): { index: number; weekday: number } {
+  const c = clockAt(offset);
+  return {
+    index: Math.round(Date.UTC(c.year, c.month - 1, c.day) / 86_400_000),
+    weekday: c.weekday,
+  };
+}
+
+/** Monday to Friday. The client's posting window is weekdays and L4 checks it before publishing. */
+export const isWorkingDay = (weekday: number): boolean => weekday >= 1 && weekday <= 5;
+
+/* ----------------------------------------------------------------------------------- weeks --- */
+
+/**
+ * WEEKS, because the product's unit of work is one.
+ *
+ * The agent plans on Monday, drafts the whole of the following week on Wednesday, publishes
+ * against slots, and learns on Sunday. Everything the operator does sits inside a week, so the
+ * week needs to be a value the code can pass around rather than something each screen re-derives
+ * from a pile of timestamps.
+ *
+ * WEEKS ARE INDEXED RELATIVE TO THE ANCHOR, NOT NUMBERED. Week 0 contains the anchor, week +1 is
+ * the one being drafted right now, week −1 is the one that just published. Absolute week numbers
+ * would reintroduce exactly the drift R2/D-030 removed by making every timestamp an offset.
+ *
+ * MONDAY-FIRST, because the schedule is: planning Monday, drafting Wednesday, learning Sunday. A
+ * Sunday-first week would split the learning run off from the week it learned from.
+ */
+const MINUTES_PER_DAY = 1440;
+
+/** How far into its own week the anchor sits, in whole days. The anchor is a Thursday and
+ *  `scripts/check.mts` enforces that, so this is 3 — but it is derived, not assumed. */
+function anchorDaysSinceMonday(): number {
+  return (clockAt(NOW).weekday + 6) % 7;
+}
+
+/**
+ * Which week an offset falls in, relative to the anchor's own week.
+ *
+ * `Math.floor` rather than a truncating divide: truncation rounds toward zero, which would fold
+ * last Sunday (−1 day from a Monday boundary) into week 0 alongside this Monday. Off-by-one on a
+ * week boundary is the defect this function exists to not have.
+ */
+export function weekIndexOf(offset: MinutesFromAnchor): number {
+  return Math.floor((signedCalendarDays(NOW, offset) + anchorDaysSinceMonday()) / 7);
+}
+
+/** Monday 00:00 client-local of a given week, as an offset. */
+export function weekStart(index: number): MinutesFromAnchor {
+  const c = clockAt(NOW);
+  const intoWeek = anchorDaysSinceMonday() * MINUTES_PER_DAY + c.hour * 60 + c.minute;
+  return (index * 7 * MINUTES_PER_DAY - intoWeek) as MinutesFromAnchor;
+}
+
+/** `Mon` — the day name alone, for a column head or a schedule row. */
+export function weekdayShort(offset: MinutesFromAnchor): string {
+  return WEEKDAY_LABELS[clockAt(offset).weekday];
+}
+
+/**
+ * `This week` · `Next week` · `Last week` · `Week of 20 Jul`.
+ *
+ * The three named ones are the only weeks an operator refers to by name. Anything further out is
+ * a date, because "in 3 weeks" is not something you can check a calendar against.
+ */
+export function weekLabel(index: number): string {
+  if (index === 0) return 'This week';
+  if (index === 1) return 'Next week';
+  if (index === -1) return 'Last week';
+  const start = weekStart(index);
+  const c = clockAt(start);
+  return `Week of ${pad(c.day)} ${MONTH_LABELS[c.month]}`;
 }
 
 /**

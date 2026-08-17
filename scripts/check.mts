@@ -1040,6 +1040,180 @@ check('settings transitions do not mutate the world they are given',
   fixtures.settings.tone.banned_phrases.length === 4 &&
   fixtures.settings.versions.length === 3);
 
+/* ==============================================================================================
+ * THE WEEK
+ *
+ * The projection in `lib/week.ts` is what every screen frames itself with, and two of its failure
+ * modes are silent by construction: a week that renders the wrong number of slots still renders,
+ * and a slot on the wrong weekday still renders. Both were live defects — the fixtures published
+ * six posts at the weekend, and the first version of the "about the week" group listed next week's
+ * eight drafting runs under this week. Neither threw. Both are asserted here.
+ * ============================================================================================*/
+
+section('The week');
+
+/** Dynamic, like the fixture import above: these modules read the build-time anchor, and importing
+ *  them at the top would resolve it before the anchor section has confirmed it is a Thursday. */
+const { buildWeek, defaultWeekIndex } = await import('../lib/week.ts');
+const { at, weekIndexOf, wallClockIn, CLIENT_TIMEZONE } = await import('../lib/time.ts');
+const initialWeek = defaultWeekIndex(fixtures);
+
+/**
+ * The contracted cadence is Monday to Friday and L4 checks a posting window before publishing, so
+ * a weekend slot is a fixture contradicting the architecture it is meant to illustrate. Asserted
+ * over the whole set rather than over history alone: the invariant is about the product, not about
+ * one generator.
+ */
+for (const slot of fixtures.calendarSlots) {
+  const day = wallClockIn(CLIENT_TIMEZONE, at(slot.publish_at)).weekday;
+  check(
+    `${slot.id} · publishes on a weekday`,
+    day >= 1 && day <= 5,
+    `lands on ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day]}`,
+  );
+}
+
+/**
+ * A SLIP IS A MOVE.
+ *
+ * `original_publish_at` exists so the calendar shows the move rather than silently relocating a
+ * slot. Both the fixture generator and the reject transition used to record the original time as
+ * *equal to* the current one, which asserts a reschedule that never happened and renders as
+ * `09:00 09:00` with one struck through. Neither threw; nothing read the field until the week view.
+ */
+for (const slot of fixtures.calendarSlots.filter((s) => s.original_publish_at !== null)) {
+  check(`${slot.id} · a moved slot actually moved`, slot.original_publish_at !== slot.publish_at);
+  check(`${slot.id} · it moved forwards`, (slot.original_publish_at as number) < slot.publish_at);
+}
+
+/** And the same for the transition, which is what a reviewer will actually trigger. */
+/** A topical slot is dropped rather than slipped, so it would exercise the other branch. */
+const slipping = fixtures.drafts.find((d) => {
+  if (d.state !== 'awaiting_approval') return false;
+  const slot = fixtures.calendarSlots.find((s) => s.id === d.slot_id);
+  return slot !== undefined && !slot.is_topical;
+});
+if (slipping) {
+  const slipped = reject(fixtures, slipping.id, 'tone_wrong', 'negative test', ctx)
+    .calendarSlots?.[0];
+  if (slipped?.state === 'slipped') {
+    check('a rejected slot slips to a later time',
+      (slipped.original_publish_at as number) < slipped.publish_at);
+    const day = wallClockIn(CLIENT_TIMEZONE, at(slipped.publish_at)).weekday;
+    check('a slipped slot lands on a weekday', day >= 1 && day <= 5);
+  }
+}
+
+/**
+ * The drafting week is the board's "Approved plan = 8 posts". Five are ratified `CalendarSlot`
+ * records and three exist only as `proposed_calendar` entries, so this number is the join working.
+ * If the match key ever drifts the week silently renders eleven — every proposed slot plus every
+ * ratified one — which looks plausible and is wrong.
+ */
+const draftingWeek = buildWeek(fixtures, 1);
+check('the drafting week holds eight slots', draftingWeek.entries.length === 8,
+  `got ${draftingWeek.entries.length}`);
+check('no slot is counted twice in a week',
+  new Set(draftingWeek.entries.map((e) => e.key)).size === draftingWeek.entries.length);
+
+/** A slot waiting on a person with no deadline cannot be chased, and the countdown renders nothing
+ *  where the operator expects a clock. */
+for (const entry of draftingWeek.entries.filter((e) => e.state === 'needs_you')) {
+  check(`${entry.key} · a slot needing you carries a deadline`, entry.deadline !== null);
+}
+
+/** Every entry must fall inside the week that claims it — the `weekIndexOf`/`weekStart` pair is
+ *  used in both directions and an off-by-one on a Monday boundary would be invisible. */
+for (const index of [-3, -2, -1, 0, 1]) {
+  const week = buildWeek(fixtures, index);
+  check(
+    `week ${index} · every entry falls inside it`,
+    week.entries.every((e) => weekIndexOf(e.publish_at) === index),
+  );
+  /** A run that targets a draft or a post belongs to that record's slot. Listing it separately is
+   *  how the rail got to thirty-eight rows, and how the first version of this group showed ten. */
+  check(
+    `week ${index} · about-the-week runs target no record`,
+    week.otherRuns.every((r) => r.run.target_draft_id === null && r.run.target_post_id === null),
+  );
+}
+
+/** The console and the rail open here. Opening on a week with nothing waiting would hide every
+ *  pending decision behind a stepper the reviewer has no reason to press. */
+check('the default week is the one with work in it', buildWeek(fixtures, initialWeek).waitingOnYou > 0);
+
+/* ==============================================================================================
+ * THE BUDGET GATE
+ *
+ * The cap is the one control whose effect is a system state rather than a record change, and the
+ * demonstration depends on two facts that are easy to break by editing a fixture: that the shipped
+ * dataset sits quietly under the cap, and that the cap can still be dragged below spend. Lose the
+ * first and every screen carries a permanent budget warning; lose the second and the gate cannot be
+ * shown working at all.
+ * ============================================================================================*/
+
+section('The budget gate');
+
+const { budgetPosture } = await import('../lib/budget.ts');
+const posture = budgetPosture(fixtures);
+
+check('the shipped fixtures sit under the cap', posture.state === 'under',
+  `state is ${posture.state} at ${posture.pct.toFixed(1)}%`);
+check('spend is summed over real steps', posture.sample_n > 0);
+check('spend exceeds the opening balance', posture.spent > fixtures.client.opening_spend_usd);
+
+/**
+ * Both cost addends contribute, asserted rather than assumed.
+ *
+ * A publish step incurs model *and* platform cost — X is pay-per-use, and a URL-bearing post costs
+ * a multiple of a plain one. Dropping the platform term is a one-word edit that understates exactly
+ * the runs the cap exists to govern, and it changes no state and throws nothing: spend simply reads
+ * a little low forever. This is the only thing that would notice.
+ */
+const modelOnly =
+  fixtures.client.opening_spend_usd +
+  fixtures.runSteps
+    .filter((s) => s.started_at >= fixtures.client.budget_period_start)
+    .reduce((total, s) => total + s.cost_model_usd, 0);
+check('platform cost is part of spend', posture.spent > modelOnly,
+  `spend ${posture.spent.toFixed(4)} vs model-only ${modelOnly.toFixed(4)}`);
+
+/** The cap's floor must be reachable from below current spend, or dragging it can never trip the
+ *  gate and the control demonstrates nothing. */
+const capRange = fixtures.settings.field_meta['budget.cap']?.range;
+check('the cap range is declared', capRange !== undefined);
+if (capRange) {
+  check('the cap can be dragged below current spend', capRange.min < posture.spent,
+    `min ${capRange.min} vs spend ${posture.spent.toFixed(2)}`);
+}
+
+/** Same purity rule as every other transition: the function is handed the world and must not
+ *  write to it. `budget` is a nested object, so a naive field write would reach through the
+ *  one-level spread in `withNewVersion` and mutate the caller's settings. */
+const capBefore = fixtures.settings.budget.cap;
+const capPatch = updateSetting(fixtures, { kind: 'budget_cap', value: 60 }, ctx);
+check('budget_cap does not mutate the world it is given',
+  fixtures.settings.budget.cap === capBefore, `world now reads ${fixtures.settings.budget.cap}`);
+check('budget_cap returns the new value on the patch', capPatch.settings?.budget.cap === 60);
+check('budget_cap records a diff row',
+  capPatch.settings?.versions.at(-1)?.diff.some((d) => d.key === 'budget.cap') === true);
+
+/** Clamped to the declared range rather than trusted — a caller is not a slider. */
+if (capRange) {
+  const tooLow = updateSetting(fixtures, { kind: 'budget_cap', value: -50 }, ctx);
+  check('budget_cap clamps below its range', tooLow.settings?.budget.cap === capRange.min);
+  const tooHigh = updateSetting(fixtures, { kind: 'budget_cap', value: 99_999 }, ctx);
+  check('budget_cap clamps above its range', tooHigh.settings?.budget.cap === capRange.max);
+}
+
+/** And the gate actually trips when it should. Posture is read against the patched settings, which
+ *  is what the screen does after a write. */
+if (capPatch.settings) {
+  const stopped = budgetPosture({ ...fixtures, settings: capPatch.settings });
+  check('taking the cap below spend stops the gate', stopped.state === 'stopped',
+    `state is ${stopped.state}`);
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed.`);
 
 if (failures > 0) {

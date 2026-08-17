@@ -10,6 +10,10 @@
  * So the row shows why it is here, what the agent wrote, the score with its arithmetic, and every
  * guardrail result. What it does not show is the full reasoning trace — that is the detail view,
  * and putting it here would make the queue unreadable at forty items.
+ *
+ * IT NO LONGER SHOWS THE BUTTONS EITHER. The decision surface is `DecisionControls`, rendered by
+ * the console as well, and this component takes it as a slot. What is left here is the evidence,
+ * which is what the row was always about.
  */
 
 import Link from 'next/link';
@@ -59,20 +63,23 @@ export function QueueRow({
   selected,
   busy,
   onSelect,
-  onApprove,
-  onEdit,
-  onReject,
-  onEscalate,
+  controls,
 }: {
   item: QueueItem;
   threshold: number;
   selected: boolean;
   busy: boolean;
   onSelect: () => void;
-  onApprove: () => void;
-  onEdit: () => void;
-  onReject: () => void;
-  onEscalate: () => void;
+  /**
+   * The decision surface, built by the screen and slotted in.
+   *
+   * It was four callbacks — `onApprove`, `onEdit`, `onReject`, `onEscalate` — which made this
+   * component a second place that knew what the buttons are called and which arms offer which.
+   * `DecisionControls` owns both now, so the row's job is back to what it says on the header: lay
+   * out what a person needs in order to decide. `null` on the run arm, which has no draft to
+   * decide against.
+   */
+  controls: React.ReactNode;
 }) {
   const frame = {
     borderColor: selected ? 'var(--accent-text)' : 'var(--border)',
@@ -88,22 +95,25 @@ export function QueueRow({
           <Badge tone={runStateTone(item.run.state)}>
             {RUN_STATE_LABEL[item.run.state] ?? item.run.state}
           </Badge>
-          <span className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          <span className="t-meta font-mono" style={{ color: 'var(--text-muted)' }}>
             {item.run.id}
           </span>
-          <span className="text-[12px]" style={{ color: 'var(--text-faint)' }}>
-            {formatRelative(item.run.started_at)}
-          </span>
+          <span className="t-meta">{formatRelative(item.run.started_at)}</span>
         </div>
 
-        <p className="mt-1.5 text-[13px]">
+        <p className="t-body mt-1.5">
           {/* No draft exists to show. That is the point of this arm of the union. */}
           {failure?.detail ?? 'This run stopped and needs a person.'}
         </p>
 
         {item.run.next_sweep_at !== null && (
-          <p className="mt-1 text-[12px]" style={{ color: 'var(--text-muted)' }}>
-            Retries in <Countdown deadline={item.run.next_sweep_at} expiredLabel="any moment" />
+          <p className="t-label mt-1">
+            Retries in{' '}
+            <Countdown
+              deadline={item.run.next_sweep_at}
+              expiredLabel="any moment"
+              className="tabular"
+            />
           </p>
         )}
       </div>
@@ -130,14 +140,14 @@ export function QueueRow({
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="blocked">Returned to you</Badge>
           <Badge tone="neutral">{item.post.channel === 'linkedin' ? 'LinkedIn' : 'X'}</Badge>
-          <span className="text-[13px] font-medium">Caught by a rule you changed</span>
+          <span className="t-body font-medium">Caught by a rule you changed</span>
           <span className="ml-auto flex items-center gap-2">
-            <span className="font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>
+            <span className="t-meta tabular font-mono">
               was publishing {formatRelative(item.post.scheduled_at)}
             </span>
             <Link
               href={`/draft/${item.draft.id}`}
-              className="text-[12px]"
+              className="t-label"
               style={{ color: 'var(--accent-text)' }}
             >
               Open
@@ -149,50 +159,20 @@ export function QueueRow({
             from a bug, and `invalidated_reason` exists on the record for this sentence. */}
         {item.post.invalidated_reason && (
           <p
-            className="mt-1.5 rounded px-2 py-1 text-[12px]"
+            className="t-label mt-1.5 rounded px-2 py-1"
             style={{ background: 'var(--state-blocked-bg)', color: 'var(--state-blocked)' }}
           >
             {item.post.invalidated_reason}
           </p>
         )}
 
-        <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">
+        <p className="mt-2 t-body whitespace-pre-wrap">
           {scheduledVersion?.text}
         </p>
 
-        <p className="mt-2 text-[12px]" style={{ color: 'var(--text-muted)' }}>
-          Nothing was sent.
-        </p>
+        <p className="t-label mt-2">Nothing was sent.</p>
 
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onApprove}
-            disabled={busy}
-            className="rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-40"
-            style={{ background: 'var(--accent)', color: '#fff' }}
-          >
-            Approve again
-          </button>
-          <button
-            type="button"
-            onClick={onEdit}
-            disabled={busy}
-            className="rounded border px-2.5 py-1 text-[13px] disabled:opacity-40"
-            style={{ borderColor: 'var(--border-strong)' }}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={onReject}
-            disabled={busy}
-            className="rounded border px-2.5 py-1 text-[13px] disabled:opacity-40"
-            style={{ borderColor: 'var(--border-strong)' }}
-          >
-            Drop it
-          </button>
-        </div>
+        <div className="mt-2.5">{controls}</div>
       </div>
     );
   }
@@ -220,7 +200,7 @@ export function QueueRow({
         <Badge tone={belowThreshold || blocked ? 'awaiting' : 'neutral'}>
           {draft.channel === 'linkedin' ? 'LinkedIn' : 'X'}
         </Badge>
-        <span className="text-[13px] font-medium">{flags[0]}</span>
+        <span className="t-body font-medium">{flags[0]}</span>
         {events
           .filter((e) => e.result !== 'pass')
           .map((e) => (
@@ -229,13 +209,13 @@ export function QueueRow({
             </Badge>
           ))}
         <span className="ml-auto flex items-center gap-2">
-          <span className="font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>
+          <span className="t-meta tabular font-mono">
             {approval ? `waiting ${formatRelative(approval.queued_at).replace(' ago', '')}` : ''}
           </span>
           {/* The queue carries enough to decide; the detail view is for when it is not enough. */}
           <Link
             href={`/draft/${draft.id}`}
-            className="text-[12px]"
+            className="t-label"
             style={{ color: 'var(--accent-text)' }}
           >
             Open
@@ -244,27 +224,24 @@ export function QueueRow({
       </div>
 
       {/* The draft itself. Whitespace preserved because line breaks are part of how a post reads. */}
-      <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">{version?.text}</p>
+      <p className="mt-2 t-body whitespace-pre-wrap">{version?.text}</p>
 
       {/* The score with its arithmetic beside it. A single number hides whether the weights were
           applied at all, and hides which dimension is dragging — which is the thing an operator
           would actually act on. */}
       <details className="mt-2">
-        <summary
-          className="cursor-pointer font-mono text-[10px] font-bold uppercase"
-          style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}
-        >
+        {/* `.t-field` and not a heading class: this labels a stat block, which is the one job the
+            PDF's mono-caps FIELD role has. It also raises the old 10px off the floor. */}
+        <summary className="t-field tabular cursor-pointer">
           Score {draft.composite_score.toFixed(3)} · {events.length} checks
         </summary>
         <div className="mt-1.5 space-y-1.5">
           <ul className="grid grid-cols-2 gap-x-4 gap-y-0.5">
             {(Object.keys(draft.score_components) as (keyof typeof draft.score_components)[]).map(
               (dimension) => (
-                <li key={dimension} className="flex items-baseline justify-between gap-2 text-[12px]">
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    {dimension.replace(/_/g, ' ')}
-                  </span>
-                  <span className="font-mono">
+                <li key={dimension} className="t-label flex items-baseline justify-between gap-2">
+                  <span>{dimension.replace(/_/g, ' ')}</span>
+                  <span className="tabular font-mono">
                     {draft.score_components[dimension].toFixed(2)}
                     <span style={{ color: 'var(--text-faint)' }}>
                       {' '}
@@ -277,65 +254,19 @@ export function QueueRow({
           </ul>
           <ul className="space-y-0.5">
             {events.map((event) => (
-              <li key={event.id} className="flex items-baseline gap-2 text-[12px]">
+              <li key={event.id} className="t-label flex items-baseline gap-2">
                 <Badge tone={guardrailTone(event.result)}>{event.result}</Badge>
-                <span style={{ color: 'var(--text-muted)' }}>{event.detail}</span>
+                <span>{event.detail}</span>
               </li>
             ))}
           </ul>
         </div>
       </details>
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        {/*
-          Approve is removed where a guardrail *failed*, per A-09. A warn routes to review and can
-          be approved past; a fail blocks, and offering the button anyway would make the guardrail
-          advisory. The distinction is the whole reason results are three-state.
-        */}
-        {!blocked && (
-          <button
-            type="button"
-            onClick={onApprove}
-            disabled={busy}
-            className="rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-40"
-            style={{ background: 'var(--accent)', color: '#fff' }}
-          >
-            Approve
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onEdit}
-          disabled={busy}
-          className="rounded border px-2.5 py-1 text-[13px] disabled:opacity-40"
-          style={{ borderColor: 'var(--border-strong)' }}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          onClick={onReject}
-          disabled={busy}
-          className="rounded border px-2.5 py-1 text-[13px] disabled:opacity-40"
-          style={{ borderColor: 'var(--border-strong)' }}
-        >
-          Reject
-        </button>
-        <button
-          type="button"
-          onClick={onEscalate}
-          disabled={busy}
-          className="rounded border px-2.5 py-1 text-[13px] disabled:opacity-40"
-          style={{ borderColor: 'var(--border-strong)', color: 'var(--text-muted)' }}
-        >
-          Escalate
-        </button>
-        {blocked && (
-          <span className="text-[12px]" style={{ color: 'var(--state-blocked)' }}>
-            Blocked — edit or drop it
-          </span>
-        )}
-      </div>
+      {/* Approve-removed-when-blocked (A-09) moved into `DecisionControls` with the buttons: it is
+          a rule about the decision surface, and leaving it here would have been the second place
+          that knew it. */}
+      <div className="mt-2.5">{controls}</div>
     </div>
   );
 }

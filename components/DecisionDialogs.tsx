@@ -16,6 +16,11 @@
  *
  * The options come from settings rather than from a constant here. One list, two surfaces: the
  * operator can see and edit in Settings exactly what the reject dialog will offer.
+ *
+ * IT LIVES AT `components/` AND NOT `components/queue/`. It used to be queue-only, and the folder
+ * said so. `DecisionControls` now mounts it on the console as well, so a path claiming one owner
+ * would be the file lying about who uses it — the same reason `Badge` is not under `components/
+ * console/`. Nothing else moved: this is the file it always was, with one import path corrected.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -74,7 +79,8 @@ function Modal({
       }}
     >
       <div className="p-4">
-        <h2 className="text-[13px] font-bold">{title}</h2>
+        {/* `.t-section`, not `.t-title`: the screen name is the title and there is one of those. */}
+        <h2 className="t-section">{title}</h2>
         {children}
       </div>
     </dialog>
@@ -120,14 +126,14 @@ export function DecisionDialogs({
   return (
     <>
       <Modal open={open === 'reject'} title="Why are you rejecting this?" onClose={onClose}>
-        <p className="mt-1 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+        <p className="t-label mt-1">
           The reason goes back to the agent. The next attempt at this slot will name it.
         </p>
 
         <ul className="mt-3 space-y-1">
           {active.map((reason) => (
             <li key={reason.code}>
-              <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[13px]">
+              <label className="t-body flex cursor-pointer items-center gap-2 rounded px-2 py-1">
                 <input
                   type="radio"
                   name="reject-reason"
@@ -149,7 +155,7 @@ export function DecisionDialogs({
           onChange={(e) => setNote(e.target.value)}
           rows={2}
           placeholder="Anything else (optional)"
-          className="mt-2 w-full resize-none rounded border px-2 py-1.5 text-[13px] outline-none"
+          className="t-body mt-2 w-full resize-none rounded border px-2 py-1.5 outline-none"
           style={{ borderColor: 'var(--border-strong)', background: 'var(--surface-sunk)' }}
         />
 
@@ -161,15 +167,15 @@ export function DecisionDialogs({
               const chosen = active.find((r) => r.code === code);
               if (chosen) onReject(chosen.code, note.trim() || null, chosen.label);
             }}
-            className="rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-30"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            className="t-body rounded px-2.5 py-1 font-medium disabled:opacity-30"
+            style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
           >
             Reject
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded border px-2.5 py-1 text-[13px]"
+            className="t-body rounded border px-2.5 py-1"
             style={{ borderColor: 'var(--border-strong)' }}
           >
             Cancel
@@ -178,7 +184,7 @@ export function DecisionDialogs({
       </Modal>
 
       <Modal open={open === 'edit'} title="Edit before approving" onClose={onClose}>
-        <p className="mt-1 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+        <p className="t-label mt-1">
           Your version is what publishes, and what the approval binds to.
         </p>
 
@@ -186,16 +192,11 @@ export function DecisionDialogs({
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={8}
-          className="mt-2 w-full resize-none rounded border px-2 py-1.5 text-[13px] leading-relaxed outline-none"
+          className="t-body mt-2 w-full resize-none rounded border px-2 py-1.5 outline-none"
           style={{ borderColor: 'var(--border-strong)', background: 'var(--surface-sunk)' }}
         />
 
-        <div
-          className="mt-2 font-mono text-[10px] font-bold uppercase"
-          style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}
-        >
-          What did you change?
-        </div>
+        <div className="t-field mt-2">What did you change?</div>
         <div className="mt-1 flex flex-wrap gap-1">
           {EDIT_TAGS.map(({ tag, label }) => {
             const on = tags.includes(tag);
@@ -204,7 +205,7 @@ export function DecisionDialogs({
                 key={tag}
                 type="button"
                 onClick={() => setTags((t) => (on ? t.filter((x) => x !== tag) : [...t, tag]))}
-                className="rounded border px-2 py-0.5 text-[12px]"
+                className="t-label rounded border px-2 py-0.5"
                 style={{
                   borderColor: on ? 'var(--accent-text)' : 'var(--border-strong)',
                   color: on ? 'var(--accent-text)' : 'var(--text-muted)',
@@ -215,7 +216,7 @@ export function DecisionDialogs({
             );
           })}
         </div>
-        <p className="mt-1 text-[11px]" style={{ color: 'var(--text-faint)' }}>
+        <p className="t-meta mt-1">
           A tag seen three times in twenty decisions becomes a suggested writing rule.
         </p>
 
@@ -224,15 +225,15 @@ export function DecisionDialogs({
             type="button"
             disabled={!text.trim() || text === version?.text}
             onClick={() => onSaveEdit(text, tags)}
-            className="rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-30"
-            style={{ background: 'var(--accent)', color: '#fff' }}
+            className="t-body rounded px-2.5 py-1 font-medium disabled:opacity-30"
+            style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
           >
             Save and approve
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded border px-2.5 py-1 text-[13px]"
+            className="t-body rounded border px-2.5 py-1"
             style={{ borderColor: 'var(--border-strong)' }}
           >
             Cancel

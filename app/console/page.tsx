@@ -10,15 +10,26 @@
  * ---------------------------------------------------------------------------------------------
  * THE LAYOUT IS THE ARGUMENT
  *
- * A context strip that does not move, one scrolling transcript, and a composer pinned to the
- * bottom. The transcript stays anchored to its end as steps arrive, and stops doing so the moment
- * you scroll up to read something — because following a live feed and reading back through it are
- * two different jobs, and a view that yanks you to the bottom mid-sentence is doing one of them
- * badly.
+ * A week frame that does not move, one scrolling transcript, and a composer pinned to the bottom.
+ * The transcript stays anchored to its end as steps arrive, and stops doing so the moment you
+ * scroll up to read something — because following a live feed and reading back through it are two
+ * different jobs, and a view that yanks you to the bottom mid-sentence is doing one of them badly.
  *
  * An earlier version was a document: a page title, stacked sections with headings, content running
  * off the bottom of a scrolling page. It read as an article about an agent rather than as an agent
  * being watched.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * THE HEADER IS A WEEK, NOT A RECORD HEADER
+ *
+ * It read `RUN-0147 · Needs you · Wednesday batch · 2h ago`: which database row is open, and
+ * nothing else. Every question an operator actually opens this screen with — how much of next week
+ * is still on me, did the owner sign off the calendar, what fires next — was unanswerable from the
+ * one strip that never scrolls away.
+ *
+ * So the frame is the week (`lib/week.ts`) and the run is demoted to a second line under it. The
+ * run id survives as `.t-meta`, because it is what you quote in a bug report and not what you
+ * navigate by.
  *
  * ---------------------------------------------------------------------------------------------
  * WHAT IS REAL HERE AND WHAT IS PRE-WRITTEN
@@ -35,31 +46,107 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import { useRouter } from 'next/navigation';
 import {
   getActiveRun,
+  getDraftDetail,
   getGuardrailEvents,
+  getSettings,
+  getWeek,
   haltRun,
+  initialWeekIndex,
   openRun,
   runNow as startRunNow,
   streamRun,
   submitBrief,
+  subscribeToWorld,
   type RunAttachment,
   type StreamEndReason,
 } from '@/lib/agentClient';
-import type { BriefRef, ConsoleError, GuardrailEvent, Run, RunId, RunStep } from '@/lib/types';
-import { formatRelative, formatTime } from '@/lib/time';
-import { Badge, RUN_STATE_LABEL, runStateTone } from '@/components/Badge';
+import type {
+  BriefRef,
+  ConsoleError,
+  Draft,
+  DraftId,
+  GuardrailEvent,
+  MinutesFromAnchor,
+  Run,
+  RunId,
+  RunStep,
+  RunStepId,
+  Settings,
+} from '@/lib/types';
+import type { OwnerGate, Week, WeekEntry } from '@/lib/week';
+import { NOW, formatRelative, formatTime, weekStart, weekdayShort } from '@/lib/time';
+import { Badge, RUN_STATE_LABEL, runStateTone, weekSlotTone } from '@/components/Badge';
+import { Countdown } from '@/components/Countdown';
 import { ErrorPanel, NotFound } from '@/components/ErrorState';
 import { StepRow } from '@/components/console/StepRow';
 import { ControlBar } from '@/components/console/ControlBar';
+import { DecisionControls } from '@/components/DecisionControls';
 import { Rail } from '@/components/Rail';
 
+/**
+ * WHO STARTED THIS RUN, not just which job it was.
+ *
+ * The labels read `Wednesday batch`, `Daily poll`, `Retry sweep` — names of jobs, which left the
+ * obvious question unanswered: *why is this running when I did not press anything.* The agent runs
+ * on a schedule and the console attaches to a run already in flight, which is correct and is what
+ * the fixture's `RUN_LIVE` comment defends; it simply was not stated anywhere on screen.
+ *
+ * Prefixing the agency onto the label answers it in the frame, where the fact already lives, rather
+ * than adding a sentence explaining scheduling to the person who configured it.
+ */
 const TRIGGER_LABEL: Record<string, string> = {
-  'schedule.weekly_plan': 'Monday schedule',
-  'schedule.weekly_draft': 'Wednesday batch',
+  'schedule.weekly_plan': 'Scheduled · Monday plan',
+  'schedule.weekly_draft': 'Scheduled · Wednesday batch',
   'manual.run_now': 'Started by you',
-  'poll.performance': 'Daily poll',
-  'poll.engagement': 'Reply poll',
-  'sweep.resume': 'Retry sweep',
+  'poll.performance': 'Scheduled · daily poll',
+  'poll.engagement': 'Scheduled · reply poll',
+  'sweep.resume': 'Automatic retry',
 };
+
+const CHANNEL_LABEL: Record<WeekEntry['channel'], string> = {
+  linkedin: 'LinkedIn',
+  x: 'X',
+};
+
+const MINUTES_PER_DAY = 1440;
+
+/**
+ * THE SCHEDULE, WHICH IS THE ONE THING THIS SCREEN KNOWS ABOUT NEXT WEEK.
+ *
+ * A-01's weekday rhythm: Monday plans, Wednesday drafts the whole of the following week, Sunday
+ * learns from what the humans changed. Days are Monday-indexed to match `weekStart`.
+ *
+ * THE HOURS ARE ORDERING ONLY AND ARE NEVER RENDERED. Monday's and Wednesday's 06:00 are fixtured;
+ * the learning job's hour is not specified anywhere, so printing a time for it would be the console
+ * asserting a fact the system does not hold. The hour exists so that "what fires next" is still
+ * right on a Wednesday afternoon, when the batch that morning is already behind us — a comparison
+ * on whole days alone would answer with a job that has already run.
+ */
+const SCHEDULE = [
+  { day: 6, hour: 6, label: 'learning run' },
+  { day: 0, hour: 6, label: 'planning run' },
+  { day: 2, hour: 6, label: 'drafting batch' },
+] as const;
+
+/**
+ * The next scheduled behaviour, derived rather than written down.
+ *
+ * Two weeks of candidates, because from a Thursday the next Monday and Wednesday both live in the
+ * week after this one. Pure arithmetic over the anchor, so it computes identically on the server
+ * and in the browser — the same reason nothing in `lib/time.ts` calls `Date.now()`.
+ */
+function nextScheduled(): { label: string; at: MinutesFromAnchor } {
+  const monday = weekStart(0) as number;
+  return [0, 1]
+    .flatMap((week) =>
+      SCHEDULE.map((job) => ({
+        label: job.label,
+        at: (monday + (week * 7 + job.day) * MINUTES_PER_DAY + job.hour * 60) as MinutesFromAnchor,
+      })),
+    )
+    .filter((candidate) => candidate.at > NOW)
+    .sort((a, b) => (a.at as number) - (b.at as number))[0];
+}
 
 /** Status, not prose. Each is what an operator would say out loud about the run. */
 const END_COPY: Record<StreamEndReason, string> = {
@@ -91,6 +178,45 @@ export default function ConsolePage() {
   const [error, setError] = useState<ConsoleError | null>(null);
   const [loading, setLoading] = useState(true);
   const [briefs, setBriefs] = useState<BriefRef[]>([]);
+  const [week, setWeek] = useState<Week | null>(null);
+
+  /**
+   * The week index, resolved once.
+   *
+   * `initialWeekIndex()` is synchronous and picks the earliest week that still has something
+   * waiting — from a Thursday that is next week, whose eight posts Wednesday's batch drafted. Held
+   * in state with a lazy initialiser so that re-reading the week after a decision re-reads *this*
+   * week, rather than sliding to whichever week is now the earliest with work outstanding. The
+   * frame moving under the operator because they cleared something is the opposite of a frame.
+   */
+  const [weekIndex] = useState(initialWeekIndex);
+
+  /**
+   * Writes land in `agentClient` and are announced from `applyPatch`, so any screen that renders a
+   * consequence of one can re-read without being told by the screen that took the decision.
+   *
+   * This is new, and it is what the console needed the moment it could take a decision itself. The
+   * comment here used to say the console takes none and therefore nothing on it can change
+   * `waitingOnYou`. That is now false: approving at the interrupt moves the week, the rail and the
+   * metrics, and the frame has to agree with the transcript underneath it. Same mechanism the rail
+   * and the week view already use.
+   */
+  const [worldRevision, setWorldRevision] = useState(0);
+  useEffect(() => subscribeToWorld(() => setWorldRevision((n) => n + 1)), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getWeek(weekIndex)
+      .then((next) => {
+        if (!cancelled) setWeek(next);
+      })
+      /** The frame is context. If it fails the transcript is still the screen, so this does not
+       *  raise the full-screen error state the run's own failure does. */
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [weekIndex, worldRevision]);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,13 +300,11 @@ export default function ConsolePage() {
   const handleEnd = useCallback((reason: StreamEndReason) => setEnded(reason), []);
 
   /**
-   * Where a decision actually gets taken.
+   * The route to the queue, now a secondary affordance rather than the only one.
    *
-   * The console is a viewer and the queue is where a week's decisions get cleared in one sitting.
-   * That split is the brief's, but nothing on this screen used to say so: a run would stop, announce
-   * "Waiting for you", and offer no route anywhere. The only visible control was Run now, which
-   * starts a *different* run — so the obvious thing to press was also the wrong one, and it gave no
-   * signal that it was wrong.
+   * The decision itself is taken here — see `decision` below. This stays because clearing a week in
+   * one sitting is what the queue is for, and a person who has just approved the run in front of
+   * them usually has seven more waiting.
    */
   const router = useRouter();
   const goToQueue = useCallback(() => router.push('/queue'), [router]);
@@ -191,16 +315,123 @@ export default function ConsolePage() {
    *
    * Keyed off the *stream's* ending rather than `run.state`, and the difference is not pedantic:
    * the live run is `running` in its record and stays that way while its remaining steps play out,
-   * so a condition on the record hid the link on the one run a reviewer is most likely to be
+   * so a condition on the record hid the controls on the one run a reviewer is most likely to be
    * watching when it stops.
    *
-   * Planning is excluded because its gate waits on the owner, who has no console account and
-   * approves by signed link from their inbox. Offering the operator a decision there would invent
-   * a gate the architecture does not have.
+   * PLANNING IS EXCLUDED AND STAYS EXCLUDED. Its gate waits on the client's owner, who has no
+   * console account and approves by signed link from their inbox. Offering the operator a decision
+   * there would invent a gate the architecture does not have.
    */
   const needsOperator = ended === 'interrupt' && run?.type !== 'planning';
   /** Viewing something that already finished, rather than following the live run. */
   const viewingPast = run !== null && run.state !== 'running' && ended !== null;
+
+  /* --------------------------------------------------------------------------------------------
+   * THE DRAFT GATE
+   *
+   * What the operator is being asked to decide about, loaded only once a run has actually stopped
+   * for them. Two of the four interrupt gates carry no draft at all — a hostile-reply intervention
+   * is about a published post — so this resolves to null there and the row falls back to the queue
+   * route.
+   * ------------------------------------------------------------------------------------------ */
+
+  const [gate, setGate] = useState<{ draft: Draft; decidable: boolean } | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  /**
+   * What the operator's decision did, kept on screen where the buttons were.
+   *
+   * Both carry the draft they belong to, and both are rendered only while that is still the draft
+   * on screen. The alternative was clearing them in an effect keyed on the run — which would have
+   * had to distinguish "a different run is showing" from "the world changed because of the
+   * decision I just took", and the second of those fires immediately after every decision.
+   */
+  const [outcome, setOutcome] = useState<{ draftId: DraftId; message: string } | null>(null);
+  const [decisionError, setDecisionError] = useState<{
+    draftId: DraftId;
+    error: ConsoleError;
+  } | null>(null);
+
+  /**
+   * When the operator started looking at this decision.
+   *
+   * A-17's rubber-stamp clock measures from here, not from page load — the same discipline the
+   * queue applies at selection. A ref rather than state because it is read at decision time and
+   * never rendered.
+   */
+  const gateOpenedAt = useRef(0);
+
+  const gateDraftId: DraftId | null = needsOperator ? (run?.target_draft_id ?? null) : null;
+
+  /** Nothing is cleared here on the way out. A stale `gate` is filtered at the render below by
+   *  comparing its draft to `gateDraftId`, which is one comparison against a `setState` in an
+   *  effect body — the cascading render the lint rule is right to reject. */
+  useEffect(() => {
+    if (gateDraftId === null) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [detail, config] = await Promise.all([getDraftDetail(gateDraftId), getSettings()]);
+        if (cancelled) return;
+        setGate({
+          draft: detail.draft,
+          /**
+           * Decidable means the world holds a pending approval to decide against.
+           *
+           * The live run is the case that forces this check. It is mid-flight at `NOW`: its
+           * interrupt step is in the future, its draft is still `drafting`, and no Approval row
+           * exists yet — so there is genuinely nothing to approve, and `submitReview` would throw
+           * against a draft with no pending approval. The runs that have actually reached the gate
+           * (RUN-0141, RUN-0142, and anything Start-a-new-run replays) do carry one.
+           */
+          decidable:
+            detail.draft.state === 'awaiting_approval' &&
+            detail.approval !== null &&
+            detail.approval.decided_at === null,
+        });
+        setSettings(config);
+        gateOpenedAt.current = Date.now();
+      } catch {
+        /** The gate is one block inside the transcript. If it fails to load the run is still
+         *  readable, so this does not raise the full-screen error state. */
+        if (!cancelled) setGate(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [gateDraftId, worldRevision]);
+
+  /**
+   * The decision surface, built once and slotted into the interrupt step.
+   *
+   * `DecisionControls` is the same component the queue renders, holding the only `submitReview`
+   * call site in the application — which is what answers D-051's objection that a console decision
+   * would mean two implementations of the highest-consequence write. There is one, and two screens
+   * import it.
+   */
+  const decision =
+    decisionError && decisionError.draftId === gateDraftId ? (
+      <ErrorPanel
+        error={decisionError.error}
+        onRetry={() => setDecisionError(null)}
+        retryLabel="Try again"
+      />
+    ) : outcome && outcome.draftId === gateDraftId ? (
+      <span
+        className="t-body inline-block rounded px-2 py-0.5 font-bold"
+        style={{ background: 'var(--note-bg)', color: 'var(--note-ink)' }}
+      >
+        {outcome.message}
+      </span>
+    ) : gate?.decidable && gate.draft.id === gateDraftId && settings ? (
+      <DecisionControls
+        draft={gate.draft}
+        reasons={settings.rejection_reason_set}
+        openedAt={gateOpenedAt}
+        onDecided={(message) => setOutcome({ draftId: gate.draft.id, message })}
+        onError={(error) => setDecisionError({ draftId: gate.draft.id, error })}
+      />
+    ) : null;
 
   if (error) {
     return (
@@ -215,6 +446,7 @@ export default function ConsolePage() {
             onBackToLive={backToLive}
             canHalt={false}
             viewingPast={false}
+            runActive={false}
             busy={loading}
           />
         </main>
@@ -226,37 +458,7 @@ export default function ConsolePage() {
     <>
       <Rail selectedRunId={run?.id ?? null} onSelectRun={showRun} />
       <main className="flex min-w-0 flex-1 flex-col">
-      {/* Context strip. Fixed, because "which run is this and why did it fire" should never scroll
-          away from the thing it describes. */}
-      <div
-        className="shrink-0 border-b px-4 py-2.5"
-        style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
-      >
-        <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-1">
-          {run ? (
-            <>
-              <span className="font-mono text-[13px]">{run.id}</span>
-              <Badge tone={runStateTone(run.state)}>
-                {RUN_STATE_LABEL[run.state] ?? run.state}
-              </Badge>
-              {run.variant !== 'nominal' && (
-                <Badge tone="parked" mono>
-                  {run.variant}
-                </Badge>
-              )}
-              {run.degraded && <Badge tone="parked">degraded</Badge>}
-              <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-                {TRIGGER_LABEL[run.trigger] ?? run.trigger} · {formatRelative(run.started_at)}
-              </span>
-
-            </>
-          ) : (
-            <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
-              No run selected
-            </span>
-          )}
-        </div>
-      </div>
+      <WeekFrame week={week} run={run} />
 
       <Transcript
         source={source}
@@ -268,6 +470,7 @@ export default function ConsolePage() {
         onRunNow={runNow}
         onDecide={goToQueue}
         needsOperator={needsOperator}
+        decision={decision}
       />
 
       <ControlBar
@@ -277,10 +480,115 @@ export default function ConsolePage() {
         onBackToLive={backToLive}
         canHalt={streaming}
         viewingPast={viewingPast}
+        /** Live, or stopped and waiting on a person: either way starting another run is not the
+         *  thing to reach for. */
+        runActive={streaming || needsOperator}
         busy={loading}
       />
       </main>
     </>
+  );
+}
+
+/* ================================================================================================
+ * THE WEEK FRAME — two rows, fixed, and the only chrome above the transcript
+ *
+ * Row A is where we are in the week. Row B is what is on screen. That order is the argument: the
+ * week outlives the run, and a run only means something as one day's work inside it.
+ * ==============================================================================================*/
+
+function WeekFrame({ week, run }: { week: Week | null; run: Run | null }) {
+  /**
+   * The slot this run is working on, matched on the run id the week already resolved.
+   *
+   * `WeekEntry.run_id` is the drafting run where one exists and the planning run otherwise, so this
+   * join is the week's own answer to "what happened to this slot", read backwards. It misses for a
+   * run outside the framed week — a poll, a publish, last week's batch — and the row falls back to
+   * the trigger, which is the honest answer: that run is not one of these eight posts.
+   */
+  const entry = week && run ? (week.entries.find((e) => e.run_id === run.id) ?? null) : null;
+  const next = nextScheduled();
+
+  return (
+    <div
+      className="shrink-0 border-b px-4 py-2"
+      style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+    >
+      <div className="mx-auto w-full max-w-3xl">
+        {/* Row A · the week. The schedule renders before the fetch resolves — it is arithmetic over
+            the anchor, not data — so the frame is never a blank bar waiting on latency. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {week && (
+            <>
+              <span className="t-title">{week.label}</span>
+              {week.waitingOnYou > 0 && (
+                <Badge tone={weekSlotTone('needs_you')}>{week.waitingOnYou} need you</Badge>
+              )}
+              <OwnerGateLine gate={week.ownerGate} />
+            </>
+          )}
+          <span className="t-meta ml-auto">
+            Next · {weekdayShort(next.at)} {next.label}
+          </span>
+        </div>
+
+        {/* Row B · the run. */}
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+          {run ? (
+            <>
+              <Badge tone={runStateTone(run.state)}>
+                {RUN_STATE_LABEL[run.state] ?? run.state}
+              </Badge>
+              {run.variant !== 'nominal' && (
+                <Badge tone="parked" mono>
+                  {run.variant}
+                </Badge>
+              )}
+              {run.degraded && <Badge tone="parked">degraded</Badge>}
+              {/* What the run is actually about: a day, a channel and an angle beats "RUN-0143
+                  running", which names the record and not the work. */}
+              {entry && (
+                <span className="t-body min-w-0 flex-1 truncate">
+                  {weekdayShort(entry.publish_at)} · {CHANNEL_LABEL[entry.channel]} · {entry.angle}
+                </span>
+              )}
+              <span className="t-label">
+                {TRIGGER_LABEL[run.trigger] ?? run.trigger} · {formatRelative(run.started_at)}
+              </span>
+              <span className="t-meta tabular ml-auto font-mono">{run.id}</span>
+            </>
+          ) : (
+            <span className="t-label">No run selected</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * THE CALENDAR GATE — the board's other human gate, and it waits on the client's owner, not on the
+ * operator reading this screen. Naming them is the whole point of the line: an unlabelled countdown
+ * in an operator console reads as the operator's own deadline.
+ *
+ * NO COUNTDOWN ON THE APPROVED CASE. The union carries `at`, a moment that has passed, and the
+ * fixtures hold exactly that — the owner approved on Tuesday, which is what let Wednesday's batch
+ * draft at all. Rendering a live clock against a settled gate would be the console stating
+ * something false, so the two cases render as two different things rather than one component fed a
+ * different number.
+ */
+function OwnerGateLine({ gate }: { gate: OwnerGate }) {
+  if (gate.kind === 'none') return null;
+
+  if (gate.kind === 'approved') {
+    return <span className="t-label">Owner approved · {weekdayShort(gate.at)}</span>;
+  }
+
+  return (
+    <span className="t-label">
+      Owner approval ·{' '}
+      <Countdown deadline={gate.deadline} expiredLabel="lapsed" className="tabular" />
+    </span>
   );
 }
 
@@ -298,6 +606,7 @@ function Transcript({
   onRunNow,
   onDecide,
   needsOperator,
+  decision,
 }: {
   source: Source | null;
   events: GuardrailEvent[];
@@ -308,6 +617,9 @@ function Transcript({
   onRunNow: () => void;
   onDecide: () => void;
   needsOperator: boolean;
+  /** Rendered at the interrupt step. Null when this gate carries no decision for the operator —
+   *  the calendar gate, or a run whose draft has not reached review yet. */
+  decision: React.ReactNode;
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto" data-transcript>
@@ -322,6 +634,7 @@ function Transcript({
             events={events}
             onEnd={onEnd}
             onDecide={onDecide}
+            decision={decision}
           />
         )}
 
@@ -330,17 +643,18 @@ function Transcript({
             className="flex flex-wrap items-center gap-2 rounded px-2.5 py-1.5"
             style={{ background: END_TONE[ended].bg, color: END_TONE[ended].ink }}
           >
-            <span className="text-[13px] font-bold">{END_COPY[ended]}</span>
-            {/* The route out. A banner saying "Waiting for you" with nothing to click is where
-                this screen used to end. */}
+            <span className="t-body font-bold">{END_COPY[ended]}</span>
+            {/* Secondary now, not the route out. The decision itself is taken at the interrupt
+                step above; this is for the other seven drafts waiting behind it, which is what
+                the queue is for. */}
             {needsOperator && (
               <button
                 type="button"
                 onClick={onDecide}
-                className="rounded px-2 py-0.5 text-[13px] font-bold underline underline-offset-2"
+                className="t-body rounded px-2 py-0.5 font-bold underline underline-offset-2"
                 style={{ color: 'inherit' }}
               >
-                Decide on this in the queue →
+                Clear the rest in the queue →
               </button>
             )}
           </div>
@@ -355,9 +669,7 @@ function Transcript({
         ))}
 
         {briefs.length > 0 && (
-          <p className="pt-0.5 text-right text-[11px]" style={{ color: 'var(--text-faint)' }}>
-            Queued for the next run
-          </p>
+          <p className="t-meta pt-0.5 text-right">Queued for the next run</p>
         )}
       </div>
     </div>
@@ -373,13 +685,13 @@ function BriefBubble({ brief }: { brief: BriefRef }) {
         className="max-w-[80%] rounded-lg px-3 py-2"
         style={{ background: 'var(--accent-soft)', border: '1px solid var(--border-strong)' }}
       >
-        <div
-          className="font-mono text-[10px] font-bold uppercase"
-          style={{ color: 'var(--accent-text)', letterSpacing: '0.1em' }}
-        >
+        {/* Not `.t-field`, though it was mono caps and looked like it. That role is reserved for
+            labels inside an expanded step; reusing it here would make a message header and a JSON
+            field label the same thing. */}
+        <div className="t-meta font-mono" style={{ color: 'var(--accent-text)' }}>
           Brief · {formatTime(brief.submitted_at)}
         </div>
-        <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-wrap">{brief.text}</p>
+        <p className="t-body mt-1 whitespace-pre-wrap">{brief.text}</p>
       </div>
     </div>
   );
@@ -391,16 +703,27 @@ function RunStream({
   events,
   onEnd,
   onDecide,
+  decision,
 }: {
   runId: RunId;
   fromSeq: number;
   events: GuardrailEvent[];
   onEnd: (reason: StreamEndReason) => void;
   onDecide: () => void;
+  decision: React.ReactNode;
 }) {
   const [steps, setSteps] = useState<RunStep[]>([]);
   const [historyLength, setHistoryLength] = useState(0);
   const [live, setLive] = useState(true);
+  /**
+   * Which steps are over.
+   *
+   * A step now arrives when it *starts*, so "has this finished" is a fact the stream delivers
+   * separately and the transcript has to hold. A `Set` of ids rather than a flag on the step: the
+   * record does not change when it settles — what changed is that it is no longer happening — and
+   * rewriting the step in place would make the list re-render every row on every settle.
+   */
+  const [settled, setSettled] = useState<ReadonlySet<RunStepId>>(() => new Set());
   const endRef = useRef<HTMLDivElement>(null);
   /** Whether to keep the view pinned to the newest step. Turned off the moment the reader scrolls
    *  away from the bottom, because following a feed and reading back through it are two different
@@ -430,8 +753,13 @@ function RunStream({
       if (event.type === 'history') {
         setHistoryLength(event.steps.length);
         setSteps(event.steps);
+        /** History is by definition over. Marked in one assignment rather than by treating an
+         *  absent id as settled, so that "not in the set" means exactly one thing: still running. */
+        setSettled(new Set(event.steps.map((s) => s.id)));
       } else if (event.type === 'step') {
         setSteps((current) => [...current, event.step]);
+      } else if (event.type === 'settled') {
+        setSettled((current) => new Set(current).add(event.id));
       } else {
         setLive(false);
         onEnd(event.reason);
@@ -462,14 +790,16 @@ function RunStream({
               step={step}
               event={events.find((e) => e.run_step_id === step.id)}
               isNew={index >= historyLength}
+              inFlight={!settled.has(step.id)}
               onDecide={onDecide}
+              decision={decision}
             />
           </Fragment>
         ))}
       </ol>
 
       {live && steps.length > 0 && (
-        <p className="flex items-center gap-2 px-1 pt-1 text-[13px]" style={{ color: 'var(--text-muted)' }}>
+        <p className="t-label flex items-center gap-2 px-1 pt-1">
           <span
             aria-hidden
             className="inline-block h-1.5 w-1.5 rounded-full"
@@ -502,21 +832,25 @@ function LoadingState() {
   );
 }
 
+/**
+ * Two words and a button.
+ *
+ * It used to carry a sentence explaining the schedule to the person operating it. The frame above
+ * now names what fires next, derived rather than written out, so the sentence was both long and a
+ * second copy of a fact — the failure mode of a product that narrates itself instead of showing
+ * its state.
+ */
 function EmptyState({ onRun }: { onRun: () => void }) {
   return (
     <div className="py-10 text-center">
-      <p className="text-[13px] font-medium">Nothing running</p>
-      <p className="mx-auto mt-1 max-w-sm text-[13px]" style={{ color: 'var(--text-muted)' }}>
-        Runs start on a schedule — the calendar on Monday, the drafting batch on Wednesday. Brief
-        the agent below, or start one now.
-      </p>
+      <p className="t-body font-medium">Nothing running</p>
       <button
         type="button"
         onClick={onRun}
-        className="mt-3 rounded px-2.5 py-1 text-[13px] font-medium"
-        style={{ background: 'var(--accent)', color: '#fff' }}
+        className="t-body mt-3 rounded px-2.5 py-1 font-medium"
+        style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
       >
-        Run now
+        Start a new run
       </button>
     </div>
   );
@@ -534,10 +868,7 @@ function ErrorState({ error, onRetry }: { error: ConsoleError; onRetry: () => vo
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-6">
         {error.kind === 'not_found' ? (
-          <NotFound
-            title="No run to show"
-            detail="Runs start on a schedule — the calendar on Monday, the drafting batch on Wednesday."
-          />
+          <NotFound title="No run to show" />
         ) : (
           <ErrorPanel error={error} onRetry={onRetry} retryLabel="Try again" />
         )}

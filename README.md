@@ -9,9 +9,9 @@ invented** — not a Dartnox client, and this is not a Dartnox product.
 
 > **No backend, no API routes, no keys, no network calls.** All state is client-side.
 
-**Where to start:** open `/console`, let the live run finish, then follow *Decide on this in the
-queue*. The console watches; the queue decides. To see what the agent plans for the week, open the
-**Plan next week** run in the left rail.
+**Where to start:** open `/console` and let the run stream. The left rail is next week's schedule —
+pick a slot marked **Needs you** and the console replays that run and stops at its approval gate, with
+approve / edit / reject there. Then open `/queue` and switch it to **Week** for the calendar.
 
 ## Quick start
 
@@ -21,7 +21,7 @@ npm run dev          # http://localhost:3000 → redirects to /console
 ```
 
 ```bash
-npm run verify       # check + tsc + eslint + build — 1,696 assertions
+npm run verify       # check + tsc + eslint + build — 1,756 assertions
 ```
 
 Node ≥ 22. On a fresh clone `tsc --noEmit` alone fails with `Cannot find name 'LayoutProps'` — Next 16
@@ -32,11 +32,11 @@ them correctly.
 
 | Route | What it does |
 |---|---|
-| `/console` | Live activity feed. Steps stream with real timing; tool calls and results expand; guardrails branch the run. Open **Plan next week** to see the proposed content calendar. |
-| `/queue` | Everything waiting on a person — drafts, runs that never produced one, and posts sent back by a settings change. |
-| `/draft/[id]` | One item opened fully: post, versions, score arithmetic, every guardrail evaluation, full reasoning trace. |
+| `/console` | Live activity feed. Steps arrive when they start and settle when they finish; expanding a step shows its model, tokens and cost; guardrails branch the run. A run halted at its gate carries the decision inline. |
+| `/queue` | Everything waiting on a person — drafts, runs that never produced one, and posts sent back by a settings change. **Week** toggles the same work to a Monday–Sunday calendar. |
+| `/draft/[id]` | One item opened fully: post, why it was flagged, the score and its weakest dimension, versions, full reasoning trace. |
 | `/metrics` | The PRD's KPIs, computed live, one drill-down. |
-| `/settings` | Tone, thresholds, approval rules, escalation triggers, guardrail rules. |
+| `/settings` | Tone, thresholds, approval rules, escalation triggers, guardrail rules, monthly spend cap. |
 
 ## Architecture
 
@@ -83,9 +83,13 @@ of inputs that run consumed is assembled at emit time from current state. What's
 inputs the run consumed**, not the prose.
 
 **Timing.** Every step carries two numbers: `latency_ms` (honest — a drafting call really takes ~20s,
-shown as metadata) and `playback_ms` (how long the console waits). The showcase run's real duration
-is 44s and it plays in 14s — **about 3×**. Played at true speed it's unwatchable; a uniform 300ms tick
-is the faked streaming the brief rejects.
+shown as the step's duration) and `playback_ms` (how long that step is shown working). The showcase
+run's real duration is 44s and it plays in 24s — **about 1.8×**. Played at true speed it's
+unwatchable; a uniform 300ms tick is the faked streaming the brief rejects.
+
+A step arrives when it **starts**, not when it finishes, and settles after its own duration. While
+it's in flight the console withholds the duration, tokens and cost, because those facts don't exist
+yet.
 
 **Fixtures.** ~500 records across 13 types — three weeks of settled history plus a three-week forward
 pipeline. Hand-written where a reviewer actually reads (current drafts with full traces, the long
@@ -110,8 +114,8 @@ deploys; one redeploy refreshes it.
   types is the same: a demo affordance with no production counterpart.
 - **Settings is deliberately the thinnest screen.** The brief names four controls; its closing line
   says choose an alive console over a fifth polished screen. Cadence, posting windows, both
-  allowlists, entities, terminology, budget cap, auto-pull, negative-engagement threshold,
-  rejection-reason set and weekend contact are modelled and not rendered.
+  allowlists, entities, terminology, auto-pull, negative-engagement threshold, rejection-reason set
+  and weekend contact are modelled and not rendered.
 - **Three of five learned writing rules show no backing edits.** They were learned from decisions
   outside the three weeks of history retained. Empty is a statement, not missing data — the one
   *suggested* rule carries all three and expands to show them.
@@ -134,8 +138,9 @@ deploys; one redeploy refreshes it.
   — it demonstrates the seam, it is not a migration path.
 - **Cold start is invisible here.** Brightsill is nine weeks in, and one client can't both lack
   history and hold the record four screens need. That path lives in the PRD and on the diagram.
-- **Desktop-first.** An operator console is a dense surface someone sits in front of for an hour. Not
-  responsive below tablet width, by decision.
+- **Desktop-first.** An operator console is a dense surface someone sits in front of for an hour. The
+  week view stacks to one day per row below 900px; nothing else is designed for a narrow viewport, by
+  decision.
 
 </details>
 
