@@ -38,14 +38,26 @@
 
 import { fixtures } from '@/fixtures';
 import { NOW } from '@/lib/time';
+import {
+  approve,
+  escalate,
+  labelEscalation,
+  reject,
+  type DecisionContext,
+  type WorldPatch,
+} from '@/lib/world';
 import type {
   Client,
   ConsoleError,
   Draft,
   DraftId,
   BriefRef,
+  DraftVersionId,
+  EditTag,
   FixtureSet,
   GuardrailEvent,
+  GuardrailEventId,
+  RejectionReasonCode,
   MetricDescriptor,
   Pillar,
   Run,
@@ -306,6 +318,111 @@ export async function submitBrief(text: string, author: string): Promise<BriefRe
 
 export function pendingBriefCount(): number {
   return submittedBriefs.length;
+}
+
+/**
+ * Idempotency keys already spent.
+ *
+ * A replayed write — a double click, a retry after a timeout — must not produce a second approval.
+ * The key is the client's; the server remembers it and returns the original result rather than
+ * doing the work twice. This is the first question a backend engineer asks about a write API, and
+ * a signature list that cannot answer it is not a contract.
+ */
+const spentKeys = new Map<string, WorldPatch>();
+
+/** Applies a patch to the world in place. The only place the world is written. */
+function applyPatch(patch: WorldPatch): void {
+  const merge = <T extends { id: string }>(collection: T[], changed?: T[]) => {
+    if (!changed) return;
+    for (const record of changed) {
+      const index = collection.findIndex((r) => r.id === record.id);
+      if (index >= 0) collection[index] = record;
+      else collection.push(record);
+    }
+  };
+  merge(world.drafts, patch.drafts);
+  merge(world.approvals, patch.approvals);
+  merge(world.posts, patch.posts);
+  merge(world.runs, patch.runs);
+  merge(world.calendarSlots, patch.calendarSlots);
+  merge(world.guardrailEvents, patch.guardrailEvents);
+}
+
+export type ReviewDecision =
+  | { kind: 'approve' }
+  | { kind: 'approve_with_edits'; text: string; editTags: EditTag[] }
+  | { kind: 'reject'; reasonCode: RejectionReasonCode; note: string | null }
+  | { kind: 'escalate'; tier: 'operator' | 'stakeholder'; detail: string };
+
+/**
+ * The operator's decision on a draft. The one write the queue makes.
+ *
+ * Takes the version the operator was looking at. If the draft has moved since — someone else
+ * edited it, or a settings change bounced it — this throws `version_conflict` rather than deciding
+ * against text nobody read. An approval binds a *version*, and L4 later publishes only on a hash
+ * match, so deciding against a stale version would break the chain that makes "a human approved
+ * every published post" true.
+ */
+export async function submitReview(
+  draftId: DraftId,
+  seenVersionId: DraftVersionId,
+  decision: ReviewDecision,
+  opts: { idempotencyKey: string; secondsOpen: number },
+): Promise<WorldPatch> {
+  await sleep(LATENCY_MS.detail);
+
+  const replayed = spentKeys.get(opts.idempotencyKey);
+  if (replayed) return replayed;
+
+  const draft = world.drafts.find((d) => d.id === draftId);
+  if (!draft) fail({ kind: 'not_found' });
+
+  if (draft.current_version_id !== seenVersionId) {
+    fail({ kind: 'version_conflict', current_version_id: draft.current_version_id });
+  }
+
+  const ctx: DecisionContext = {
+    now: NOW,
+    operatorId: world.settings.versions[0].changed_by,
+    secondsOpen: opts.secondsOpen,
+    idempotencyKey: opts.idempotencyKey,
+  };
+
+  let patch: WorldPatch;
+  switch (decision.kind) {
+    case 'approve':
+      patch = approve(world, draftId, ctx);
+      break;
+    case 'approve_with_edits':
+      patch = approve(world, draftId, ctx, { text: decision.text, editTags: decision.editTags });
+      break;
+    case 'reject':
+      patch = reject(world, draftId, decision.reasonCode, decision.note, ctx);
+      break;
+    case 'escalate':
+      patch = escalate(world, draftId, decision.tier, decision.detail, ctx);
+      break;
+  }
+
+  applyPatch(patch);
+  spentKeys.set(opts.idempotencyKey, patch);
+  return patch;
+}
+
+/** One click, and the escalation-precision figure moves. */
+export async function labelEscalationUnnecessary(
+  eventId: GuardrailEventId,
+  wasUnnecessary: boolean,
+): Promise<WorldPatch> {
+  await sleep(LATENCY_MS.config);
+  const patch = labelEscalation(world, eventId, wasUnnecessary, {
+    now: NOW,
+    operatorId: world.settings.versions[0].changed_by,
+    secondsOpen: 0,
+    idempotencyKey: `label:${eventId}`,
+  });
+  applyPatch(patch);
+  return patch;
 }
 
 /* ================================================================================================

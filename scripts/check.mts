@@ -282,6 +282,120 @@ check(
 /** Every fixture file declares the schema version it was authored against (D-029). */
 check('fixture set declares the schema version', fixtures.schemaVersion === '1');
 
+/* ==============================================================================================
+ * TRANSITIONS
+ *
+ * D-026 claimed the state transitions were "a state machine, directly testable without rendering
+ * anything", and TODO.md flagged that as either-prove-it-or-drop-the-sentence. These are the
+ * proof. lib/world.ts imports no React, so it runs here directly.
+ *
+ * What is checked is the shape of the write, not the plumbing: DUMMY-DATA-SPEC.md 4.8 says an
+ * approve touches five records. If it touches four, two screens will eventually disagree about
+ * what an approval did, and nothing else in the build would notice.
+ * ============================================================================================*/
+
+section('Transitions');
+
+const { approve, reject, escalate, contentDigest } = await import('../lib/world.ts');
+
+const ctx = {
+  now: 0 as never,
+  operatorId: fixtures.settings.versions[0].changed_by,
+  secondsOpen: 42,
+  idempotencyKey: 'check-key-1',
+};
+
+const pending = fixtures.drafts.find((d) => d.state === 'awaiting_approval');
+check('a draft is awaiting approval to test against', pending !== undefined);
+
+if (pending) {
+  /* ---- approve --------------------------------------------------------------------------- */
+  const approved = approve(fixtures, pending.id, ctx);
+
+  check('approve · moves the draft to approved', approved.drafts?.[0]?.state === 'approved');
+  check('approve · decides the approval', approved.approvals?.[0]?.decision === 'approve');
+  check('approve · stamps who decided', approved.approvals?.[0]?.decided_by === 'operator');
+  check(
+    'approve · records seconds open (the rubber-stamp clock)',
+    approved.approvals?.[0]?.seconds_open === 42,
+  );
+  check('approve · creates a scheduled post', approved.posts?.[0]?.state === 'scheduled');
+  check('approve · queues a publish run', approved.runs?.[0]?.type === 'publish');
+  check('approve · publish run is queued, not running', approved.runs?.[0]?.state === 'queued');
+  /** L4 publishes only on a hash match, so the post must carry the digest of the exact version
+   *  that was approved. Without this the safety invariant has nothing to check against. */
+  const approvedVersion = pending.versions.find((v) => v.id === pending.current_version_id);
+  check(
+    'approve · post binds the approved version hash',
+    approved.posts?.[0]?.approved_content_hash === approvedVersion?.content_hash,
+  );
+  check(
+    'approve · post carries the idempotency key',
+    approved.posts?.[0]?.idempotency_key === 'check-key-1',
+  );
+
+  /* ---- approve with edits ------------------------------------------------------------------ */
+  const edited = approve(fixtures, pending.id, ctx, {
+    text: 'A different sentence entirely.',
+    editTags: ['tightened'],
+  });
+  const newVersion = edited.drafts?.[0]?.versions.at(-1);
+
+  check('edit · appends a version rather than overwriting', 
+    (edited.drafts?.[0]?.versions.length ?? 0) === pending.versions.length + 1);
+  /** Edit rate counts human-authored approved versions, and authorship is authoritative over the
+   *  decision label. If these disagreed, the metric would disagree with the queue. */
+  check('edit · new version is human-authored', newVersion?.author === 'human');
+  check('edit · decision follows the version, not the button',
+    edited.approvals?.[0]?.decision === 'approve_with_edits');
+  check('edit · approval binds the NEW version', 
+    edited.approvals?.[0]?.draft_version_id === newVersion?.id);
+  check('edit · hash changes with the text',
+    newVersion?.content_hash === contentDigest('A different sentence entirely.'));
+  /** The prior versions must survive untouched: edit magnitude diffs the last agent version
+   *  against the shipped one, so overwriting would destroy the measurement. */
+  check('edit · earlier versions are untouched',
+    edited.drafts?.[0]?.versions[0]?.text === pending.versions[0].text);
+
+  /* ---- reject ------------------------------------------------------------------------------ */
+  const rejected = reject(fixtures, pending.id, 'claim_unsupported', 'No source for the figure.', ctx);
+
+  check('reject · moves the draft to rejected', rejected.drafts?.[0]?.state === 'rejected');
+  check('reject · records a structured reason code',
+    rejected.approvals?.[0]?.reason_code === 'claim_unsupported');
+  /** A rejection must move the slot, or published-vs-planned reads 100% forever and the >=90%
+   *  gate can never fire. */
+  const slotState = rejected.calendarSlots?.[0]?.state;
+  check('reject · slot slips or drops', slotState === 'slipped' || slotState === 'dropped');
+  check('reject · a slipped slot keeps its original date',
+    slotState !== 'slipped' || rejected.calendarSlots?.[0]?.original_publish_at !== null);
+  check('reject · a slipped slot queues a redraft',
+    slotState !== 'slipped' || rejected.runs?.[0]?.state === 'queued');
+
+  /* ---- escalate ---------------------------------------------------------------------------- */
+  const escalated = escalate(fixtures, pending.id, 'stakeholder', 'Needs legal review.', ctx);
+  const event = escalated.guardrailEvents?.[0];
+
+  /** `held`, not `blocked_guardrail`. Different producer, different release event. */
+  check('escalate · holds the draft', escalated.drafts?.[0]?.state === 'held');
+  check('escalate · uses the operator trigger kind', event?.trigger_kind === 'operator_escalation');
+  check('escalate · uses the operator-initiated trigger',
+    event?.escalation_trigger === 'operator_initiated');
+  /** Nullable and well-formed: an operator escalation has no rule behind it, and minting a
+   *  synthetic one would corrupt the per-rule block-rate chart. */
+  check('escalate · carries no rule id', event?.rule_id === null);
+  check('escalate · is unlabelled until someone judges it', event?.was_unnecessary === null);
+  check('escalate · stakeholder tier gets a 72h deadline',
+    event?.decision_deadline !== null);
+
+  /* ---- purity ------------------------------------------------------------------------------ */
+  /** Every call above ran against the same fixture object. If any of them had mutated it, the
+   *  later ones would have seen a changed world — and a transition that mutates can be called
+   *  twice and do the wrong thing the second time. */
+  check('transitions do not mutate the world they are given',
+    pending.state === 'awaiting_approval');
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed.`);
 
 if (failures > 0) {
