@@ -149,6 +149,10 @@ export default function SettingsPage() {
             <span className="ml-auto font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>
               every change is a versioned event
             </span>
+            <span className="w-full text-[11px]" style={{ color: 'var(--text-faint)' }}>
+              What the agent may write and what stops it. Each control says when it takes effect —
+              most apply to the next run, two apply immediately.
+            </span>
           </div>
         </div>
 

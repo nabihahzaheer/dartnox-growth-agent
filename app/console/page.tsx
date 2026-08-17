@@ -32,6 +32,7 @@
  */
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   getActiveRun,
   getGuardrailEvents,
@@ -138,6 +139,10 @@ export default function ConsolePage() {
 
   const runNow = useCallback(() => void attach(startRunNow), [attach]);
 
+  /** Back to whatever is live, or the most recent thing that stopped for a human. The same call the
+   *  screen makes on mount, so "back" lands exactly where you started. */
+  const backToLive = useCallback(() => void attach(getActiveRun), [attach]);
+
   /** Opening a run from the rail replays it rather than streaming it — a run that finished
    *  yesterday did not just happen, and animating it would be the console lying about time. The
    *  client decides that, since it is a fact about the run. */
@@ -168,7 +173,34 @@ export default function ConsolePage() {
 
   const handleEnd = useCallback((reason: StreamEndReason) => setEnded(reason), []);
 
+  /**
+   * Where a decision actually gets taken.
+   *
+   * The console is a viewer and the queue is where a week's decisions get cleared in one sitting.
+   * That split is the brief's, but nothing on this screen used to say so: a run would stop, announce
+   * "Waiting for you", and offer no route anywhere. The only visible control was Run now, which
+   * starts a *different* run — so the obvious thing to press was also the wrong one, and it gave no
+   * signal that it was wrong.
+   */
+  const router = useRouter();
+  const goToQueue = useCallback(() => router.push('/queue'), [router]);
+
   const streaming = source !== null && ended === null;
+  /**
+   * True when this run stopped for the operator specifically.
+   *
+   * Keyed off the *stream's* ending rather than `run.state`, and the difference is not pedantic:
+   * the live run is `running` in its record and stays that way while its remaining steps play out,
+   * so a condition on the record hid the link on the one run a reviewer is most likely to be
+   * watching when it stops.
+   *
+   * Planning is excluded because its gate waits on the owner, who has no console account and
+   * approves by signed link from their inbox. Offering the operator a decision there would invent
+   * a gate the architecture does not have.
+   */
+  const needsOperator = ended === 'interrupt' && run?.type !== 'planning';
+  /** Viewing something that already finished, rather than following the live run. */
+  const viewingPast = run !== null && run.state !== 'running' && ended !== null;
 
   if (error) {
     return (
@@ -180,7 +212,9 @@ export default function ConsolePage() {
             onSubmitBrief={sendBrief}
             onRunNow={runNow}
             onHalt={halt}
+            onBackToLive={backToLive}
             canHalt={false}
+            viewingPast={false}
             busy={loading}
           />
         </main>
@@ -214,6 +248,17 @@ export default function ConsolePage() {
               <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
                 {TRIGGER_LABEL[run.trigger] ?? run.trigger} · {formatRelative(run.started_at)}
               </span>
+              {/* ORIENTATION. Nothing on any screen said what the screen was for, which is the
+                  difference between a reviewer understanding this in five seconds and guessing at
+                  it. One line, and it names the split that is otherwise invisible: this screen
+                  watches, the queue decides. */}
+              <span
+                className="w-full text-[11px]"
+                style={{ color: 'var(--text-faint)' }}
+              >
+                One run is one unit of work — plan the week, write one post, publish one post, or
+                check replies. Watch it here; decide in the queue.
+              </span>
             </>
           ) : (
             <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
@@ -231,13 +276,17 @@ export default function ConsolePage() {
         ended={ended}
         onEnd={handleEnd}
         onRunNow={runNow}
+        onDecide={goToQueue}
+        needsOperator={needsOperator}
       />
 
       <ControlBar
         onSubmitBrief={sendBrief}
         onRunNow={runNow}
         onHalt={halt}
+        onBackToLive={backToLive}
         canHalt={streaming}
+        viewingPast={viewingPast}
         busy={loading}
       />
       </main>
@@ -257,6 +306,8 @@ function Transcript({
   ended,
   onEnd,
   onRunNow,
+  onDecide,
+  needsOperator,
 }: {
   source: Source | null;
   events: GuardrailEvent[];
@@ -265,6 +316,8 @@ function Transcript({
   ended: StreamEndReason | null;
   onEnd: (reason: StreamEndReason) => void;
   onRunNow: () => void;
+  onDecide: () => void;
+  needsOperator: boolean;
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto" data-transcript>
@@ -278,16 +331,29 @@ function Transcript({
             fromSeq={source.fromSeq}
             events={events}
             onEnd={onEnd}
+            onDecide={onDecide}
           />
         )}
 
         {ended && (
-          <p
-            className="rounded px-2.5 py-1.5 text-[13px] font-bold"
+          <div
+            className="flex flex-wrap items-center gap-2 rounded px-2.5 py-1.5"
             style={{ background: END_TONE[ended].bg, color: END_TONE[ended].ink }}
           >
-            {END_COPY[ended]}
-          </p>
+            <span className="text-[13px] font-bold">{END_COPY[ended]}</span>
+            {/* The route out. A banner saying "Waiting for you" with nothing to click is where
+                this screen used to end. */}
+            {needsOperator && (
+              <button
+                type="button"
+                onClick={onDecide}
+                className="rounded px-2 py-0.5 text-[13px] font-bold underline underline-offset-2"
+                style={{ color: 'inherit' }}
+              >
+                Decide on this in the queue →
+              </button>
+            )}
+          </div>
         )}
 
         {!loading && !source && !ended && <EmptyState onRun={onRunNow} />}
@@ -334,11 +400,13 @@ function RunStream({
   fromSeq,
   events,
   onEnd,
+  onDecide,
 }: {
   runId: RunId;
   fromSeq: number;
   events: GuardrailEvent[];
   onEnd: (reason: StreamEndReason) => void;
+  onDecide: () => void;
 }) {
   const [steps, setSteps] = useState<RunStep[]>([]);
   const [historyLength, setHistoryLength] = useState(0);
@@ -415,6 +483,7 @@ function RunStream({
               step={step}
               event={events.find((e) => e.run_step_id === step.id)}
               isNew={index >= historyLength}
+              onDecide={onDecide}
             />
           </Fragment>
         ))}

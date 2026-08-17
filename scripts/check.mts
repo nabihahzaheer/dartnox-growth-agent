@@ -221,6 +221,82 @@ check(
   fixtures.reflectionRules.some((r) => r.status === 'suggested' && r.evidence_ids.length >= 3),
 );
 
+/* ==============================================================================================
+ * THE FIELDS NOTHING WAS WALKING
+ *
+ * Three dangling-reference bugs shipped in three different collections, and each was found by a
+ * person clicking something rather than by this file: the reflection rules' `evidence_ids`, every
+ * live slot's `calendar_run_id`, and a draft's `similarity.against_post_id`.
+ *
+ * The pattern is the point. Each was a field the checker did not know about, so "the checks pass"
+ * meant "the checks pass on the fields I remembered". Below is every remaining id-bearing field in
+ * the schema, walked exhaustively. If a record type grows a reference, it belongs here on the same
+ * day.
+ * ============================================================================================*/
+
+section('Referential integrity · the long tail');
+
+const postIds = new Set<string>(fixtures.posts.map((p) => p.id));
+const reflectionRuleIds = new Set<string>(fixtures.reflectionRules.map((r) => r.id));
+
+for (const slot of fixtures.calendarSlots) {
+  /** Dangling for every live slot until 17 Aug: they all pointed at `RUN-0132`, a planning run that
+   *  did not exist. Nothing rendered it, so nothing complained. */
+  check(`${slot.id} · calendar run exists`, runIds.has(slot.calendar_run_id));
+  check(`${slot.id} · pillar exists`, pillarIds.has(slot.pillar_id));
+}
+
+for (const draft of fixtures.drafts) {
+  for (const postId of draft.example_refs) {
+    check(`${draft.id} · example post exists`, postIds.has(postId));
+  }
+  for (const ruleId of draft.applied_reflection_rule_ids) {
+    check(`${draft.id} · applied reflection rule exists`, reflectionRuleIds.has(ruleId));
+  }
+  /** The similarity arms are separately nullable and were separately unchecked. */
+  if (draft.similarity?.published) {
+    check(
+      `${draft.id} · similarity compares against a real post`,
+      postIds.has(draft.similarity.published.against_post_id),
+    );
+  }
+  if (draft.similarity?.batch) {
+    check(
+      `${draft.id} · similarity compares against a real draft`,
+      draftIds.has(draft.similarity.batch.against_draft_id),
+    );
+  }
+}
+
+for (const post of fixtures.posts) {
+  check(`${post.id} · binds an existing draft version`, versionIds.has(post.draft_version_id));
+}
+
+for (const snapshot of fixtures.metricSnapshots) {
+  check(`${snapshot.id} · post exists`, postIds.has(snapshot.post_id));
+}
+
+for (const run of fixtures.runs) {
+  if (run.target_post_id) {
+    check(`${run.id} · target post exists`, postIds.has(run.target_post_id));
+  }
+}
+
+for (const approval of fixtures.approvals) {
+  if (approval.superseded_by) {
+    check(
+      `${approval.id} · supersede points at a real approval`,
+      fixtures.approvals.some((a) => a.id === approval.superseded_by),
+    );
+  }
+}
+
+/** Ids are quoted by operators when something goes wrong, so they have to read as one series. The
+ *  `H` prefix meant "history" — a fixture-authoring label with no meaning in the product. */
+for (const run of fixtures.runs) {
+  check(`${run.id} · carries no internal id prefix`, !/-H\d/.test(run.id));
+}
+
 /* --- invariants that are not joins ---------------------------------------------------------- */
 
 section('Fixture invariants');

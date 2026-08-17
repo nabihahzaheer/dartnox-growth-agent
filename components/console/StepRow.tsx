@@ -15,7 +15,7 @@
 
 import { useState } from 'react';
 import type { GuardrailEvent, RunStep } from '@/lib/types';
-import { formatTime } from '@/lib/time';
+import { formatDateTime, formatTime } from '@/lib/time';
 import { Badge, guardrailTone } from '@/components/Badge';
 import { Countdown } from '@/components/Countdown';
 
@@ -76,6 +76,7 @@ export function StepRow({
   step,
   event,
   isNew,
+  onDecide,
 }: {
   step: RunStep;
   /** The guardrail event this step produced, if it is a guardrail step. Paired by id rather than
@@ -84,6 +85,9 @@ export function StepRow({
   /** Only steps that arrived live animate in. Replayed history appearing with a stagger would be
    *  theatre — it already happened. */
   isNew: boolean;
+  /** Route to the decision. Absent on the draft detail screen, which is already showing the item
+   *  the decision would be about. */
+  onDecide?: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -96,6 +100,9 @@ export function StepRow({
     step.brief_ref !== null ||
     step.error !== null ||
     step.interrupt !== null ||
+    /** Without this the planning run's "Propose next week" step carries eight slots and refuses to
+     *  open, because it has no thinking text or tool payload of its own. */
+    (step.proposed_calendar?.length ?? 0) > 0 ||
     event !== undefined;
 
   return (
@@ -314,19 +321,89 @@ export function StepRow({
               </Field>
             )}
 
+            {/*
+              THE WEEK THE AGENT PROPOSED.
+
+              `proposed_calendar` is a `ProposedSlot[]` and not `CalendarSlot[]` because no slot
+              record exists yet — the planning run proposes, and slots are created when the owner
+              ratifies. The field existed from the start and nothing rendered it, which meant the
+              product had no answer to "what is this agent going to do next week" — the first
+              question anyone asks of a content agent.
+            */}
+            {step.proposed_calendar && step.proposed_calendar.length > 0 && (
+              <Field label={`proposed week · ${step.proposed_calendar.length} slots`}>
+                <ol className="space-y-1">
+                  {step.proposed_calendar.map(({ slot }, i) => (
+                    <li
+                      key={`${slot.publish_at}-${i}`}
+                      className="flex flex-wrap items-baseline gap-2 rounded px-2 py-1"
+                      style={{ background: 'var(--surface-sunk)' }}
+                    >
+                      <span className="w-28 shrink-0 font-mono text-[11px] text-[var(--text-faint)]">
+                        {formatDateTime(slot.publish_at)}
+                      </span>
+                      <Badge tone="neutral">
+                        {slot.channel === 'linkedin' ? 'LinkedIn' : 'X'}
+                      </Badge>
+                      <span className="min-w-0 flex-1 text-[13px]">{slot.angle}</span>
+                      {slot.is_topical && (
+                        <Badge tone="awaiting" mono>
+                          topical
+                        </Badge>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-1 text-[11px] text-[var(--text-faint)]">
+                  Posting times come from the client’s best historical slots, not from a model call.
+                  Nothing drafts until the owner approves this.
+                </p>
+              </Field>
+            )}
+
+            {/*
+              THE INTERRUPT, AND THE DEAD END IT USED TO BE.
+
+              This listed the gate's options as `<Badge>` pills — `approve`, `approve with edits`,
+              `reject`, `escalate` — which look exactly like buttons and are `<span>`s. So the one
+              place the product says "I need you" offered four things that appeared clickable and
+              were not, and no route to anywhere that was.
+
+              Now the options are described rather than mimicked, and the actual decision is one
+              link away. The console does not take the decision itself: the queue is where a week's
+              worth get cleared in one sitting, and duplicating the approve/edit/reject/escalate
+              surface here would mean two implementations of the highest-consequence write in the
+              product.
+            */}
             {step.interrupt && (
               <Field label={`waiting on ${step.interrupt.awaiting}`}>
-                <div className="flex flex-wrap items-center gap-2 text-[13px]">
-                  <span>Options:</span>
-                  {step.interrupt.options.map((option) => (
-                    <Badge key={option} mono>
-                      {option.replace(/_/g, ' ')}
-                    </Badge>
-                  ))}
-                </div>
-                <p className="mt-1 text-[13px] text-[var(--text-muted)]">
-                  Slot slips in{' '}
-                  <Countdown deadline={step.interrupt.deadline} expiredLabel="already slipped" />
+                <p className="text-[13px] text-[var(--text-muted)]">
+                  {step.interrupt.awaiting === 'stakeholder'
+                    ? 'The owner approves this by email, through a signed expiring link. They have no console account.'
+                    : 'You can ' +
+                      step.interrupt.options.map((o) => o.replace(/_/g, ' ')).join(', ') +
+                      ' — all of it from the queue.'}
+                </p>
+
+                {step.interrupt.awaiting === 'operator' && onDecide && (
+                  <button
+                    type="button"
+                    onClick={onDecide}
+                    className="mt-1.5 rounded px-2.5 py-1 text-[13px] font-medium"
+                    style={{ background: 'var(--accent)', color: '#fff' }}
+                  >
+                    Decide on this →
+                  </button>
+                )}
+
+                <p className="mt-1.5 text-[13px] text-[var(--text-muted)]">
+                  {step.interrupt.gate === 'calendar_approval' ? 'Drafting starts in ' : 'Slot slips in '}
+                  <Countdown
+                    deadline={step.interrupt.deadline}
+                    expiredLabel={
+                      step.interrupt.gate === 'calendar_approval' ? 'already started' : 'already slipped'
+                    }
+                  />
                 </p>
               </Field>
             )}

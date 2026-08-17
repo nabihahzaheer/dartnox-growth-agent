@@ -356,7 +356,7 @@ const shortBodies: Record<string, string> = {
  * two lines and cannot drift.
  */
 export const HOSTILE_REPLY_POST_ID =
-  `POST-H${String(PLAN.length).padStart(3, '0')}` as PostId;
+  `POST-${String(PLAN.length + 100).padStart(4, '0')}` as PostId;
 
 const pillarLabel: Record<string, string> = {
   [PILLAR_COMPLIANCE]: 'compliance',
@@ -511,12 +511,23 @@ const PASS_RULES: GuardrailRuleId[] = [
 ];
 
 PLAN.forEach((entry, index) => {
-  const n = String(index + 1).padStart(3, '0');
+  /**
+   * ONE ID SERIES, NO `H`.
+   *
+   * These read `RUN-H001` until 17 Aug. The `H` meant "history" — a fixture-authoring label that
+   * had no meaning to anyone reading the product, where it showed up in the run rail beside ids
+   * like `RUN-0141` and looked arbitrary. Ids are the thing an operator quotes when something goes
+   * wrong, so they have to look like one series.
+   *
+   * History occupies 0101–0124 and the live pipeline 0132–0149, so the numbers also read
+   * chronologically.
+   */
+  const n = String(index + 101).padStart(4, '0');
   const outcome = entry.outcome ?? 'published';
   const publishAt = minutes(entry.dayOffset * DAY + 9 * HOUR);
   const draftedAt = minutes(entry.dayOffset * DAY - 2 * DAY);
-  const slotId = `SLOT-H${n}` as CalendarSlotId;
-  const runId = `RUN-H${n}` as RunId;
+  const slotId = `SLOT-${n}` as CalendarSlotId;
+  const runId = `RUN-${n}` as RunId;
 
   historySlots.push({
     id: slotId,
@@ -553,7 +564,7 @@ PLAN.forEach((entry, index) => {
     step_cap: 20,
     degraded: false,
     settings_version_id: settingsVersionAt(entry.dayOffset),
-    target_draft_id: outcome === 'quarantined' ? null : (`DRAFT-H${n}` as DraftId),
+    target_draft_id: outcome === 'quarantined' ? null : (`DRAFT-${n}` as DraftId),
     target_post_id: null,
     next_sweep_at: null,
     variant: outcome === 'quarantined' ? 'poisoned_source' : 'nominal',
@@ -570,7 +581,7 @@ PLAN.forEach((entry, index) => {
    */
   const fullTrace = compactTrace(
     runId,
-    outcome === 'quarantined' ? null : (`DRAFT-H${n}` as DraftId),
+    outcome === 'quarantined' ? null : (`DRAFT-${n}` as DraftId),
     draftedAt,
     entry.channel,
   );
@@ -584,9 +595,9 @@ PLAN.forEach((entry, index) => {
    */
   if (outcome === 'quarantined') {
     historyEvents.push({
-      id: `GE-H${n}-INJ` as GuardrailEventId,
+      id: `GE-${n}-INJ` as GuardrailEventId,
       run_id: runId,
-      run_step_id: `RS-H${n}-03` as RunStepId,
+      run_step_id: `RS-${n}-03` as RunStepId,
       draft_id: null,
       rule_id: RULE_INJECTION,
       trigger_kind: 'guardrail',
@@ -614,13 +625,13 @@ PLAN.forEach((entry, index) => {
     return;
   }
 
-  const draftId = `DRAFT-H${n}` as DraftId;
+  const draftId = `DRAFT-${n}` as DraftId;
   const body = entry.body ?? shortBodies[entry.angle] ?? entry.angle;
   const settingsVersion = settingsVersionAt(entry.dayOffset);
 
   const versions: DraftVersion[] = [
     {
-      id: `DV-H${n}-1` as DraftVersionId,
+      id: `DV-${n}-1` as DraftVersionId,
       version: 1,
       created_at: draftedAt,
       text: body,
@@ -634,7 +645,7 @@ PLAN.forEach((entry, index) => {
 
   if (entry.humanEdit) {
     versions.push({
-      id: `DV-H${n}-2` as DraftVersionId,
+      id: `DV-${n}-2` as DraftVersionId,
       version: 2,
       created_at: minutes((draftedAt as number) + 40),
       text: entry.humanEdit.text,
@@ -684,7 +695,7 @@ PLAN.forEach((entry, index) => {
   const decidedAt = minutes((draftedAt as number) + intBetween(60, 26 * HOUR));
 
   historyApprovals.push({
-    id: `APR-H${n}` as ApprovalId,
+    id: `APR-${n}` as ApprovalId,
     draft_version_id: current.id,
     decision: outcome === 'slipped' ? 'reject' : entry.humanEdit ? 'approve_with_edits' : 'approve',
     reason_code: outcome === 'slipped' ? ('timing_wrong' as RejectionReasonCode) : null,
@@ -704,9 +715,9 @@ PLAN.forEach((entry, index) => {
   // everything.
   for (const rule of PASS_RULES) {
     historyEvents.push({
-      id: `GE-H${n}-${pillarLabel[entry.pillar]}-${rule}` as GuardrailEventId,
+      id: `GE-${n}-${pillarLabel[entry.pillar]}-${rule}` as GuardrailEventId,
       run_id: runId,
-      run_step_id: `RS-H${n}-06` as RunStepId,
+      run_step_id: `RS-${n}-06` as RunStepId,
       draft_id: draftId,
       rule_id: rule,
       trigger_kind: 'guardrail',
@@ -742,9 +753,9 @@ PLAN.forEach((entry, index) => {
     const judged = index !== 9; // one stays unlabelled, so coverage has something to report
     const warranted = index !== 1; // and one judged escalation turned out not to be warranted
     historyEvents.push({
-      id: `GE-H${n}-ESC` as GuardrailEventId,
+      id: `GE-${n}-ESC` as GuardrailEventId,
       run_id: runId,
-      run_step_id: `RS-H${n}-06` as RunStepId,
+      run_step_id: `RS-${n}-06` as RunStepId,
       draft_id: draftId,
       rule_id: RULE_ENTAILMENT,
       trigger_kind: 'guardrail',
@@ -772,7 +783,7 @@ PLAN.forEach((entry, index) => {
 
   if (outcome === 'slipped') return;
 
-  const postId = `POST-H${n}` as PostId;
+  const postId = `POST-${n}` as PostId;
   const publishedAt = minutes((publishAt as number) + intBetween(0, 4));
   const mature = entry.dayOffset <= -7;
 
@@ -805,7 +816,7 @@ PLAN.forEach((entry, index) => {
   captures.forEach((offset, capture) => {
     const share = (capture + 1) / captures.length;
     historySnapshots.push({
-      id: `MS-H${n}-${capture}` as MetricSnapshotId,
+      id: `MS-${n}-${capture}` as MetricSnapshotId,
       post_id: postId,
       captured_at: minutes((publishedAt as number) + offset),
       channel: entry.channel,

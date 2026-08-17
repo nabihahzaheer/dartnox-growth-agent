@@ -196,6 +196,10 @@ export default function QueuePage() {
             >
               j / k move · a approve · e edit · r reject
             </span>
+            <span className="w-full text-[11px]" style={{ color: 'var(--text-faint)' }}>
+              Everything waiting on a decision, in one list — drafts, runs that never produced one,
+              and posts sent back by a settings change. This is where you approve, edit and reject.
+            </span>
           </div>
         </div>
 

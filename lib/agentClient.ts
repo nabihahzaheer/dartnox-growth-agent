@@ -461,7 +461,22 @@ export type RunSummary = {
 
 export async function getRunSummaries(): Promise<RunSummary[]> {
   return read(LATENCY_MS.list, () =>
-    world.runs.map((run) => {
+    world.runs
+      /**
+       * A run with no steps opens onto an empty screen, which reads as broken.
+       *
+       * Three qualify: the Wednesday batch parent, which is a container whose children hold the
+       * work, and the two queued publish runs, which have not executed yet. Listing them invites a
+       * click that lands nowhere, and the batch parent in particular is the most tempting row in
+       * the rail because it is the one that sounds like the whole week.
+       *
+       * The runs are not removed from the world — they are real records and the queue, the metrics
+       * and `Run.parent_run_id` all still use them. This is a rendering decision about a list, and
+       * it belongs here rather than in the component because "has anything happened yet" is a fact
+       * about the run.
+       */
+      .filter((run) => world.runSteps.some((s) => s.run_id === run.id))
+      .map((run) => {
       const draft = run.target_draft_id
         ? world.drafts.find((d) => d.id === run.target_draft_id)
         : undefined;

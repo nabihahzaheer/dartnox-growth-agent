@@ -38,9 +38,14 @@
 
   --text: #eceff3;
   /* #4B5158 is the document's grey. Lightened here because it is on ink rather than on paper —
-     the role is the same, the contrast requirement is inverted. */
-  --text-muted: #939aa4;
-  --text-faint: #6b727c;
+     the role is the same, the contrast requirement is inverted.
+
+     RAISED 17 AUG. These were #939aa4 and #6b727c, and the second in particular failed WCAG AA
+     against --surface at the 11px this interface uses it at. It carries timestamps, run ids and
+     field labels — the things you squint at — so it was the wrong place to be economical. Both are
+     now above 4.5:1 on --surface. */
+  --text-muted: #a8b0bb;
+  --text-faint: #8b93a0;
 
   /* The blue, unchanged, used as a fill: squares, markers, the active nav chip. */
   --accent: #2e5cff;
@@ -112,6 +117,55 @@ body {
 .font-mono {
   font-family: var(--font-mono);
   letter-spacing: 0.02em;
+}
+
+/**
+ * SCROLLBARS.
+ *
+ * The default ones are painted by the OS in light grey and white, and this interface has four
+ * scrolling regions — the rail, the transcript, and the body of every screen. On a near-black
+ * surface they read as a rendering fault rather than as chrome.
+ *
+ * Both syntaxes, because they are not interchangeable: `scrollbar-color` is the standard and is
+ * what Firefox honours, `::-webkit-scrollbar` is what Chrome and Safari honour. Only supporting one
+ * leaves the problem in half the browsers a reviewer might open this in.
+ *
+ * Deliberately not `scrollbar-width: none`. Hiding the scrollbar in a dense operator tool removes
+ * the only cue that a region has more content below it — which is the opposite of the problem being
+ * solved.
+ */
+* {
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+  /* A transparent border with a background clip gives the thumb breathing room inside the track
+     without a second element to style. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: content-box;
+}
+
+/* Where two scrolling panes meet, the corner is painted too — otherwise a light square appears at
+   the intersection. */
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* Never removed, never restyled to invisibility. D-025 declined the component library that would

@@ -74,15 +74,15 @@ const DAY = 24 * 60;
  *
  * Named constants rather than inline strings for the same reason the pillar ids are: a branded id
  * stops a `DraftVersionId` being passed where a `RunId` belongs, and does nothing whatever about
- * `'DV-H004-2'` being mistyped as `'DV-H04-2'`. Referencing a constant does. These are exactly the
+ * `'DV-0104-2'` being mistyped as `'DV-H04-2'`. Referencing a constant does. These are exactly the
  * ids this file got wrong, so they are the last place to hand-write a string literal.
  *
- * All three are `history.ts` edit pairs tagged `tightened`, and each diff shows it: H004 cuts a
- * redundant noun, H009 drops an unsupported timeframe, H016 removes a lead-in clause.
+ * All three are `history.ts` edit pairs tagged `tightened`, and each diff shows it: 0104 cuts a
+ * redundant noun, 0109 drops an unsupported timeframe, 0116 removes a lead-in clause.
  */
-const EV_TIGHTENED_H004 = vid('DV-H004-2');
-const EV_TIGHTENED_H009 = vid('DV-H009-2');
-const EV_TIGHTENED_H016 = vid('DV-H016-2');
+const EV_TIGHTENED_0104 = vid('DV-0104-2');
+const EV_TIGHTENED_0109 = vid('DV-0109-2');
+const EV_TIGHTENED_0116 = vid('DV-0116-2');
 
 export const reflectionRules: ReflectionRule[] = [
   /* --- active (3) -------------------------------------------------------------------------
@@ -162,7 +162,7 @@ export const reflectionRules: ReflectionRule[] = [
      */
     text: 'Say it once. Three of the last twenty edits cut a lead-in or a hedge the sentence did not need.',
     status: 'suggested',
-    evidence_ids: [EV_TIGHTENED_H004, EV_TIGHTENED_H009, EV_TIGHTENED_H016],
+    evidence_ids: [EV_TIGHTENED_0104, EV_TIGHTENED_0109, EV_TIGHTENED_0116],
     evidence_tag: 'tightened',
     activated_at: null,
     retired_at: null,

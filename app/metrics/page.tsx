@@ -103,6 +103,10 @@ export default function MetricsPage() {
             <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
               Rolling 4 weeks · monthly where the denominator needs it
             </span>
+            <span className="w-full text-[11px]" style={{ color: 'var(--text-faint)' }}>
+              Every figure is computed from the records on each render, so a decision in the queue
+              moves these. Nothing here is stored.
+            </span>
           </div>
         </div>
 

@@ -67,6 +67,7 @@ import type {
   PostId,
   Run,
   RunId,
+  ProposedSlot,
   RunStep,
   RunStepId,
   ScoreComponents,
@@ -103,6 +104,25 @@ const runId = (n: string) => n as RunId;
 const stepId = (n: string) => n as RunStepId;
 const eventId = (n: string) => n as GuardrailEventId;
 const approvalId = (n: string) => n as ApprovalId;
+
+/**
+ * MONDAY'S PLANNING RUN — the agent's headline behaviour, and it was missing entirely.
+ *
+ * Option B's own description opens with *"plans a content calendar from brand pillars"*, and until
+ * 17 Aug no run of type `planning` existed in the fixture set. Three consequences, all found by
+ * someone trying to use the product rather than by any check:
+ *
+ *   · every live slot's `calendar_run_id` pointed at `RUN-0132`, which did not exist — a dangling
+ *     reference in a field `scripts/check.mts` did not walk
+ *   · `RunStep.proposed_calendar` was built specifically to carry a proposed week and was used by
+ *     nothing, so the type described a capability the fixtures never exercised
+ *   · there was nowhere in the product to answer "what is this agent going to do next week", which
+ *     is the first question anyone asks of a content agent
+ *
+ * It ran Monday 06:00, proposed eight slots, validated them deterministically, and stopped for the
+ * owner. The owner approved, and Wednesday's batch drafted against it.
+ */
+export const RUN_PLANNING = runId('RUN-0132');
 
 export const RUN_PARENT = runId('RUN-0140');
 export const RUN_CLEAN = runId('RUN-0141');
@@ -525,7 +545,10 @@ export const drafts: Draft[] = [
     degraded: false,
     blocked_reason: null,
     similarity: {
-      published: { max_cosine: 0.42, against_post_id: 'POST-0098' as PostId },
+      /** A real post in the set. This read `POST-0098`, which never existed — the similarity arms
+       *  were among the fields nothing walked. A dangling comparison target renders as a
+       *  similarity warning pointing at nothing. */
+      published: { max_cosine: 0.42, against_post_id: 'POST-0101' as PostId },
       batch: null,
       window_days: 30,
       same_channel: true,
@@ -833,6 +856,9 @@ export const scheduledPosts: Post[] = [
  * RUNS
  * ==============================================================================================*/
 
+/** Monday 06:00, three days before the anchor. The planning run's origin. */
+const PLAN_START = -3 * DAY - 4 * HOUR;
+
 const BATCH_START = minutes(-28 * HOUR);
 
 /** Start offsets for the three failure narratives, in minutes before the anchor. Declared here
@@ -842,6 +868,28 @@ const HOSTILE_START = -52;
 const RECONCILE_START = -140;
 
 export const runs: Run[] = [
+  {
+    id: RUN_PLANNING,
+    client_id: CLIENT_ID,
+    type: 'planning',
+    parent_run_id: null,
+    /** Completed: the owner approved on Tuesday, which is what let Wednesday's batch draft against
+     *  it. The interrupt step stays in the trace as the record of what was put to them. */
+    state: 'completed',
+    checkpoint_ref: 'ckpt:0132:final',
+    trigger: 'schedule.weekly_plan',
+    park_reason: null,
+    end_reason: null,
+    started_at: minutes(PLAN_START),
+    ended_at: minutes(PLAN_START + 26 * HOUR),
+    step_cap: 20,
+    degraded: false,
+    settings_version_id: SETTINGS_V3,
+    target_draft_id: null,
+    target_post_id: null,
+    next_sweep_at: null,
+    variant: 'nominal',
+  },
   {
     id: RUN_PARENT,
     client_id: CLIENT_ID,
@@ -2162,7 +2210,7 @@ const reconcileSteps: RunStep[] = [
     latency_ms: 30_000, playback_ms: 900, tool_name: 'publish_post',
     tool_input: {
       channel: 'linkedin',
-      idempotency_key: 'pub:DRAFT-H016:DV-H016-2',
+      idempotency_key: 'pub:DRAFT-0116:DV-0116-2',
       approved_hash: 'fnv1a:…',
     },
   }),
@@ -2230,7 +2278,118 @@ const reconcileSteps: RunStep[] = [
   }),
 ];
 
+/* ================================================================================================
+ * THE PLANNING RUN'S TRACE
+ *
+ * Eight proposed slots, and this is the only place in the product that answers "what is the agent
+ * going to do next week". `proposed_calendar` rather than `CalendarSlot[]` because no slot record
+ * exists yet — the planning run *proposes*, and slots are created when the owner ratifies. A type
+ * that reused CalendarSlot here would have had to invent ids for records that may never exist.
+ *
+ * Note the fixture models five of the eight resulting slots. The proposal is a self-contained
+ * record of what was put to the owner; modelling all eight would add slot, draft and run records
+ * that no screen renders.
+ * ==============================================================================================*/
+
+/**
+ * Next week, in the client's contracted shape: 3 LinkedIn (Mon/Wed/Thu) + 5 X (Mon–Fri).
+ *
+ * Sorted by publish time at the end rather than by hand. A calendar listed out of chronological
+ * order reads as a bug regardless of whether the underlying data is right, and hand-ordering it
+ * means the next person to add a slot has to remember where it goes.
+ */
+const proposedWeek: { slot: ProposedSlot }[] = ([
+  { slot: { pillar_id: PILLAR_COMPLIANCE, channel: 'linkedin', publish_at: minutes(4 * DAY - 1 * HOUR), angle: 'What the next compliance period actually asks of a 30-unit building', is_topical: false } },
+  { slot: { pillar_id: PILLAR_FIELD_NOTES, channel: 'x', publish_at: minutes(4 * DAY + 3 * HOUR), angle: 'One line from the Bed-Stuy basement', is_topical: false } },
+  { slot: { pillar_id: PILLAR_COST, channel: 'x', publish_at: minutes(5 * DAY - 90), angle: 'Payback maths, plainly', is_topical: false } },
+  { slot: { pillar_id: PILLAR_OLD_BUILDINGS, channel: 'x', publish_at: minutes(5 * DAY + 5 * HOUR), angle: 'Why the riser diagram is always wrong', is_topical: false } },
+  { slot: { pillar_id: PILLAR_FIELD_NOTES, channel: 'x', publish_at: minutes(6 * DAY + 2 * HOUR), angle: 'The cavity nobody had recorded', is_topical: false } },
+  { slot: { pillar_id: PILLAR_OLD_BUILDINGS, channel: 'linkedin', publish_at: minutes(6 * DAY - 1 * HOUR), angle: 'Knob and tube is a stop-work, not a detail', is_topical: false } },
+  { slot: { pillar_id: PILLAR_COST, channel: 'linkedin', publish_at: minutes(7 * DAY - 1 * HOUR), angle: 'What "pays for itself" actually depends on', is_topical: false } },
+  { slot: { pillar_id: PILLAR_OLD_BUILDINGS, channel: 'x', publish_at: minutes(8 * DAY + 4 * HOUR), angle: 'Risers sized for a building that no longer exists', is_topical: false } },
+] as { slot: ProposedSlot }[]).sort(
+  (a, b) => (a.slot.publish_at as number) - (b.slot.publish_at as number),
+);
+
+const planningSteps: RunStep[] = [
+  step({
+    id: stepId('RS-0132-01'), run_id: RUN_PLANNING, seq: 1, type: 'thinking',
+    label: 'Load pillars and last week’s performance', started_at: t(PLAN_START, 0),
+    latency_ms: 3100, playback_ms: 640,
+    model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
+    tokens_in: 4820, tokens_out: 240, cost_model_usd: 0.0611,
+    thinking_text:
+      'Four active pillars, none paused. Cadence is 3 LinkedIn and 5 X. Checking which pillars ran ' +
+      'thin last week so the plan does not stack three compliance posts again.',
+  }),
+  step({
+    id: stepId('RS-0132-02'), run_id: RUN_PLANNING, seq: 2, type: 'tool_call',
+    label: 'get_performance', started_at: t(PLAN_START, 6),
+    latency_ms: 1500, playback_ms: 500, tool_name: 'get_performance',
+    tool_input: { window_days: 28, group_by: ['pillar', 'channel'] },
+  }),
+  step({
+    id: stepId('RS-0132-03'), run_id: RUN_PLANNING, seq: 3, type: 'tool_result',
+    label: 'get_performance → 4 pillars, 2 channels', started_at: t(PLAN_START, 9),
+    latency_ms: 1900, playback_ms: 560, tool_name: 'get_performance', outcome: 'ok',
+    tool_output: {
+      best: { pillar: 'Field notes', channel: 'linkedin', median_rate: 0.038 },
+      worst: { pillar: 'The compliance clock', channel: 'x', median_rate: 0.011 },
+      note: 'Posting times taken from the client’s best historical slots, not from a model call.',
+    },
+  }),
+  step({
+    id: stepId('RS-0132-04'), run_id: RUN_PLANNING, seq: 4, type: 'action',
+    label: 'Propose next week · 8 slots', started_at: t(PLAN_START, 14),
+    latency_ms: 12_400, playback_ms: 1000,
+    model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
+    tokens_in: 5240, tokens_out: 690, cost_model_usd: 0.0884,
+    /** The field this run exists to fill. Rendered by `StepRow` as the week's schedule. */
+    proposed_calendar: proposedWeek,
+  }),
+  step({
+    id: stepId('RS-0132-05'), run_id: RUN_PLANNING, seq: 5, type: 'guardrail',
+    label: 'Validate the plan · no model', started_at: t(PLAN_START, 28),
+    latency_ms: 90, playback_ms: 700,
+    /**
+     * Deterministic on purpose. Pillar coverage, cadence totals, channel split and minimum spacing
+     * are all counting — a model would be slower, dearer and less certain at it, and this check has
+     * to be right every week rather than usually.
+     */
+    tool_output: {
+      cadence_matches_settings: true,
+      all_pillars_covered: true,
+      min_spacing_hours: 18,
+      paused_pillars_excluded: 0,
+    },
+    guardrail_event_id: eventId('GE-0132-01'),
+  }),
+  step({
+    id: stepId('RS-0132-06'), run_id: RUN_PLANNING, seq: 6, type: 'interrupt',
+    label: 'Waiting for the owner to approve the calendar', started_at: t(PLAN_START, 29),
+    latency_ms: 0, playback_ms: 800,
+    interrupt: {
+      /** The first of A-08's four gates, and the only one that reaches the owner rather than the
+       *  operator. They approve what the company will talk about, not individual posts. */
+      gate: 'calendar_approval',
+      awaiting: 'stakeholder',
+      options: ['approve', 'reject'],
+      /** N1b. After 48 hours drafting proceeds against the *last approved* pillar set and the owner
+       *  is escalated — silence does not stop the week, but it is not treated as consent either. */
+      deadline: minutes(PLAN_START + 48 * HOUR),
+    },
+  }),
+  step({
+    id: stepId('RS-0132-07'), run_id: RUN_PLANNING, seq: 7, type: 'action',
+    label: 'Calendar approved by the owner · 8 slots created',
+    started_at: t(PLAN_START, 26 * HOUR), latency_ms: 400, playback_ms: 700,
+    outcome: 'ok',
+    tool_input: { approved_by: 'Dana Roque — owner', via: 'signed expiring link', slots_created: 8 },
+  }),
+];
+
 export const runSteps: RunStep[] = [
+  ...planningSteps,
   ...cleanSteps,
   ...warnedSteps,
   ...liveSteps,
@@ -2305,6 +2464,15 @@ function passEvent(
 }
 
 export const guardrailEvents: GuardrailEvent[] = [
+  passEvent(
+    'GE-0132-01',
+    RUN_PLANNING,
+    stepId('RS-0132-05'),
+    null,
+    null,
+    t(PLAN_START, 28),
+    'Cadence matches settings, all four pillars covered, minimum 18h spacing, no paused pillars included.',
+  ),
   passEvent(
     'GE-0141-01',
     RUN_CLEAN,

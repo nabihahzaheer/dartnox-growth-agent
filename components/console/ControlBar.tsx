@@ -27,13 +27,18 @@ export function ControlBar({
   onSubmitBrief,
   onRunNow,
   onHalt,
+  onBackToLive,
   canHalt,
+  viewingPast,
   busy,
 }: {
   onSubmitBrief: (text: string) => Promise<void>;
   onRunNow: () => void;
   onHalt: () => void;
+  onBackToLive: () => void;
   canHalt: boolean;
+  /** Looking at a run that already finished, rather than following the live one. */
+  viewingPast: boolean;
   busy: boolean;
 }) {
   const [composing, setComposing] = useState(false);
@@ -107,6 +112,14 @@ export function ControlBar({
         )}
 
         <div className="flex items-center gap-1.5">
+          {/*
+            "Start a new run", not "Run now".
+            
+            It was the latter, and the label was actively misleading: after clicking a past run in
+            the rail, pressing it appeared to re-run *that* run and in fact started an unrelated
+            one. The verb now says what happens, and the back-to-live control below gives the
+            action people were actually reaching for.
+          */}
           <button
             type="button"
             onClick={onRunNow}
@@ -114,8 +127,19 @@ export function ControlBar({
             className="rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-40"
             style={{ background: 'var(--accent)', color: '#fff' }}
           >
-            Run now
+            Start a new run
           </button>
+          {viewingPast && (
+            <button
+              type="button"
+              onClick={onBackToLive}
+              disabled={busy}
+              className="rounded border px-2.5 py-1 text-[13px] disabled:opacity-40"
+              style={{ borderColor: 'var(--border-strong)' }}
+            >
+              ← Back to the latest run
+            </button>
+          )}
           {/* Halt, not pause. Pause implies resume, which implies a checkpoint and a restart path. */}
           <button
             type="button"

@@ -9,6 +9,10 @@ invented** — not a Dartnox client, and this is not a Dartnox product.
 
 > **No backend, no API routes, no keys, no network calls.** All state is client-side.
 
+**Where to start:** open `/console`, let the live run finish, then follow *Decide on this in the
+queue*. The console watches; the queue decides. To see what the agent plans for the week, open the
+**Plan next week** run in the left rail.
+
 ## Quick start
 
 ```bash
@@ -17,7 +21,7 @@ npm run dev          # http://localhost:3000 → redirects to /console
 ```
 
 ```bash
-npm run verify       # check + tsc + eslint + build — 1,407 assertions
+npm run verify       # check + tsc + eslint + build — 1,696 assertions
 ```
 
 Node ≥ 22. On a fresh clone `tsc --noEmit` alone fails with `Cannot find name 'LayoutProps'` — Next 16
@@ -28,7 +32,7 @@ them correctly.
 
 | Route | What it does |
 |---|---|
-| `/console` | Live activity feed. Steps stream with real timing; tool calls and results expand; guardrails branch the run. |
+| `/console` | Live activity feed. Steps stream with real timing; tool calls and results expand; guardrails branch the run. Open **Plan next week** to see the proposed content calendar. |
 | `/queue` | Everything waiting on a person — drafts, runs that never produced one, and posts sent back by a settings change. |
 | `/draft/[id]` | One item opened fully: post, versions, score arithmetic, every guardrail evaluation, full reasoning trace. |
 | `/metrics` | The PRD's KPIs, computed live, one drill-down. |
@@ -83,7 +87,7 @@ shown as metadata) and `playback_ms` (how long the console waits). The showcase 
 is 44s and it plays in 14s — **about 3×**. Played at true speed it's unwatchable; a uniform 300ms tick
 is the faked streaming the brief rejects.
 
-**Fixtures.** ~490 records across 13 types — three weeks of settled history plus a three-week forward
+**Fixtures.** ~500 records across 13 types — three weeks of settled history plus a three-week forward
 pipeline. Hand-written where a reviewer actually reads (current drafts with full traces, the long
 post bodies, the human edit pairs); generated deterministically from compact tables elsewhere, with a
 seeded PRNG, never `Math.random()`.
