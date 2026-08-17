@@ -8,19 +8,30 @@
  * screen everything else is traded against.
  *
  * ---------------------------------------------------------------------------------------------
- * WHAT IS REAL HERE AND WHAT IS PRE-WRITTEN — worth being able to say plainly
+ * THE LAYOUT IS THE ARGUMENT
  *
- * Pre-written: the words. Post text, reasoning text, tool payloads, guardrail explanations. In a
- * real system a model produces those.
+ * A context strip that does not move, one scrolling transcript, and a composer pinned to the
+ * bottom. The transcript stays anchored to its end as steps arrive, and stops doing so the moment
+ * you scroll up to read something — because following a live feed and reading back through it are
+ * two different jobs, and a view that yanks you to the bottom mid-sentence is doing one of them
+ * badly.
  *
- * Real: everything around them. The steps genuinely arrive one at a time on a timer. The data
- * genuinely arrives asynchronously, so the loading state is not staged. A failed call genuinely
- * fails. The run genuinely branches on its own guardrail results.
+ * An earlier version was a document: a page title, stacked sections with headings, content running
+ * off the bottom of a scrolling page. It read as an article about an agent rather than as an agent
+ * being watched.
  *
- * So the honest sentence is: the model output is pre-recorded, the system logic around it is real.
+ * ---------------------------------------------------------------------------------------------
+ * WHAT IS REAL HERE AND WHAT IS PRE-WRITTEN
+ *
+ * Pre-written: the words. Post text, reasoning text, tool payloads, guardrail explanations.
+ *
+ * Real: everything around them. Steps genuinely arrive one at a time on a timer. Data genuinely
+ * arrives asynchronously, so the loading state is not staged. A failed call genuinely fails. The
+ * run branches on its own guardrail results, and a submitted brief is genuinely the one the next
+ * drafting step reads.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   getActiveRun,
   getGuardrailEvents,
@@ -28,16 +39,15 @@ import {
   haltRun,
   isFailureActive,
   streamRun,
+  submitBrief,
   type StreamEndReason,
 } from '@/lib/agentClient';
-import type { ConsoleError, GuardrailEvent, Run, RunId, RunStep } from '@/lib/types';
-import { formatRelative } from '@/lib/time';
+import type { BriefRef, ConsoleError, GuardrailEvent, Run, RunId, RunStep } from '@/lib/types';
+import { formatRelative, formatTime } from '@/lib/time';
 import { Badge, runStateTone } from '@/components/Badge';
 import { StepRow } from '@/components/console/StepRow';
-import { FailureDrawer } from '@/components/console/FailureDrawer';
-import { Eyebrow, Note } from '@/components/Eyebrow';
+import { Composer } from '@/components/console/Composer';
 
-/** The run the fixtures leave mid-flight, and how far it had got when we attached. */
 const LIVE_RUN_ID = 'RUN-0143' as RunId;
 const LIVE_RUN_THROUGH_SEQ = 6;
 const TOOL_FAILURE_RUN_ID = 'RUN-0144' as RunId;
@@ -45,7 +55,7 @@ const TOOL_FAILURE_RUN_ID = 'RUN-0144' as RunId;
 const TRIGGER_LABEL: Record<string, string> = {
   'schedule.weekly_plan': 'Monday planning schedule',
   'schedule.weekly_draft': 'Wednesday drafting batch',
-  'manual.run_now': 'Run now, by the operator',
+  'manual.run_now': 'Started by you',
   'poll.performance': 'Daily performance poll',
   'poll.engagement': '30-minute reply poll',
   'sweep.resume': 'Hourly resume sweep',
@@ -67,11 +77,10 @@ export default function ConsolePage() {
   const [ended, setEnded] = useState<StreamEndReason | null>(null);
   const [error, setError] = useState<ConsoleError | null>(null);
   const [loading, setLoading] = useState(true);
+  const [briefs, setBriefs] = useState<BriefRef[]>([]);
 
-  /* ---- attach to whatever is live on first load ------------------------------------------- */
   useEffect(() => {
     let cancelled = false;
-
     getActiveRun()
       .then(async (active) => {
         if (cancelled) return;
@@ -85,13 +94,10 @@ export default function ConsolePage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-
     return () => {
       cancelled = true;
     };
   }, []);
-
-  /* ---- controls ---------------------------------------------------------------------------- */
 
   const startRun = useCallback(async (targetId: RunId, fromSeq: number) => {
     setLoading(true);
@@ -101,13 +107,15 @@ export default function ConsolePage() {
       const next = await getRun(targetId);
       setRun(next);
       setEvents(await getGuardrailEvents(targetId));
-      setSource((current) => ({
-        runId: targetId,
-        fromSeq,
-        // Bumped every time so pressing "run now" on the run already on screen still restarts it.
-        // The key below is built from this, so a new nonce remounts the stream with clean state.
-        nonce: (current?.nonce ?? 0) + 1,
-      }));
+      // A new nonce remounts the stream, so starting a run is a fresh instance rather than a reset.
+      setSource((current) => ({ runId: targetId, fromSeq, nonce: (current?.nonce ?? 0) + 1 }));
+      /**
+       * Pending briefs clear when a run starts, because the run has now consumed them — the
+       * drafting step's own detail panel shows which brief it read. Leaving them queued below the
+       * transcript would imply they are still waiting, which would be the one thing on this screen
+       * that is not true.
+       */
+      setBriefs([]);
     } catch (e) {
       setError(e as ConsoleError);
     } finally {
@@ -116,15 +124,6 @@ export default function ConsolePage() {
   }, []);
 
   const runNow = useCallback(() => {
-    /**
-     * §6b's unlock. Most settings take effect "next draft", so without a run on demand a tone
-     * change takes effect at a moment nobody is watching. This is what makes those controls
-     * demonstrable at all.
-     *
-     * With the tool-failure switch armed, this streams the run whose variant is `tool_failure`
-     * instead — three attempts, jittered backoff, then a park. That is the entire mechanism:
-     * pre-written alternate step sequences selected by a flag, which is what `RunVariant` is.
-     */
     const target = isFailureActive('tool_failure') ? TOOL_FAILURE_RUN_ID : LIVE_RUN_ID;
     void startRun(target, 0);
   }, [startRun]);
@@ -141,115 +140,172 @@ export default function ConsolePage() {
     }
   }, [run]);
 
+  const sendBrief = useCallback(async (text: string) => {
+    const brief = await submitBrief(text, 'You — operator');
+    setBriefs((current) => [...current, brief]);
+    // The transcript pins itself to the bottom as steps arrive; a brief is the one addition that
+    // comes from the operator rather than the stream, so it scrolls itself into view.
+    requestAnimationFrame(() => {
+      const scroller = document.querySelector('[data-transcript]');
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    });
+  }, []);
+
   const handleEnd = useCallback((reason: StreamEndReason) => setEnded(reason), []);
-
-  /* ---- render ------------------------------------------------------------------------------ */
-
-  if (error) {
-    return <ErrorState error={error} onRetry={() => void startRun(LIVE_RUN_ID, 0)} />;
-  }
 
   const streaming = source !== null && ended === null;
 
-  return (
-    <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6">
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div className="space-y-1">
-            <Eyebrow>Operator console</Eyebrow>
-            <h1 className="text-xl font-bold leading-tight">The agent, working</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={runNow}
-              className="rounded border px-2.5 py-1 text-sm font-medium"
-              style={{ borderColor: 'var(--border-strong)', color: 'var(--accent-text)' }}
-            >
-              Run now
-            </button>
-            {/*
-              Halt, not pause. Pause implies resume, which implies a checkpoint and a restart path
-              — a different feature, and a pause button that cannot resume invites exactly the
-              question the orchestrator has to answer on the board anyway. Half-implementing it
-              would be worse than not having it.
-            */}
-            <button
-              type="button"
-              onClick={halt}
-              disabled={!streaming}
-              className="rounded border px-2.5 py-1 text-sm disabled:opacity-40"
-              style={{ borderColor: 'var(--border-strong)' }}
-            >
-              Halt
-            </button>
-            <FailureDrawer />
-          </div>
-        </div>
+  if (error) {
+    return (
+      <>
+        <ErrorState error={error} onRetry={() => void startRun(LIVE_RUN_ID, 0)} />
+        <Composer
+          onSubmitBrief={sendBrief}
+          onRunNow={runNow}
+          onHalt={halt}
+          canHalt={false}
+          busy={loading}
+        />
+      </>
+    );
+  }
 
-        {run && (
-          <div
-            className="rounded border px-3 py-2.5"
-            style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
-          >
-            <div className="mb-1.5">
-              <Eyebrow>Current run</Eyebrow>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-sm">{run.id}</span>
+  return (
+    <>
+      {/* Context strip. Fixed, because "which run is this and why did it fire" should never scroll
+          away from the thing it describes. */}
+      <div
+        className="shrink-0 border-b px-4 py-2.5"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+      >
+        <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-1">
+          {run ? (
+            <>
+              <span className="font-mono text-[13px]">{run.id}</span>
               <Badge tone={runStateTone(run.state)}>{run.state.replace(/_/g, ' ')}</Badge>
-              {run.degraded && <Badge tone="parked">degraded</Badge>}
               {run.variant !== 'nominal' && (
                 <Badge tone="parked" mono>
-                  variant: {run.variant}
+                  {run.variant}
                 </Badge>
               )}
-            </div>
-            {/* Why this run fired is the difference between a feed and a trace. */}
-            <p className="mt-1 text-[13px]" style={{ color: 'var(--text-muted)' }}>
-              {TRIGGER_LABEL[run.trigger] ?? run.trigger} · started {formatRelative(run.started_at)}{' '}
-              · step cap {run.step_cap}
-            </p>
-          </div>
-        )}
-      </header>
-
-      {loading && <LoadingState />}
-
-      {source && (
-        <div className="mb-1.5 pt-1">
-          <Eyebrow>Activity</Eyebrow>
+              {run.degraded && <Badge tone="parked">degraded</Badge>}
+              <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+                {TRIGGER_LABEL[run.trigger] ?? run.trigger} · {formatRelative(run.started_at)}
+              </span>
+            </>
+          ) : (
+            <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
+              No run selected
+            </span>
+          )}
         </div>
-      )}
+      </div>
 
-      {source && (
-        <RunStream
-          // Remounting on a new source is what resets the feed. Resetting state inside the effect
-          // instead would mean a synchronous setState during an effect, which cascades renders —
-          // a key is the framework's own answer to "this is a different thing now".
-          key={`${source.runId}:${source.nonce}`}
-          runId={source.runId}
-          fromSeq={source.fromSeq}
-          events={events}
-          onEnd={handleEnd}
-        />
-      )}
+      <Transcript
+        source={source}
+        events={events}
+        briefs={briefs}
+        loading={loading}
+        ended={ended}
+        onEnd={handleEnd}
+        onRunNow={runNow}
+      />
 
-      {/* The document reserves its green block for the thing you must not miss. A run stopping —
-          and *why* it stopped — is that thing on this screen. */}
-      {ended && <Note>{END_COPY[ended]}</Note>}
-
-      {!loading && !source && !ended && <EmptyState onRun={runNow} />}
-    </div>
+      <Composer
+        onSubmitBrief={sendBrief}
+        onRunNow={runNow}
+        onHalt={halt}
+        canHalt={streaming}
+        busy={loading}
+      />
+    </>
   );
 }
 
 /* ================================================================================================
- * THE STREAM
- *
- * A separate component so that starting a different run is a remount rather than a reset. Its
- * whole state — which steps have arrived, how many were history — is scoped to one attachment.
+ * TRANSCRIPT — the one scrolling region
  * ==============================================================================================*/
+
+function Transcript({
+  source,
+  events,
+  briefs,
+  loading,
+  ended,
+  onEnd,
+  onRunNow,
+}: {
+  source: Source | null;
+  events: GuardrailEvent[];
+  briefs: BriefRef[];
+  loading: boolean;
+  ended: StreamEndReason | null;
+  onEnd: (reason: StreamEndReason) => void;
+  onRunNow: () => void;
+}) {
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto" data-transcript>
+      <div className="mx-auto w-full max-w-3xl space-y-2 px-4 py-4">
+        {loading && !source && <LoadingState />}
+
+        {source && (
+          <RunStream
+            key={`${source.runId}:${source.nonce}`}
+            runId={source.runId}
+            fromSeq={source.fromSeq}
+            events={events}
+            onEnd={onEnd}
+          />
+        )}
+
+        {ended && (
+          <p
+            className="rounded px-3 py-2 text-[13px] font-medium"
+            style={{ background: 'var(--note-bg)', color: 'var(--note-ink)' }}
+          >
+            {END_COPY[ended]}
+          </p>
+        )}
+
+        {!loading && !source && !ended && <EmptyState onRun={onRunNow} />}
+
+        {/* Below the run, because that is when they were submitted. They clear once a run starts,
+            since at that point the run has read them. */}
+        {briefs.map((brief, i) => (
+          <BriefBubble key={`${brief.submitted_at}-${i}`} brief={brief} />
+        ))}
+
+        {briefs.length > 0 && (
+          <p className="pt-1 text-right text-[11px]" style={{ color: 'var(--text-faint)' }}>
+            {briefs.length === 1 ? 'This brief' : `These ${briefs.length} briefs`} will be read by
+            the next drafting run.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** What the operator put in, rendered in the flow of the run rather than in a side panel. It is an
+ *  input to the system and it belongs in the record of what happened. */
+function BriefBubble({ brief }: { brief: BriefRef }) {
+  return (
+    <div className="flex justify-end">
+      <div
+        className="max-w-[80%] rounded-lg px-3 py-2"
+        style={{ background: 'var(--accent-soft)', border: '1px solid var(--border-strong)' }}
+      >
+        <div
+          className="font-mono text-[10px] font-bold uppercase"
+          style={{ color: 'var(--accent-text)', letterSpacing: '0.1em' }}
+        >
+          Brief · {formatTime(brief.submitted_at)}
+        </div>
+        <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-wrap">{brief.text}</p>
+      </div>
+    </div>
+  );
+}
 
 function RunStream({
   runId,
@@ -263,10 +319,31 @@ function RunStream({
   onEnd: (reason: StreamEndReason) => void;
 }) {
   const [steps, setSteps] = useState<RunStep[]>([]);
-  /** How many steps had already happened when we attached. Steps below this index are history and
-   *  must not animate in — replaying an arrival that already occurred is theatre. */
   const [historyLength, setHistoryLength] = useState(0);
   const [live, setLive] = useState(true);
+  const endRef = useRef<HTMLDivElement>(null);
+  /** Whether to keep the view pinned to the newest step. Turned off the moment the reader scrolls
+   *  away from the bottom, because following a feed and reading back through it are two different
+   *  jobs and only one of them wants the view moving. */
+  const stickToBottom = useRef(true);
+
+  useEffect(() => {
+    const scroller = document.querySelector('[data-transcript]');
+    if (!scroller) return;
+    const onScroll = () => {
+      const distanceFromBottom =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      stickToBottom.current = distanceFromBottom < 80;
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Layout effect, not effect: this runs before the browser paints, so the view is already at the
+  // bottom when the new step becomes visible rather than jumping there a frame later.
+  useLayoutEffect(() => {
+    if (stickToBottom.current) endRef.current?.scrollIntoView({ block: 'end' });
+  }, [steps.length]);
 
   useEffect(() => {
     const handle = streamRun(runId, fromSeq, (event) => {
@@ -280,20 +357,15 @@ function RunStream({
         onEnd(event.reason);
       }
     });
-
-    // StrictMode double-invokes effects in development on purpose, to surface ones that leak.
-    // `stop()` clears the pending timer and flags an in-flight callback, so the second mount runs
-    // clean rather than alongside the first and emitting every step twice.
+    // StrictMode double-invokes effects in development to surface ones that leak; `stop()` clears
+    // the pending timer and flags an in-flight callback so the second mount runs clean.
     return () => handle.stop();
   }, [runId, fromSeq, onEnd]);
 
   return (
     <>
-      {/*
-        `aria-live="polite"` with `aria-relevant="additions"`: steps are announced as they arrive
-        without the whole list being re-read each time. Not `assertive` — this is a feed, not an
-        alarm, and interrupting a reader once a second would make the screen unusable.
-      */}
+      {/* `aria-live="polite"` with `aria-relevant="additions"`: steps are announced as they arrive
+          without the whole list being re-read. Not `assertive` — this is a feed, not an alarm. */}
       <ol className="space-y-2" aria-live="polite" aria-relevant="additions" aria-label="Agent activity">
         {steps.map((step, index) => (
           <StepRow
@@ -306,7 +378,7 @@ function RunStream({
       </ol>
 
       {live && steps.length > 0 && (
-        <p className="flex items-center gap-2 px-1 text-[13px]" style={{ color: 'var(--text-muted)' }}>
+        <p className="flex items-center gap-2 px-1 pt-1 text-[13px]" style={{ color: 'var(--text-muted)' }}>
           <span
             aria-hidden
             className="inline-block h-1.5 w-1.5 rounded-full"
@@ -315,14 +387,14 @@ function RunStream({
           Working…
         </p>
       )}
+
+      <div ref={endRef} />
     </>
   );
 }
 
 /* ================================================================================================
- * STATES
- * The brief names loading, empty and error as a constraint, so they are components rather than
- * afterthoughts. Each says what is happening and what the reader can do about it.
+ * STATES — named by the brief as a constraint, so they are components rather than afterthoughts
  * ==============================================================================================*/
 
 function LoadingState() {
@@ -332,7 +404,7 @@ function LoadingState() {
         <div
           key={i}
           className="h-14 rounded border"
-          style={{ borderColor: 'var(--border)', background: 'var(--surface-sunk)' }}
+          style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
         />
       ))}
     </div>
@@ -341,20 +413,17 @@ function LoadingState() {
 
 function EmptyState({ onRun }: { onRun: () => void }) {
   return (
-    <div
-      className="rounded border px-4 py-6 text-center"
-      style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
-    >
-      <p className="text-sm font-medium">No run in progress</p>
-      <p className="mx-auto mt-1 max-w-md text-[13px]" style={{ color: 'var(--text-muted)' }}>
-        Runs normally start on a schedule — the calendar on Monday, the drafting batch on
-        Wednesday. You can also start one by hand.
+    <div className="py-10 text-center">
+      <p className="text-[13px] font-medium">Nothing running</p>
+      <p className="mx-auto mt-1 max-w-sm text-[13px]" style={{ color: 'var(--text-muted)' }}>
+        Runs start on a schedule — the calendar on Monday, the drafting batch on Wednesday. Brief
+        the agent below, or start one now.
       </p>
       <button
         type="button"
         onClick={onRun}
-        className="mt-3 rounded border px-2.5 py-1 text-sm font-medium"
-        style={{ borderColor: 'var(--border-strong)', color: 'var(--accent-text)' }}
+        className="mt-3 rounded px-2.5 py-1 text-[13px] font-medium"
+        style={{ background: 'var(--accent)', color: '#fff' }}
       >
         Run now
       </button>
@@ -362,8 +431,8 @@ function EmptyState({ onRun }: { onRun: () => void }) {
   );
 }
 
-/** D-031's argument in one component: seven error kinds exist because the copy differs, and the
- *  copy differing is the point. A single "something went wrong" would waste the taxonomy. */
+/** Seven error kinds exist because the copy differs, and the copy differing is the point. A single
+ *  "something went wrong" would waste the taxonomy. */
 function ErrorState({ error, onRetry }: { error: ConsoleError; onRetry: () => void }) {
   const copy: Record<ConsoleError['kind'], string> = {
     not_found: 'That run no longer exists.',
@@ -376,26 +445,28 @@ function ErrorState({ error, onRetry }: { error: ConsoleError; onRetry: () => vo
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6">
-      <div
-        className="rounded border px-4 py-4"
-        style={{ borderColor: 'var(--state-blocked)', background: 'var(--state-blocked-bg)' }}
-      >
-        <p className="text-sm font-medium">{copy[error.kind]}</p>
-        <p
-          className="mt-1 font-mono text-[11px] uppercase"
-          style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-3xl px-4 py-6">
+        <div
+          className="rounded border px-4 py-4"
+          style={{ borderColor: 'var(--state-blocked)', background: 'var(--state-blocked-bg)' }}
         >
-          {error.kind}
-        </p>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-3 rounded border px-2.5 py-1 text-sm font-medium"
-          style={{ borderColor: 'var(--border-strong)' }}
-        >
-          Try again
-        </button>
+          <p className="text-[13px] font-medium">{copy[error.kind]}</p>
+          <p
+            className="mt-1 font-mono text-[10px] font-bold uppercase"
+            style={{ color: 'var(--text-muted)', letterSpacing: '0.1em' }}
+          >
+            {error.kind}
+          </p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-3 rounded border px-2.5 py-1 text-[13px] font-medium"
+            style={{ borderColor: 'var(--border-strong)' }}
+          >
+            Try again
+          </button>
+        </div>
       </div>
     </div>
   );

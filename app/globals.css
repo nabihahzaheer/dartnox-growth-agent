@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /**
- * VISUAL LANGUAGE (D-039, revised 17 Aug)
+ * VISUAL LANGUAGE (D-039, revised twice on 17 Aug)
  *
  * The palette and type below are lifted from the assignment PDF rather than invented. Those values
  * were reverse-engineered from that document's content stream when `build_prd.py` was written to
@@ -16,9 +16,13 @@
  * Helvetica for text, Courier-Bold for labels. The PDF's own hierarchy, which is worth naming
  * because it is doing real work here:
  *
- *   SECTION  ▪ blue square + Courier-Bold caps, blue      → `<Eyebrow>`
- *   FIELD      Courier-Bold caps, grey, no square         → labels inside an expanded step
+ *   BRAND      the blue square — once, on the rail, and nowhere else
+ *   FIELD      Courier-Bold caps, grey                    → labels inside an expanded step
  *   body       Helvetica                                  → everything else
+ *
+ * The square was briefly used on every section heading. In the PDF it opens a section once, with a
+ * page of space around it; stacked four-deep in one viewport it stops being a mark and becomes
+ * wallpaper. It is now the brand mark only.
  *
  * Dark by default. An operator console is a surface someone sits in front of for an hour clearing
  * a queue, and the assessment document's own header bar is already this near-black.
@@ -87,6 +91,11 @@
    */
   --font-sans: Helvetica, "Helvetica Neue", Arial, system-ui, sans-serif;
   --font-mono: "Courier New", Courier, ui-monospace, monospace;
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {

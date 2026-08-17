@@ -43,6 +43,7 @@ import type {
   ConsoleError,
   Draft,
   DraftId,
+  BriefRef,
   FixtureSet,
   GuardrailEvent,
   MetricDescriptor,
@@ -230,6 +231,30 @@ export async function haltRun(id: RunId): Promise<Run> {
   return run;
 }
 
+/**
+ * Operator briefs submitted through the console, newest first.
+ *
+ * A-01 ranks briefs first among the three source types, and the reason is worth stating: a
+ * brief-driven post cannot be generic, because its substance exists nowhere else. News commentary
+ * is the floor; a note from someone who was on site is the product's actual differentiator.
+ *
+ * The architecture already says these arrive "as free-form notes through the console", which is
+ * why the composer at the bottom of the screen is a real surface rather than a chat affordance
+ * borrowed from somewhere else.
+ */
+const submittedBriefs: BriefRef[] = [];
+
+export async function submitBrief(text: string, author: string): Promise<BriefRef> {
+  await sleep(LATENCY_MS.list);
+  const brief: BriefRef = { author, submitted_at: NOW, text };
+  submittedBriefs.unshift(brief);
+  return brief;
+}
+
+export function pendingBriefCount(): number {
+  return submittedBriefs.length;
+}
+
 /* ================================================================================================
  * THE STREAM
  * ==============================================================================================*/
@@ -282,7 +307,21 @@ export function streamRun(
 
   const steps = world.runSteps
     .filter((s) => s.run_id === runId)
-    .sort((a, b) => a.seq - b.seq);
+    .sort((a, b) => a.seq - b.seq)
+    /**
+     * If the operator has submitted a brief, the next drafting step consumes it instead of the
+     * fixture's. This is the smallest honest version of "your input changes what the agent does
+     * next": the step really does read whatever is in the store at the moment it runs, rather than
+     * replaying a value baked in at build time.
+     *
+     * The limit, which belongs in the README: the drafted *text* is still pre-written. What is
+     * real is which input the run consumed.
+     */
+    .map((step) =>
+      step.brief_ref && submittedBriefs.length > 0
+        ? { ...step, brief_ref: submittedBriefs[0] }
+        : step,
+    );
 
   const history = steps.filter((s) => s.seq <= fromSeq);
   const pending = steps.filter((s) => s.seq > fromSeq);
