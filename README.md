@@ -25,8 +25,9 @@ npm run verify       # check + tsc + eslint + build — 1,756 assertions
 ```
 
 Node ≥ 22. On a fresh clone `tsc --noEmit` alone fails with `Cannot find name 'LayoutProps'` — Next 16
-generates route types into `.next/types`, so a build must run once first. `npm run verify` orders
-them correctly.
+generates route types into `.next/types`, so a build has to run first. `npm run verify` runs the
+build before the typecheck for that reason; run them the other way round on a clean checkout and the
+typecheck fails on generated types that do not exist yet.
 
 ## Screens
 
