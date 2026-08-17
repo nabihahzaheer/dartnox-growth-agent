@@ -69,9 +69,10 @@ const BUILD_INSTANTS: ReadonlyArray<readonly [string, string]> = [
   ['2026-08-20T08:00:00Z', 'a Thursday exactly on the anchor hour — must stay today'],
   ['2026-08-20T14:00:00Z', 'a Thursday afternoon'],
   ['2026-08-22T23:00:00Z', 'late on a Saturday'],
-  ['2026-03-29T10:00:00Z', 'the day EU clocks go forward'],
-  ['2026-03-26T09:05:00Z', 'the Thursday before the spring transition'],
-  ['2026-10-25T10:00:00Z', 'the day EU clocks go back'],
+  ['2026-03-08T12:00:00Z', 'the day US clocks go forward'],
+  ['2026-03-05T14:05:00Z', 'the Thursday before the spring transition'],
+  ['2026-11-01T12:00:00Z', 'the day US clocks go back'],
+  ['2026-11-05T14:30:00Z', 'the Thursday after the autumn transition'],
   ['2026-01-01T00:00:00Z', 'across a year boundary'],
   ['2027-01-02T12:00:00Z', 'the Saturday after new year'],
 ];
@@ -96,10 +97,23 @@ for (const [iso, description] of BUILD_INSTANTS) {
     `anchor ${anchor.toISOString()} is after build ${iso}`,
   );
 
+  /**
+   * Seven days plus an hour, and the hour is not slack — it is daylight saving.
+   *
+   * This assertion was originally a flat seven days and the autumn-transition case failed it,
+   * which is the check earning its place. A build on the Thursday after the clocks go back, at
+   * 09:30 local, anchors to the previous Thursday at 10:00 local. In *wall-clock* terms that gap
+   * is six days and 23.5 hours. In absolute terms it is seven days and 30 minutes, because an
+   * extra hour of real time elapsed when the clocks went back inside the window.
+   *
+   * So the honest bound on a local-wall-clock anchor is seven days plus the largest DST shift.
+   * Asserting a flat seven days would have failed twice a year, on a correct implementation.
+   */
+  const maxGapMs = 7 * 86_400_000 + 3_600_000;
   check(
-    `${label} — is within seven days of the build`,
-    buildAt.getTime() - anchor.getTime() <= 7 * 86_400_000,
-    `gap is ${((buildAt.getTime() - anchor.getTime()) / 86_400_000).toFixed(2)} days`,
+    `${label} — is within seven days (plus DST slack) of the build`,
+    buildAt.getTime() - anchor.getTime() <= maxGapMs,
+    `gap is ${((buildAt.getTime() - anchor.getTime()) / 86_400_000).toFixed(3)} days`,
   );
 }
 
@@ -136,10 +150,207 @@ if (fallbackMatch) {
 }
 
 /* ==============================================================================================
- * TODO as the build proceeds
- *   - lib/world.ts transitions (Step 5)
- *   - fixture referential integrity (Step 10)
+ * FIXTURE REFERENTIAL INTEGRITY
+ *
+ * The fixture set is a graph held together by string ids. Branded types stop a DraftId being used
+ * where a RunId belongs, which is a different problem: they cannot tell whether `DRAFT-0141`
+ * actually exists. A dangling id produces an empty panel rather than an error, and the way you
+ * find it is by clicking the wrong thing in front of someone.
+ *
+ * These are the joins the screens actually traverse.
  * ============================================================================================*/
+
+section('Fixture referential integrity');
+
+const { fixtures } = await import('../fixtures/index.ts');
+
+const pillarIds = new Set<string>(fixtures.pillars.map((p) => p.id));
+const slotIds = new Set<string>(fixtures.calendarSlots.map((s) => s.id));
+const draftIds = new Set<string>(fixtures.drafts.map((d) => d.id));
+const runIds = new Set<string>(fixtures.runs.map((r) => r.id));
+const stepIds = new Set<string>(fixtures.runSteps.map((s) => s.id));
+const ruleIds = new Set<string>(fixtures.guardrailRules.map((r) => r.id));
+const eventIds = new Set<string>(fixtures.guardrailEvents.map((e) => e.id));
+const versionIds = new Set<string>(fixtures.drafts.flatMap((d) => d.versions.map((v) => v.id)));
+const settingsVersionIds = new Set<string>(fixtures.settings.versions.map((v) => v.version_id));
+
+for (const d of fixtures.drafts) {
+  check(`${d.id} · slot exists`, slotIds.has(d.slot_id));
+  check(`${d.id} · pillar exists`, pillarIds.has(d.pillar_id));
+  /** The single most load-bearing join in the set: the detail view's entire required content is
+   *  the reasoning trace, which lives on the run. B1's Draft had no path to it at all. */
+  check(`${d.id} · run exists`, runIds.has(d.run_id));
+  check(`${d.id} · current version is in versions[]`, versionIds.has(d.current_version_id));
+  for (const v of d.versions) {
+    check(`${v.id} · settings version exists`, settingsVersionIds.has(v.settings_version_id));
+  }
+}
+
+for (const a of fixtures.approvals) {
+  check(`${a.id} · binds an existing draft version`, versionIds.has(a.draft_version_id));
+  check(`${a.id} · pillar exists`, pillarIds.has(a.pillar_id));
+}
+
+for (const r of fixtures.runs) {
+  if (r.parent_run_id) check(`${r.id} · parent run exists`, runIds.has(r.parent_run_id));
+  if (r.target_draft_id) check(`${r.id} · target draft exists`, draftIds.has(r.target_draft_id));
+  check(`${r.id} · settings version exists`, settingsVersionIds.has(r.settings_version_id));
+}
+
+for (const s of fixtures.runSteps) {
+  check(`${s.id} · run exists`, runIds.has(s.run_id));
+  if (s.guardrail_event_id) {
+    check(`${s.id} · guardrail event exists`, eventIds.has(s.guardrail_event_id));
+  }
+  if (s.produced?.entity_type === 'draft') {
+    check(`${s.id} · produced draft exists`, draftIds.has(s.produced.id));
+  }
+}
+
+for (const e of fixtures.guardrailEvents) {
+  check(`${e.id} · run exists`, runIds.has(e.run_id));
+  check(`${e.id} · run step exists`, stepIds.has(e.run_step_id));
+  if (e.draft_id) check(`${e.id} · draft exists`, draftIds.has(e.draft_id));
+  if (e.rule_id) check(`${e.id} · rule exists`, ruleIds.has(e.rule_id));
+  if (e.offending_span) {
+    check(`${e.id} · span indexes a real version`, versionIds.has(e.offending_span.version_id));
+  }
+}
+
+/* --- invariants that are not joins ---------------------------------------------------------- */
+
+section('Fixture invariants');
+
+/**
+ * R1 exception 4: `composite_score` is derived and cached. Cached is not invented — if it ever
+ * disagreed with the components the components would win, so the two must agree at rest. This is
+ * the assertion that keeps "derived and cached" honest.
+ */
+for (const d of fixtures.drafts) {
+  if (d.state === 'drafting') continue; // not scored yet, and renders as such
+  const c = d.score_components;
+  const w = d.score_weights;
+  const expected =
+    Math.round(
+      (c.brand_voice * w.brand_voice +
+        c.claim_support * w.claim_support +
+        c.pillar_fit * w.pillar_fit +
+        c.channel_fit * w.channel_fit +
+        c.specificity * w.specificity) *
+        1000,
+    ) / 1000;
+  check(
+    `${d.id} · cached composite matches its components`,
+    Math.abs(d.composite_score - expected) < 1e-9,
+    `cached ${d.composite_score}, components give ${expected}`,
+  );
+}
+
+/** Weights are A-10's and must sum to 1, or the composite is not a weighted mean of anything. */
+for (const d of fixtures.drafts) {
+  const w = d.score_weights;
+  const sum = w.brand_voice + w.claim_support + w.pillar_fit + w.channel_fit + w.specificity;
+  check(`${d.id} · score weights sum to 1`, Math.abs(sum - 1) < 1e-9, `sum is ${sum}`);
+}
+
+/** Steps must be contiguous from 1 within each run, because `seq` is both stream order and replay
+ *  order — a gap would silently drop a step from the console. */
+for (const r of fixtures.runs) {
+  const seqs = fixtures.runSteps
+    .filter((s) => s.run_id === r.id)
+    .map((s) => s.seq)
+    .sort((a, b) => a - b);
+  if (seqs.length === 0) continue;
+  const contiguous = seqs.every((n, i) => n === i + 1);
+  check(`${r.id} · step seq is contiguous from 1`, contiguous, `got [${seqs.join(', ')}]`);
+  check(`${r.id} · step count is within the cap`, seqs.length <= r.step_cap);
+}
+
+/**
+ * R6/D-032: Draft state terminates at `approved`. Two records with write authority over one fact
+ * drift within an hour of the reducer existing, so a draft carrying a Post state is the exact
+ * defect that rule exists to prevent.
+ */
+const POST_ONLY_STATES = new Set([
+  'scheduled',
+  'pending_reapproval',
+  'publishing',
+  'published',
+  'failed',
+  'pulled',
+  'invalidated',
+]);
+for (const d of fixtures.drafts) {
+  check(`${d.id} · does not claim a Post state`, !POST_ONLY_STATES.has(d.state as string));
+}
+
+/** A pending approval is one whose `decided_at` is null — that is the canonical test, which is why
+ *  there is no separate status field. If a row has a decision it must also have a decided time. */
+for (const a of fixtures.approvals) {
+  const consistent = (a.decision === null) === (a.decided_at === null);
+  check(`${a.id} · decision and decided_at agree`, consistent);
+}
+
+/** R7: guardrail evaluations emit on pass, not only on warn or fail. Without pass rows, block rate
+ *  has no denominator and a rule that stopped being evaluated looks like a rule passing
+ *  everything. This asserts the fixture set has not quietly written only the interesting rows. */
+check(
+  'guardrail events include pass results',
+  fixtures.guardrailEvents.some((e) => e.result === 'pass'),
+);
+
+/** A `warn` is not a draft state. A warned draft sits in `awaiting_approval` and renders its
+ *  warning from the event — and two drafts differing only by guardrail result is the only place
+ *  the three-state result becomes legible in the product. */
+const warned = fixtures.guardrailEvents.filter((e) => e.result === 'warn');
+check('at least one warn event exists', warned.length > 0);
+for (const e of warned) {
+  const d = fixtures.drafts.find((x) => x.id === e.draft_id);
+  if (d) check(`${e.id} · its draft is awaiting_approval, not a "warn" state`, d.state === 'awaiting_approval');
+}
+
+/** `escalation_trigger` is non-null exactly when something was escalated. The two fields overlap
+ *  deliberately and answer different questions; this keeps them consistent. */
+for (const e of fixtures.guardrailEvents) {
+  const consistent = (e.escalation_tier === 'none') === (e.escalation_trigger === null);
+  check(`${e.id} · escalation tier and trigger agree`, consistent);
+}
+
+/** A parked run must say when it will be retried, or parking is indistinguishable from death. */
+for (const r of fixtures.runs) {
+  if (r.state === 'parked_transient') {
+    check(`${r.id} · parked_transient has a next sweep`, r.next_sweep_at !== null);
+    check(`${r.id} · parked_transient has a park reason`, r.park_reason !== null);
+  }
+}
+
+/** The live run has to be genuinely mid-flight, or the console cannot demonstrate attaching to a
+ *  run it did not start. */
+const liveRun = fixtures.runs.find((r) => r.state === 'running');
+check('exactly one run is mid-flight', liveRun !== undefined);
+if (liveRun) {
+  check(`${liveRun.id} · has not ended`, liveRun.ended_at === null);
+  check(`${liveRun.id} · started in the past`, (liveRun.started_at as number) < 0);
+}
+
+/** D-041 cut the low-score failure switch, and the replacement demonstration depends on a draft
+ *  actually sitting below the threshold. If that stops being true the settings control has nothing
+ *  to move across and the cut becomes a loss rather than a trade. */
+check(
+  'a draft sits below the score threshold',
+  fixtures.drafts.some(
+    (d) => d.state === 'awaiting_approval' && d.composite_score < fixtures.settings.score_threshold,
+  ),
+);
+check(
+  'a draft sits above the score threshold',
+  fixtures.drafts.some(
+    (d) => d.state === 'awaiting_approval' && d.composite_score >= fixtures.settings.score_threshold,
+  ),
+);
+
+/** Every fixture file declares the schema version it was authored against (D-029). */
+check('fixture set declares the schema version', fixtures.schemaVersion === '1');
 
 console.log(`\n${checks - failures}/${checks} checks passed.`);
 

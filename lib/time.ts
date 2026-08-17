@@ -33,8 +33,8 @@
  * format is exactly what was intended rather than what a locale happened to produce.
  */
 
-import { CLIENT_TIMEZONE, computeAnchorIso, wallClockIn } from '@/lib/anchor';
-import type { MinutesFromAnchor } from '@/lib/types';
+import { CLIENT_TIMEZONE, computeAnchorIso, wallClockIn } from './anchor.ts';
+import type { MinutesFromAnchor } from './types.ts';
 
 export { CLIENT_TIMEZONE };
 
@@ -46,7 +46,7 @@ export { CLIENT_TIMEZONE };
  * exactly the defect the Thursday rule exists to prevent, so the fallback obeys the same
  * invariant as the computed value. It only ever costs the automatic freshness, never correctness.
  */
-const FALLBACK_ANCHOR_ISO = '2026-08-13T08:00:00.000Z';
+const FALLBACK_ANCHOR_ISO = '2026-08-13T14:00:00.000Z';
 
 /**
  * `process.env.ANCHOR_ISO` is substituted textually at build by the `env` block in

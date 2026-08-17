@@ -55,11 +55,10 @@
  * "Thursday 10:00" *in this zone* rather than in UTC or on the build machine (Vercel builds in
  * UTC; a laptop does not).
  *
- * PROVISIONAL. The client does not exist yet — it is invented when the fixtures are written. When
- * it is, its `timezone` field must be this constant, not a second copy of the string. One value,
- * one place.
+ * Brightsill is in Brooklyn, so this is `America/New_York`. `fixtures/client.ts` imports this
+ * constant for its `timezone` field rather than repeating the string — one value, one place.
  */
-export const CLIENT_TIMEZONE = 'Europe/Amsterdam';
+export const CLIENT_TIMEZONE = 'America/New_York';
 
 /** Thursday, in `Date`'s day numbering where Sunday is 0. */
 const THURSDAY = 4;

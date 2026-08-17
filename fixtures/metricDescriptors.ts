@@ -1,0 +1,311 @@
+/**
+ * METRIC DESCRIPTORS — the dashboard's content, and the PRD's metrics section, from one file.
+ *
+ * This is configuration, not a simulated record, so it is not one of the thirteen. It exists
+ * because A-17 specifies per metric a definition, a healthy range, an action when the value leaves
+ * that range, a phase and an empty state — and none of the thirteen records holds any of that.
+ * Hardcoding it inside the dashboard component would make "defined before you build it" untrue for
+ * the one screen the phrase most applies to.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * D-042 · THIS FILE IS ALSO THE PRD'S SOURCE
+ *
+ * The failure it prevents is cheap to make and bad to ship: the dashboard renders five metrics,
+ * the PRD names six, and a reviewer holding both finds the mismatch. Two documents written days
+ * apart by different halves of the same process will disagree unless something stops them.
+ *
+ * So the direction of authority is fixed. `ARCHITECTURE-DRAFT.md` A-17 is canonical; this file
+ * transcribes A-17; the PRD's success-metrics section and the dashboard both transcribe this file.
+ * A metric that belongs in the PRD and is not in A-17 is a signal to change A-17 first — not to
+ * add a row here.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * WHY `compute_key` IS A NAME AND NOT A NUMBER
+ *
+ * R1 forbids precomputed aggregates: every number on the dashboard is a pure function over the
+ * record collections in session state, which is the property that makes approving something in the
+ * demo visibly move a metric. A descriptor carrying values would be a stats fixture arriving by
+ * the back door and would silently destroy the one thing that screen is graded on. So the
+ * descriptor carries the *name* of the function, never its result.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * WHY `empty_state.status` IS TYPED AGAINST THE RESULT UNION
+ *
+ * Metric functions return `ok | no_data | not_applicable | establishing_baseline`, not a number,
+ * because A-17 insists those four flavours of nothing are not interchangeable. Auto-approve rate
+ * must read "n/a by design" and never red; engagement against a baseline that does not exist yet
+ * must read "establishing, 2 of 4 weeks". Typing the descriptor's status against that same union
+ * means a descriptor cannot name a state the functions never return.
+ */
+
+import type { MetricDescriptor } from '../lib/types.ts';
+import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from './schema.ts';
+
+export const schemaVersion: FixtureSchemaVersion = FIXTURE_SCHEMA_VERSION;
+
+export const metricDescriptors: MetricDescriptor[] = [
+  /* ============================ BUSINESS ================================================== */
+  {
+    id: 'published_vs_planned',
+    label: 'Published vs planned',
+    family: 'business',
+    definition:
+      'Of the slots the calendar planned, the share that actually published. Slots that slipped, ' +
+      'were dropped or were quarantined count against it.',
+    unit: '%',
+    healthy_range: { min: 90, max: null },
+    action_when_outside:
+      'Read the slip reasons. A pattern of "unreviewed in time" is a review-capacity problem; a ' +
+      'pattern of guardrail blocks is a drafting problem.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'No slots planned in this period yet.' },
+    window_default: 'period',
+    compute_key: 'publishedVsPlanned',
+  },
+  {
+    id: 'hours_saved',
+    label: 'Hours saved',
+    family: 'business',
+    /** The definition carries its own arithmetic because the number is otherwise unfalsifiable.
+     *  The baseline is a captured input on Client, timed during onboarding — not a guess. */
+    definition:
+      'Posts published x your measured manual time per post, minus the minutes actually spent in ' +
+      'the review queue.',
+    unit: 'hours',
+    healthy_range: { min: 0, max: null },
+    action_when_outside:
+      'If this goes negative, review is costing more than writing did. Look at time-to-decision ' +
+      'and at how many drafts needed edits.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'Awaiting first publish.' },
+    window_default: 'period',
+    compute_key: 'hoursSaved',
+  },
+  {
+    id: 'engagement_vs_baseline',
+    label: 'Engagement vs your baseline',
+    family: 'business',
+    definition:
+      'Median engagement rate on agent-published posts against your own pre-existing median for ' +
+      'that channel.',
+    unit: 'x baseline',
+    healthy_range: { min: 1, max: null },
+    action_when_outside:
+      'Below baseline for three weeks is a content conversation, not an engineering one: pillars, ' +
+      'briefs, and who is reviewing.',
+    phase: 'both',
+    /**
+     * A-17's four-week rule, as a state rather than a footnote. A client with no history on a
+     * channel has nothing to compare against, and the first four weeks establish it. Brightsill is
+     * exactly this case on X and not on LinkedIn, which is why the two channels legitimately
+     * render differently.
+     */
+    empty_state: {
+      status: 'establishing_baseline',
+      copy: 'Establishing this channel’s baseline over the first four weeks.',
+    },
+    window_default: 'rolling_4w',
+    compute_key: 'engagementVsBaseline',
+  },
+  {
+    id: 'cost_per_post',
+    label: 'Cost per post',
+    family: 'business',
+    /** Two addends, deliberately. Model spend and platform spend are separate fields on every
+     *  step, because X is pay-per-use and a URL-bearing post costs a multiple of a plain one —
+     *  which is what makes the poll interval a cost lever rather than a detail. */
+    definition:
+      'Model spend plus platform API spend, divided by posts published. Both addends are summed ' +
+      'from individual run steps, never from a stored total.',
+    unit: 'USD',
+    healthy_range: { min: null, max: 4 },
+    action_when_outside:
+      'Check the rewrite count first — a draft rewritten three times costs roughly three drafts. ' +
+      'Then check poll intervals.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'No runs in this period.' },
+    window_default: 'period',
+    compute_key: 'costPerPost',
+  },
+
+  /* ============================ AGENT QUALITY ============================================= */
+  {
+    id: 'edit_rate',
+    label: 'Edit rate',
+    family: 'agent_quality',
+    definition:
+      'Share of approved posts where a person changed the text before approving. Counted from ' +
+      'version authorship, not from the decision label.',
+    unit: '%',
+    /** A-17's phase-conditioned pair. v1 tolerates 30%; after auto-approve exists the same number
+     *  has to be under 20%, because nobody is reading the ones that skip review. */
+    healthy_range: { min: null, max: 30 },
+    action_when_outside:
+      'Look at the edit tags. A tag recurring three times in twenty decisions should already have ' +
+      'produced a suggested writing rule; if it has not, the reflection job is the problem.',
+    phase: 'v1_all_human',
+    empty_state: { status: 'no_data', copy: 'No approvals in this period.' },
+    window_default: 'rolling_4w',
+    /** The one graded drill-down splits this by settings version (D-042, §6). */
+    compute_key: 'editRate',
+  },
+  {
+    id: 'edit_magnitude',
+    label: 'Edit magnitude',
+    family: 'agent_quality',
+    definition:
+      'Median normalised token distance between the last agent version and the shipped version. ' +
+      'Measures how much was changed, not how often.',
+    unit: '%',
+    healthy_range: { min: null, max: 20 },
+    action_when_outside:
+      'High magnitude with low edit rate means a few drafts are being rewritten wholesale — look ' +
+      'at those pillars specifically rather than at the average.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'No edited approvals in this period.' },
+    window_default: 'rolling_4w',
+    compute_key: 'editMagnitude',
+  },
+  {
+    id: 'time_to_decision',
+    label: 'Time to decision',
+    family: 'agent_quality',
+    /** Distinct from queue age, and conflating them is the trap: this is how long the item was
+     *  open in front of a person, inclusive of editing. Queue age is how long it waited. */
+    definition:
+      'Median seconds an item was open in front of the operator, including time spent editing.',
+    unit: 'seconds',
+    healthy_range: { min: 15, max: 600 },
+    action_when_outside: 'Sustained rises mean the handoff payload is not answering the question.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'No decisions in this period.' },
+    window_default: 'rolling_4w',
+    compute_key: 'timeToDecision',
+  },
+  {
+    id: 'rubber_stamp_rate',
+    label: 'Approvals under 15 seconds',
+    family: 'agent_quality',
+    /**
+     * Split out from time-to-decision rather than folded into it. A-17 writes the two together,
+     * but a median cannot detect this: a queue where half the items get careful review and half
+     * get a reflex click has a perfectly healthy median.
+     *
+     * This is the metric that measures whether human-in-the-loop is real, which A-17 identifies as
+     * HITL's actual failure mode. A system whose entire safety argument rests on human review
+     * needs an instrument pointed at the humans.
+     */
+    definition: 'Share of approvals decided in under fifteen seconds.',
+    unit: '%',
+    healthy_range: { min: null, max: 20 },
+    action_when_outside:
+      'The review gate has become theatre. This is a conversation with a named person, not a ' +
+      'threshold to retune.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'No decisions in this period.' },
+    window_default: 'rolling_4w',
+    compute_key: 'rubberStampRate',
+  },
+  {
+    id: 'queue_age_p95',
+    label: 'Queue age p95',
+    family: 'agent_quality',
+    definition:
+      'The 95th percentile of time from an item entering review to a decision on it. Measured ' +
+      'from when this review began, so a redraft starts a new clock.',
+    unit: 'hours',
+    healthy_range: { min: null, max: 48 },
+    action_when_outside:
+      'The human is the bottleneck, not the agent. Either review capacity or cadence has to move.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'Nothing has been through review yet.' },
+    /**
+     * Rolling, and the tile says so. At eight posts a week a weekly p95 is the maximum of eight
+     * samples, which is not a percentile in any useful sense. That is not a fixture artifact — it
+     * is true in production at this contracted volume, and a dashboard that hid it would be
+     * steering on noise.
+     */
+    window_default: 'rolling_4w',
+    compute_key: 'queueAgeP95',
+  },
+  {
+    id: 'guardrail_block_rate',
+    label: 'Guardrail block rate',
+    family: 'agent_quality',
+    /** Per layer and per rule. The denominator is *evaluations*, which is why passes are recorded
+     *  and not only the interesting results (R7) — without them a rule that has silently stopped
+     *  being evaluated looks identical to a rule that is passing everything. */
+    definition: 'Share of evaluations that warned or blocked, broken down by layer and by rule.',
+    unit: '%',
+    healthy_range: { min: null, max: null },
+    action_when_outside:
+      'A sudden drop is the alarm, not a high value. Check first whether somebody switched the ' +
+      'rule off — the chart marks the date if so.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'No guardrail evaluations in this period.' },
+    window_default: 'rolling_4w',
+    compute_key: 'guardrailBlockRate',
+  },
+  {
+    id: 'escalation_precision',
+    label: 'Escalation precision',
+    family: 'agent_quality',
+    /**
+     * The metric that only exists because there is a one-click way to label an escalation
+     * unnecessary. `was_unnecessary` is tri-state — unlabelled is not the same as correct — and if
+     * unlabelled counted as correct the figure would read high by default, which is what "the
+     * column without which the metric is fiction" means.
+     */
+    definition:
+      'Of escalations a person has labelled, the share that were warranted. Shown with its ' +
+      'coverage, because a precision figure over four labelled events is not a measurement.',
+    unit: '%',
+    healthy_range: { min: 60, max: null },
+    action_when_outside:
+      'Cut by trigger rather than in aggregate. "Precision is 63%" steers nothing; "the ' +
+      'unapproved-entity trigger is 40% junk" tunes one rule.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'No escalations labelled yet.' },
+    window_default: 'rolling_4w',
+    compute_key: 'escalationPrecision',
+  },
+  {
+    id: 'injection_detections',
+    label: 'Injection detections',
+    family: 'agent_quality',
+    definition: 'Sources quarantined for carrying instructions aimed at the agent.',
+    unit: 'count',
+    /** Any detection is worth a look, so there is no healthy band — this is a count you read, not
+     *  a rate you tune. */
+    healthy_range: { min: null, max: null },
+    action_when_outside:
+      'Any detection gets reviewed. A repeat from one domain gets the domain removed from the ' +
+      'source allowlist.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'None in this period.' },
+    window_default: 'period',
+    compute_key: 'injectionDetections',
+  },
+  {
+    id: 'auto_approve_rate',
+    label: 'Auto-approve rate',
+    family: 'agent_quality',
+    definition: 'Share of posts published without per-item human review.',
+    unit: '%',
+    healthy_range: { min: null, max: null },
+    action_when_outside: 'Not applicable while auto-approve is off.',
+    phase: 'post_auto_approve',
+    /**
+     * The reason `not_applicable` had to be its own result kind. In v1 this is zero, and zero is
+     * the correct and intended value — so it must never render as a red tile. A-17 is explicit
+     * that n/a-by-design and no-data-yet are different states, and `number | null` would have
+     * forced the dashboard to guess which one it had received.
+     */
+    empty_state: {
+      status: 'not_applicable',
+      copy: 'Off by design in v1 — every post is reviewed by a person.',
+    },
+    window_default: 'period',
+    compute_key: 'autoApproveRate',
+  },
+];
