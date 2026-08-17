@@ -929,10 +929,16 @@ export type RunVariant =
   | 'auth_revoked'
   | 'hostile_reply';
 // `low_score` removed (D-041). A-09 already establishes that in v1 a score below threshold
-// reroutes nothing, because every draft reaches the operator regardless. Its two real
-// consequences are demonstrated without a variant: the rewrite loop appears as `rewrite` steps
-// in the nominal trace, and the queue treatment (flagged, sorted up, review flag) is produced by
-// moving `score_threshold` in Settings across a below-threshold draft that the fixtures carry.
+// reroutes nothing, because every draft reaches the operator regardless, so the queue treatment
+// (flagged, sorted up, review flag) is produced by moving `score_threshold` in Settings across the
+// below-threshold draft the fixtures carry, which the reviewer does themselves.
+//
+// CORRECTED. This comment also claimed the rewrite loop "appears as `rewrite` steps in the nominal
+// trace". It does not — no fixture emits a `rewrite` step at all, and DRAFT-0142 sits below the
+// 0.85 threshold with a trace that goes straight from scoring to the approval interrupt. The
+// argument for dropping the variant survives without it, but the claim was false and checkable.
+// The gap and its fix are recorded in CODE-NOTES.md; the member below stays because the board's
+// rewrite path is real and the type has to be able to express it.
 
 export type Run = {
   id: RunId;
