@@ -1,41 +1,15 @@
 'use client';
 
 /**
- * COUNTDOWN — the only component permitted to read the real clock.
+ * COUNTDOWN — the only component that reads the real clock.
  *
- * ---------------------------------------------------------------------------------------------
- * WHY THIS EXISTS AS A SHARED COMPONENT RATHER THAN A FEW LINES PER SCREEN
+ * Four things tick down: the 48h calendar gate, the 72h stakeholder acknowledgement, a parked
+ * run's next sweep, and the backoff between tool retries. Each is a hydration hazard, because a
+ * clock necessarily differs between the server render and the browser render.
  *
- * Four things in this system tick down, and they are spread across four screens: the 48-hour
- * calendar-approval gate, the 72-hour stakeholder acknowledgement, a parked run's next sweep, and
- * the jittered backoff between tool retries. Each one is a deadline rendered as time remaining.
- *
- * Every one of them is a hydration hazard, and for the same reason. A page in the App Router is
- * rendered once on the server before it is sent, then rendered again in the browser so React can
- * attach to the existing markup. If a value differs between those two renders, React reports a
- * mismatch. A clock always differs between them — that is what a clock is.
- *
- * D-030 removes this hazard for every *static* timestamp by making "now" the fixture anchor rather
- * than the reader's clock, so `lib/time.ts` never looks at `Date.now()` at all. A countdown is the
- * one case that cannot be solved that way, because a value that does not move is not a countdown.
- *
- * Written once, the problem is solved once. Written per screen, it is four chances to reproduce a
- * console error on the screens a reviewer opens first.
- *
- * ---------------------------------------------------------------------------------------------
- * HOW IT AVOIDS THE MISMATCH
- *
- * The first render — the one the server produces and the one the browser must agree with — uses
- * only fixture arithmetic: the deadline's offset, which is a fixed number. `elapsed` starts at
- * zero on both sides, so both produce the same string.
- *
- * Only after mounting does the effect start measuring real elapsed time and re-rendering. Effects
- * do not run during server rendering and do not run during hydration's first pass, so by the time
- * the value moves, React has already matched the two trees and no longer cares.
- *
- * This is the standard shape for anything genuinely time-dependent in a prerendered app, and it
- * is worth being able to state plainly: render what the server can know, then correct it in an
- * effect.
+ * The fix: the first render uses fixture arithmetic only, so both sides agree; the effect starts
+ * measuring real time after mount, by which point React has matched the trees. Written once so
+ * that reasoning lives in one place instead of on four screens.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -62,29 +36,19 @@ function tickIntervalFor(remainingMs: number): number {
 }
 
 export function Countdown({ deadline, expiredLabel = 'overdue', onExpire, className }: CountdownProps) {
-  /**
-   * The gap between the anchor and the deadline. A fixed number from the fixtures — no clock
-   * involved — so the server and the browser compute the same thing.
-   */
+  /** Fixed number from the fixtures — no clock involved, so both renders agree. */
   const initialRemainingMs = msFromNow(deadline);
 
-  /**
-   * Real milliseconds since this component mounted. Zero on the server and on hydration's first
-   * pass, which is exactly what makes the first render match.
-   */
+  /** Real ms since mount. Zero on the server and on hydration's first pass. */
   const [elapsedMs, setElapsedMs] = useState(0);
 
   /** Guards `onExpire` so it fires once rather than on every tick past the deadline. */
   const hasExpired = useRef(false);
 
   /**
-   * `onExpire` is held in a ref rather than listed as a dependency of the effect below.
-   *
-   * If it were a dependency, a caller passing an inline arrow function — which is the normal thing
-   * to write — would hand a new function identity on every render, the effect would tear down and
-   * re-run each time, and `mountedAt` would reset. The countdown would then sit at its starting
-   * value forever while appearing to work. Holding the callback in a ref and reading it at call
-   * time keeps the effect tied to the deadline alone, which is what it actually depends on.
+   * Held in a ref, not listed as an effect dependency. An inline arrow callback would hand over a
+   * new identity every render, re-running the effect and resetting `mountedAt` — leaving the
+   * countdown frozen at its starting value while appearing to work.
    */
   const onExpireRef = useRef(onExpire);
   useEffect(() => {
@@ -119,12 +83,9 @@ export function Countdown({ deadline, expiredLabel = 'overdue', onExpire, classN
 
     timer = setTimeout(tick, tickIntervalFor(initialRemainingMs));
 
-    // Cleanup is not optional here. React 19's StrictMode mounts every component, unmounts it and
-    // mounts it again in development, specifically to surface effects that leak. Without this,
-    // two timers would run against one component and the countdown would skip — a bug that
-    // appears only in development and reads as a rendering fault rather than a cleanup one.
-    // `cancelled` covers the callback already in flight when cleanup runs; `clearTimeout` covers
-    // the one that has not fired yet.
+    // StrictMode double-mounts in development; without cleanup two timers would run against one
+    // component and the countdown would skip. `cancelled` covers a callback already in flight,
+    // `clearTimeout` the one not yet fired.
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -136,25 +97,13 @@ export function Countdown({ deadline, expiredLabel = 'overdue', onExpire, classN
 
   return (
     <time
-      /**
-       * `dateTime` carries the machine-readable instant, so the element means something to
-       * anything reading the document rather than looking at it. The visible text is a duration;
-       * this attribute is the moment it counts towards.
-       *
-       * Derived from the fixture offset, never from the real clock. Writing
-       * `new Date(Date.now() + remainingMs)` here would be the obvious thing and would reintroduce
-       * the exact hydration mismatch this whole component exists to avoid — the server and the
-       * browser would stamp two different instants into the same attribute.
-       */
+      /** Derived from the fixture offset, never the real clock: `Date.now()` here would be the
+       *  obvious thing and would reintroduce the mismatch this component exists to avoid. */
       dateTime={at(deadline).toISOString()}
       title={formatDateTime(deadline)}
       className={className}
-      /**
-       * Deliberately not an `aria-live` region. A value that changes every second would be
-       * announced every second, which makes a screen reader unusable on a screen that may hold
-       * several of these. The deadline is available as a static string in `title` and in
-       * `dateTime`, which is the readable form; the ticking is a visual affordance.
-       */
+      /** Deliberately not a live region: announcing every second makes a screen reader unusable.
+       *  The deadline is readable from `title` and `dateTime`; the ticking is visual. */
       aria-live="off"
     >
       {expired ? expiredLabel : formatDuration(remainingMs / 60_000)}

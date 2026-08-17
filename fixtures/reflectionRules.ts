@@ -28,7 +28,7 @@
 import { minutes } from '../lib/types.ts';
 import type { DraftVersionId, ReflectionRule, ReflectionRuleId } from '../lib/types.ts';
 import { CLIENT_ID } from './client.ts';
-import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from './schema.ts';
+import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from '../lib/types.ts';
 
 export const schemaVersion: FixtureSchemaVersion = FIXTURE_SCHEMA_VERSION;
 

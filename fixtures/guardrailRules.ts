@@ -33,7 +33,7 @@
 
 import { minutes } from '../lib/types.ts';
 import type { GuardrailRule, GuardrailRuleId } from '../lib/types.ts';
-import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from './schema.ts';
+import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from '../lib/types.ts';
 
 export const schemaVersion: FixtureSchemaVersion = FIXTURE_SCHEMA_VERSION;
 

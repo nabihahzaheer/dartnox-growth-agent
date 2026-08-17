@@ -41,7 +41,7 @@
 import { CLIENT_TIMEZONE } from '../lib/anchor.ts';
 import { minutes } from '../lib/types.ts';
 import type { Client, ClientId, GuardrailEventId, Pillar, PillarId } from '../lib/types.ts';
-import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from './schema.ts';
+import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from '../lib/types.ts';
 
 export const schemaVersion: FixtureSchemaVersion = FIXTURE_SCHEMA_VERSION;
 

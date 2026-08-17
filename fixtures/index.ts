@@ -34,7 +34,7 @@
  * designed against a number.
  */
 
-import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from './schema.ts';
+import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from '../lib/types.ts';
 import type { FixtureSet } from '../lib/types.ts';
 import { ANCHOR_MS } from '../lib/time.ts';
 

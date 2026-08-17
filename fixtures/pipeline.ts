@@ -70,7 +70,7 @@ import {
 import { OPERATOR_ID, SETTINGS_V3 } from './settings.ts';
 import { RULE_BANNED_CLAIM, RULE_ENTAILMENT, RULE_INJECTION, RULE_PII } from './guardrailRules.ts';
 import { RULE_LEAD_WITH_BUILDING } from './reflectionRules.ts';
-import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from './schema.ts';
+import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from '../lib/types.ts';
 
 export const schemaVersion: FixtureSchemaVersion = FIXTURE_SCHEMA_VERSION;
 
