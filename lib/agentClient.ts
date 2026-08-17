@@ -39,11 +39,17 @@
 import { fixtures, LIVE_RUN_EMITTED_THROUGH_SEQ } from '@/fixtures';
 import { NOW } from '@/lib/time';
 import {
+  addBannedClaim,
   approve,
+  countBannedClaimMatches,
   escalate,
   labelEscalation,
   reject,
+  settingRefusal,
+  toggleGuardrailRule,
+  updateSetting,
   type DecisionContext,
+  type SettingUpdate,
   type WorldPatch,
 } from '@/lib/world';
 import type {
@@ -54,14 +60,18 @@ import type {
   ConsoleError,
   Draft,
   DraftId,
+  DraftVersion,
   DraftVersionId,
   EditTag,
   FixtureSet,
   GuardrailEvent,
   GuardrailEventId,
+  GuardrailRule,
+  GuardrailRuleId,
   MetricDescriptor,
   Pillar,
   QueueItem,
+  ReflectionRule,
   RejectionReasonCode,
   Run,
   RunId,
@@ -111,7 +121,26 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * It lives here because D-002 already requires this module to be able to fail deliberately. The
  * drawer is a UI over a capability that has to exist anyway.
  */
-type FailureSwitch = 'next_read_fails' | 'tool_failure';
+/**
+ * `next_read_fails` breaks the transport. The other four select which pre-written run `runNow()`
+ * plays, and each maps onto a `RunVariant` of the same name.
+ */
+type FailureSwitch =
+  | 'next_read_fails'
+  | 'tool_failure'
+  | 'poisoned_source'
+  | 'hostile_reply'
+  | 'auth_revoked';
+
+/** The four that choose a run, in the order `runNow()` prefers them when more than one is armed.
+ *  Ordered rather than arbitrary so two armed switches give a predictable demo rather than a
+ *  race decided by `Set` insertion order. */
+const VARIANT_SWITCHES = [
+  'tool_failure',
+  'poisoned_source',
+  'hostile_reply',
+  'auth_revoked',
+] as const satisfies readonly FailureSwitch[];
 
 const activeFailures = new Set<FailureSwitch>();
 
@@ -170,6 +199,57 @@ export async function getSettings(): Promise<Settings> {
  */
 export async function getWorld(): Promise<FixtureSet> {
   return read(LATENCY_MS.trace, () => world);
+}
+
+/**
+ * Everything the settings screen renders, in one call.
+ *
+ * Same reasoning as `getDraftDetail`: this is a join across four collections, and doing it in the
+ * component would mean four awaits and four loading states for one screen. In production it is one
+ * endpoint returning one document.
+ *
+ * `awaitingDecision` and `scheduledCount` are here rather than fetched separately because they are
+ * what make two controls honest. The threshold slider has to say how many waiting drafts it would
+ * flag *before* it is committed, and the banned-phrase field has to say how many scheduled posts a
+ * phrase would catch. Both are previews of a consequence, and a control that changes something
+ * invisible is the failure mode this screen is most prone to.
+ */
+export type SettingsScreen = {
+  settings: Settings;
+  guardrailRules: GuardrailRule[];
+  reflectionRules: ReflectionRule[];
+  /** Drafts currently waiting on a person, with their scores — the population the threshold
+   *  re-sorts and re-flags. */
+  awaitingDecision: Draft[];
+  /** How many posts are scheduled, so "appears in 1 of 2 scheduled posts" has a denominator. */
+  scheduledCount: number;
+  /** The versions each rule's suggestion was built from, resolved. Empty for a rule whose evidence
+   *  predates the retained history window, which is a different thing from a rule with none. */
+  evidence: Record<string, DraftVersion[]>;
+};
+
+export async function getSettingsScreen(): Promise<SettingsScreen> {
+  return read(LATENCY_MS.detail, () => {
+    const versionsById = new Map(
+      world.drafts.flatMap((d) => d.versions.map((v) => [v.id as string, v] as const)),
+    );
+
+    const evidence: Record<string, DraftVersion[]> = {};
+    for (const rule of world.reflectionRules) {
+      evidence[rule.id] = rule.evidence_ids
+        .map((id) => versionsById.get(id))
+        .filter((v): v is DraftVersion => v !== undefined);
+    }
+
+    return {
+      settings: world.settings,
+      guardrailRules: world.guardrailRules,
+      reflectionRules: world.reflectionRules,
+      awaitingDecision: world.drafts.filter((d) => d.state === 'awaiting_approval'),
+      scheduledCount: world.posts.filter((p) => p.state === 'scheduled').length,
+      evidence,
+    };
+  });
 }
 
 export async function getMetricDescriptors(): Promise<MetricDescriptor[]> {
@@ -306,11 +386,24 @@ export async function openRun(id: RunId): Promise<RunAttachment> {
  * on demand, every "next draft" setting takes effect at a moment nobody is watching.
  */
 export async function runNow(): Promise<RunAttachment> {
-  const variant: RunVariant = activeFailures.has('tool_failure') ? 'tool_failure' : 'nominal';
+  /**
+   * The armed switch decides which pre-written sequence plays, and that decision lives here rather
+   * than in the console because it is a property of the simulation and not of the screen.
+   *
+   * Three of the four variants are not draft runs — a poll and a publish among them — so the
+   * lookup cannot filter on `type === 'draft'` the way it did when tool failure was the only
+   * switch. It matches on the variant and falls back to nominal.
+   */
+  const armed = VARIANT_SWITCHES.find((s) => activeFailures.has(s));
+  const variant: RunVariant = armed ?? 'nominal';
+
   const run =
-    world.runs.find((r) => r.type === 'draft' && r.variant === variant && r.target_draft_id) ??
+    world.runs.find((r) => r.variant === variant && r.type === 'draft' && r.target_draft_id) ??
     world.runs.find((r) => r.variant === variant);
   if (!run) fail({ kind: 'not_found' });
+
+  /** Failure runs replay from the top: their whole content is the sequence of steps that leads to
+   *  the stop, so starting anywhere else would skip the argument. */
   return { run, fromSeq: 0 };
 }
 
@@ -471,16 +564,63 @@ export async function getQueue(): Promise<QueueItem[]> {
         events: world.guardrailEvents.filter((e) => e.run_id === run.id),
       }));
 
-    const flagged = (item: QueueItem): boolean =>
-      item.kind === 'run' ||
-      item.draft.composite_score < threshold ||
-      item.events.some((e) => e.result !== 'pass');
+    /**
+     * Scheduled posts sent back by a settings change (D-043). Not drafts — `Draft` terminates at
+     * `approved`, so the draft behind one of these is still `approved` and the draft arm above
+     * correctly does not pick it up.
+     *
+     * A post with no pending approval is dropped rather than rendered: it would be an item with
+     * nothing to decide against, and therefore no way out of the queue. That is a broken world
+     * rather than a state, and showing it would be worse than not showing it.
+     */
+    const postItems: QueueItem[] = world.posts
+      .filter((p) => p.state === 'invalidated')
+      .flatMap((post) => {
+        const draft = world.drafts.find((d) =>
+          d.versions.some((v) => v.id === post.draft_version_id),
+        );
+        const approval = world.approvals.find(
+          (a) => a.draft_version_id === post.draft_version_id && a.decided_at === null,
+        );
+        if (!draft || !approval) return [];
+        return [
+          {
+            kind: 'post' as const,
+            post,
+            draft,
+            approval,
+            events: world.guardrailEvents.filter((e) => e.draft_id === draft.id),
+          },
+        ];
+      });
 
-    const waitingSince = (item: QueueItem): number =>
-      item.kind === 'draft' ? (item.approval?.queued_at ?? 0) : (item.run.started_at as number);
+    /**
+     * THREE PRIORITIES, NOT TWO — and the new one goes to the top.
+     *
+     * An invalidated post is the operator's own prior decision being reversed by their own settings
+     * change. It is the item most likely to be a surprise, and the only one where something already
+     * approved is now scheduled to publish text the current rules forbid. Sorting it by "waiting
+     * since" alongside everything else would bury the consequence of the change that produced it.
+     *
+     * The two existing groups are unchanged: flagged before unflagged, oldest first within each.
+     */
+    const priority = (item: QueueItem): number => {
+      if (item.kind === 'post') return 0;
+      if (item.kind === 'run') return 1;
+      const flagged =
+        item.draft.composite_score < threshold || item.events.some((e) => e.result !== 'pass');
+      return flagged ? 1 : 2;
+    };
 
-    return [...draftItems, ...runItems].sort((a, b) => {
-      if (flagged(a) !== flagged(b)) return flagged(a) ? -1 : 1;
+    const waitingSince = (item: QueueItem): number => {
+      if (item.kind === 'run') return item.run.started_at as number;
+      if (item.kind === 'post') return item.approval.queued_at as number;
+      return item.approval?.queued_at ?? 0;
+    };
+
+    return [...postItems, ...draftItems, ...runItems].sort((a, b) => {
+      const byPriority = priority(a) - priority(b);
+      if (byPriority !== 0) return byPriority;
       // Oldest first within a group: the queue-age p95 is what this ordering protects.
       return waitingSince(a) - waitingSince(b);
     });
@@ -522,6 +662,11 @@ function applyPatch(patch: WorldPatch): void {
   merge(world.runs, patch.runs);
   merge(world.calendarSlots, patch.calendarSlots);
   merge(world.guardrailEvents, patch.guardrailEvents);
+  merge(world.guardrailRules, patch.guardrailRules);
+  /** Settings is a singleton with no `id`, so it is assigned rather than merged. One line of
+   *  special handling, and the alternative — inventing an id for a record there is exactly one of
+   *  — would be worse. */
+  if (patch.settings) world.settings = patch.settings;
 }
 
 export type ReviewDecision =
@@ -590,6 +735,120 @@ export async function submitReview(
   return patch;
 }
 
+/* ================================================================================================
+ * SETTINGS WRITES
+ *
+ * Three, and each is here rather than in a component for the same reason every other write is: the
+ * transitions are pure functions in `lib/world.ts`, and this module is the only thing that applies
+ * them to the world.
+ *
+ * THIS IS WHERE `forbidden` BECOMES REACHABLE. D-031 declares seven error kinds and argues that
+ * they are seven because the copy on screen differs for each. Until now nothing threw `forbidden`,
+ * so that argument was a claim the code did not keep — the taxonomy described a union the shipped
+ * code could not produce, which is precisely the defect D-037 caught in an earlier design.
+ * `updateSettings` throws it on a fixed key, which is what the kind was written for.
+ * ==============================================================================================*/
+
+/** The operator acting. One client per console (D-017), so this resolves to the same person every
+ *  time — but the write records *who*, because the audit trail is per-change and not per-session. */
+function operatorContext(idempotencyKey: string): DecisionContext {
+  return {
+    now: NOW,
+    operatorId: world.settings.versions[0].changed_by,
+    secondsOpen: 0,
+    idempotencyKey,
+  };
+}
+
+/**
+ * Change one operator control.
+ *
+ * Throws `forbidden` with the reason on a control the architecture fixes — auto-approve, and the
+ * three non-tunable rules. The reason travels with the error rather than being looked up again by
+ * the screen: a disabled control that cannot say why reads as a bug, and the sentence explaining it
+ * is a product decision, not a string constant.
+ */
+export async function updateSettings(update: SettingUpdate): Promise<WorldPatch> {
+  await sleep(LATENCY_MS.config);
+
+  const refusal = settingRefusal(world, update);
+  if (refusal) fail({ kind: 'forbidden', reason: refusal });
+
+  const patch = updateSetting(world, update, operatorContext(`setting:${update.kind}`));
+  applyPatch(patch);
+  return patch;
+}
+
+/**
+ * Switch a guardrail rule on or off.
+ *
+ * Separate from `updateSettings` because a rule is not a settings field — it lives in its own
+ * collection with its own `is_fixed`, and folding it into the settings union would have meant one
+ * member per rule.
+ */
+export async function toggleGuardrail(
+  ruleId: GuardrailRuleId,
+  enabled: boolean,
+): Promise<WorldPatch> {
+  await sleep(LATENCY_MS.config);
+
+  const rule = world.guardrailRules.find((r) => r.id === ruleId);
+  if (!rule) fail({ kind: 'not_found' });
+  if (rule.is_fixed) fail({ kind: 'forbidden', reason: rule.fixed_reason });
+
+  const patch = toggleGuardrailRule(
+    world,
+    ruleId,
+    enabled,
+    operatorContext(`guardrail:${ruleId}:${enabled}`),
+  );
+  applyPatch(patch);
+  return patch;
+}
+
+/**
+ * Add a banned phrase, and re-validate everything already scheduled against it.
+ *
+ * The write returns what the sweep found rather than only the patch, because the sentence the
+ * screen has to show is "scanned 2, returned 1" — and a caller counting the patch's `posts` array
+ * could report the second number but not the first.
+ *
+ * Latency is the heavier `list` figure rather than `config`: in production this is a scan across
+ * scheduled posts and a re-run of an L3 rule, not a field write. The operation feeling slower than
+ * moving a slider is the honest rendering of what it does.
+ */
+export type BannedClaimResult = { scanned: number; invalidated: number; patch: WorldPatch };
+
+export async function addBannedPhrase(phrase: string): Promise<BannedClaimResult> {
+  await sleep(LATENCY_MS.list);
+
+  const trimmed = phrase.trim();
+  if (trimmed.length === 0) fail({ kind: 'not_found' });
+
+  const already = world.settings.tone.banned_phrases.some(
+    (p) => p.toLowerCase() === trimmed.toLowerCase(),
+  );
+  if (already) {
+    fail({ kind: 'forbidden', reason: `"${trimmed}" is already on the banned list.` });
+  }
+
+  const sweep = addBannedClaim(world, trimmed, operatorContext(`banned:${trimmed}`));
+  applyPatch(sweep.patch);
+  return { scanned: sweep.scanned, invalidated: sweep.invalidated.length, patch: sweep.patch };
+}
+
+/**
+ * How many scheduled posts a phrase would catch, without writing anything.
+ *
+ * Deliberately synchronous and outside the `read` wrapper. It runs on every keystroke, so a 120ms
+ * delay and a one-shot failure switch would both be wrong: this is a local predicate over data the
+ * screen already caused to be loaded, not a round trip. In production it would be the same
+ * calculation against the posts the screen is already holding.
+ */
+export function previewBannedPhrase(phrase: string): number {
+  return countBannedClaimMatches(world, phrase);
+}
+
 /** One click, and the escalation-precision figure moves. */
 export async function labelEscalationUnnecessary(
   eventId: GuardrailEventId,
@@ -612,7 +871,12 @@ export async function labelEscalationUnnecessary(
 
 /** Why a run stopped. An interrupt is the normal end of a draft run — it is waiting for a person,
  *  not finished — which is a distinction the console has to render differently. */
-export type StreamEndReason = 'interrupt' | 'parked' | 'completed' | 'halted';
+export type StreamEndReason =
+  | 'interrupt'
+  | 'parked'
+  | 'quarantined'
+  | 'completed'
+  | 'halted';
 
 export type StreamEvent =
   /** Steps that had already happened when we attached. Delivered together, because that is what
@@ -711,13 +975,30 @@ export function streamRun(
     if (cancelled) return;
 
     if (index >= pending.length) {
+      /**
+       * THE RUN'S OWN STATE DECIDES, not the shape of its last step.
+       *
+       * This inferred the ending from the final step — interrupt, else error, else complete — which
+       * gave a quarantined run a green "Complete" banner directly under a header badge reading
+       * "Quarantined". Both were rendering the same run and disagreeing about how it went, because
+       * a quarantine ends on a successful `notify_operator` action and an ambiguous publish ends on
+       * a successful park. The step succeeded; the run did not.
+       *
+       * The interrupt case still comes from the step, because a run waiting for a person is
+       * `awaiting_human` whichever gate stopped it, and the step is what knows which.
+       */
       const last = steps.at(-1);
+      const run = world.runs.find((r) => r.id === runId);
+
       const reason: StreamEndReason =
         last?.type === 'interrupt'
           ? 'interrupt'
-          : last?.outcome === 'error'
-            ? 'parked'
-            : 'completed';
+          : run?.state === 'quarantined'
+            ? 'quarantined'
+            : run?.state.startsWith('parked') || last?.outcome === 'error'
+              ? 'parked'
+              : 'completed';
+
       onEvent({ type: 'end', reason });
       return;
     }

@@ -147,6 +147,80 @@ for (const e of fixtures.guardrailEvents) {
   }
 }
 
+/**
+ * REFLECTION RULES — the collection this section did not walk, and the one that had the defect.
+ *
+ * All eighteen `evidence_ids` pointed at draft versions that do not exist. They were written as
+ * placeholders against the slice fixtures and never reconciled when `history.ts` arrived with its
+ * own id scheme. Every other collection above was walked; this one was not; the dangling ids were
+ * here. That is the shape of the failure worth recording — the bug was a symptom, the blind spot
+ * was the defect, and a checker with a gap in it is more dangerous than no checker because it
+ * reads as coverage.
+ *
+ * The three checks below are deliberately not just "does the id resolve". An id that resolves to
+ * the wrong *kind* of record is the same class of silent defect one level down:
+ *
+ *   · resolves at all — the original bug
+ *   · resolves to a HUMAN-authored version — an agent version cannot be evidence of a human edit,
+ *     and the reflection job diffs agent against human by definition
+ *   · carries the rule's own `evidence_tag` — the tag *is* the pattern. A rule citing three edits
+ *     that did something else is a rule suggested on evidence that does not support it, and it
+ *     would render on screen looking exactly like a correct one
+ */
+const versionsById = new Map(
+  fixtures.drafts.flatMap((d) => d.versions.map((v) => [v.id as string, v] as const)),
+);
+
+for (const rule of fixtures.reflectionRules) {
+  for (const evidenceId of rule.evidence_ids) {
+    const version = versionsById.get(evidenceId);
+    check(`${rule.id} · evidence ${evidenceId} exists`, version !== undefined);
+    if (!version) continue;
+    check(`${rule.id} · evidence ${evidenceId} is human-authored`, version.author === 'human');
+    check(
+      `${rule.id} · evidence ${evidenceId} carries the rule's tag`,
+      version.edit_tags.includes(rule.evidence_tag),
+      `rule tags ${rule.evidence_tag}, version has [${version.edit_tags.join(', ')}]`,
+    );
+  }
+
+  /**
+   * The emission threshold, asserted rather than described. A-05 emits a rule when a tag recurs
+   * three times, so a suggestion carrying fewer than three backing versions contradicts the
+   * mechanism that produced it — and a suggestion is emitted from the last twenty decisions, all
+   * of which are retained, so there is no honest reason for it to be short.
+   *
+   * Active and retired rules are exempt because they were activated 31 to 45 days ago, outside the
+   * three weeks of history this set retains (D-034). Empty is the correct value there and is a
+   * different statement from missing.
+   */
+  if (rule.status === 'suggested') {
+    check(
+      `${rule.id} · a suggested rule carries its three backing edits`,
+      rule.evidence_ids.length >= 3,
+      `has ${rule.evidence_ids.length}`,
+    );
+  }
+
+  /** `activated_at` and status have to agree, or "when did this rule start affecting drafts" —
+   *  which is what the metrics drill-down splits cohorts on — has no answer. */
+  const shouldBeActivated = rule.status !== 'suggested';
+  check(
+    `${rule.id} · activation and status agree`,
+    (rule.activated_at !== null) === shouldBeActivated,
+  );
+  check(`${rule.id} · only a retired rule has a retirement date`,
+    (rule.retired_at !== null) === (rule.status === 'retired'));
+}
+
+/** At least one suggestion must exist and be expandable, because that pairing is the only visible
+ *  proof in the product that the reflection loop runs. A set where every rule is already active
+ *  would show the outputs of the loop and never the loop. */
+check(
+  'a suggested rule exists with real evidence behind it',
+  fixtures.reflectionRules.some((r) => r.status === 'suggested' && r.evidence_ids.length >= 3),
+);
+
 /* --- invariants that are not joins ---------------------------------------------------------- */
 
 section('Fixture invariants');
@@ -308,6 +382,269 @@ check(
   ),
 );
 
+/**
+ * A tunable setting has to sit inside its own declared range.
+ *
+ * Added after `score_threshold`'s range read 0.50–0.99 in `field_meta` while the PRD said
+ * 0.60–0.95. That particular drift is a documentation mismatch a reviewer holding both would spot,
+ * and no assertion can catch it — nothing here can read the PRD. What this does catch is the
+ * consequence one step on: a range edited to exclude the value it governs, which renders a slider
+ * whose handle starts outside its own track and cannot be returned to where it began.
+ */
+const settingValue: Record<string, number> = {
+  score_threshold: fixtures.settings.score_threshold,
+  negative_engagement_threshold: fixtures.settings.negative_engagement_threshold,
+  'budget.cap': fixtures.settings.budget.cap,
+};
+
+for (const [key, meta] of Object.entries(fixtures.settings.field_meta)) {
+  if (meta.range === null) continue;
+  check(`${key} · declared range is not inverted`, meta.range.min < meta.range.max);
+
+  const current = settingValue[key];
+  if (current === undefined) continue;
+  check(
+    `${key} · current value sits inside its own range`,
+    current >= meta.range.min && current <= meta.range.max,
+    `value ${current}, range ${meta.range.min}–${meta.range.max}`,
+  );
+  /** The default has to be reachable too, or "reset to default" produces an invalid value. */
+  if (typeof meta.default === 'number') {
+    check(
+      `${key} · default sits inside its own range`,
+      meta.default >= meta.range.min && meta.default <= meta.range.max,
+    );
+  }
+}
+
+/* ==============================================================================================
+ * SCHEDULED POSTS — what the settings screen's banned-claim sweep acts on
+ *
+ * The bonus the brief offers is that adding a banned claim re-validates scheduled posts and
+ * returns a match to the queue. Three things have to be true of the fixture set or that feature
+ * ships as a control that appears to do nothing, and none of them is visible from reading the code.
+ * ============================================================================================*/
+
+const { DEMO_BANNABLE_PHRASE } = await import('../fixtures/pipeline.ts');
+/** The same digest the fixtures and `approve()` use. Imported here rather than reimplemented for
+ *  the same reason the fixture imports it: two copies agree until one is edited. */
+const { contentDigest } = await import('../lib/world.ts');
+
+const scheduled = fixtures.posts.filter((p) => p.state === 'scheduled');
+
+/** Without this the sweep runs over an empty set and reports nothing, and the reviewer cannot tell
+ *  a working feature from a broken one. */
+check('at least one post is scheduled for the sweep to act on', scheduled.length > 0);
+
+/**
+ * The text a Post carries is on its draft version, not on the Post — so the sweep has to resolve
+ * `draft_version_id` to find anything to match against. A scheduled post whose version does not
+ * resolve would make the sweep skip it silently rather than fail.
+ */
+const textOfPost = (versionId: string): string | null =>
+  versionsById.get(versionId)?.text ?? null;
+
+for (const post of scheduled) {
+  const text = textOfPost(post.draft_version_id);
+  check(`${post.id} · resolves to a draft version`, text !== null);
+  if (text === null) continue;
+
+  /**
+   * L4's invariant, and nothing was asserting it.
+   *
+   * "Every published post is text a human approved" is checkable rather than asserted only because
+   * publishing compares this hash against the approved version's. If a fixture wrote a hash that
+   * does not digest its own text, both the publish check and the settings sweep would be comparing
+   * two constants that happen to match, and the mechanism would look like it works.
+   */
+  check(
+    `${post.id} · approved hash digests the version it binds`,
+    post.approved_content_hash === contentDigest(text),
+  );
+
+  /** A scheduled post has not published, and conflating the two is what B1's missing
+   *  `published_at` field did. */
+  check(`${post.id} · scheduled means not yet published`, post.published_at === null);
+}
+
+/**
+ * THE DISCRIMINATION CHECK, which is the one that earns its place.
+ *
+ * One scheduled post cannot demonstrate a sweep. If the only scheduled post comes back
+ * invalidated, "matched the phrase" and "invalidates everything" render identically and the
+ * reviewer cannot tell which they are looking at. The demo needs one that matches and one that
+ * does not, and the sweep has to leave the second alone.
+ */
+const matching = scheduled.filter((p) =>
+  (textOfPost(p.draft_version_id) ?? '').toLowerCase().includes(DEMO_BANNABLE_PHRASE),
+);
+
+check(
+  `a scheduled post contains "${DEMO_BANNABLE_PHRASE}"`,
+  matching.length > 0,
+  'nothing for the sweep to match — the bonus would report zero invalidated',
+);
+check(
+  `a scheduled post does NOT contain "${DEMO_BANNABLE_PHRASE}"`,
+  scheduled.length > matching.length,
+  'every scheduled post matches, so the sweep cannot be seen discriminating',
+);
+
+/** Banning a phrase that is already banned sweeps nothing, because no draft carrying it could have
+ *  been approved in the first place. The demo phrase has to be one the operator can still add. */
+check(
+  `"${DEMO_BANNABLE_PHRASE}" is not already banned`,
+  !fixtures.settings.tone.banned_phrases.some(
+    (p) => p.toLowerCase() === DEMO_BANNABLE_PHRASE.toLowerCase(),
+  ),
+);
+
+/** And the posts that already published must not carry it, or the sweep's own scope — scheduled
+ *  only, because a published post is recalled rather than invalidated — would look arbitrary. */
+for (const post of fixtures.posts.filter((p) => p.state === 'published')) {
+  const text = textOfPost(post.draft_version_id) ?? '';
+  check(
+    `${post.id} · a published post does not carry the demo phrase`,
+    !text.toLowerCase().includes(DEMO_BANNABLE_PHRASE),
+  );
+}
+
+/* ==============================================================================================
+ * THE DASHBOARD'S BANDS — which tiles the fixture set intends to render healthy
+ *
+ * Added after two scheduled posts and two decided approvals went in, because that change moved the
+ * denominator of five metrics at once. Nothing about a fixture edit tells you it has reddened a
+ * tile on another screen; you find out by opening the dashboard, and only if you happen to look.
+ *
+ * The interesting half is the exception. `published_vs_planned` sits at ~86% against a ≥90% band
+ * ON PURPOSE — a slipped slot, a dropped topical slot and a quarantined source are all in the
+ * history, and a dashboard where every tile is green demonstrates nothing about what the bands are
+ * for. Listing it here as a deliberate breach is the only place that intent is written down in
+ * code rather than inferred.
+ * ============================================================================================*/
+
+const metricsModule = await import('../lib/metrics.ts');
+
+/** Deliberately outside its band. See above. */
+const INTENTIONAL_BREACH = new Set(['published_vs_planned']);
+
+for (const descriptor of fixtures.metricDescriptors) {
+  const compute = metricsModule.METRICS[descriptor.compute_key as keyof typeof metricsModule.METRICS];
+  if (!compute) continue;
+
+  const window =
+    descriptor.window_default === 'period' ? metricsModule.PERIOD : metricsModule.ROLLING_4W;
+  const result = compute(fixtures, window);
+
+  /** Only an `ok` value can be out of range — the point of the discriminated result. The other
+   *  three kinds are legitimate states, not failures, and must never be treated as breaches. */
+  if (result.kind !== 'ok') continue;
+
+  const { min, max } = descriptor.healthy_range;
+  const inBand = (min === null || result.value >= min) && (max === null || result.value <= max);
+
+  check(
+    `${descriptor.id} · renders ${INTENTIONAL_BREACH.has(descriptor.id) ? 'outside' : 'inside'} its healthy band`,
+    INTENTIONAL_BREACH.has(descriptor.id) ? !inBand : inBand,
+    `value ${result.value.toFixed(2)}, band ${min ?? '−∞'}–${max ?? '∞'}`,
+  );
+}
+
+/* ==============================================================================================
+ * THE FOUR FAILURE NARRATIVES (D-041)
+ *
+ * Each is a run the drawer plays. What matters is not that they exist but that each one *ends
+ * badly in its own way* — the whole argument is that this system refuses differently depending on
+ * what went wrong, and four runs that all parked would demonstrate nothing.
+ * ============================================================================================*/
+
+const narrative = (variant: string) => fixtures.runs.find((r) => r.variant === variant);
+
+for (const variant of ['tool_failure', 'poisoned_source', 'hostile_reply', 'auth_revoked']) {
+  const run = narrative(variant);
+  check(`narrative · a ${variant} run exists for the drawer to play`, run !== undefined);
+  if (!run) continue;
+  const steps = fixtures.runSteps.filter((s) => s.run_id === run.id);
+  check(`narrative · ${variant} has a trace`, steps.length >= 3);
+}
+
+/** Each ends in a different terminal state. If two collapsed onto the same one, one of the two
+ *  switches would be showing the reviewer something they had already seen. */
+const endings = new Set(
+  ['tool_failure', 'poisoned_source', 'hostile_reply', 'auth_revoked']
+    .map((v) => narrative(v)?.state)
+    .filter(Boolean),
+);
+check('narrative · the four end in four distinct states', endings.size === 4, `got ${[...endings].join(', ')}`);
+
+const poisoned = narrative('poisoned_source');
+if (poisoned) {
+  /** The shape D-033 exists for: a queue item with no draft behind it. */
+  check('poisoned · produces no draft', poisoned.target_draft_id === null);
+  check('poisoned · every step stops before drafting',
+    fixtures.runSteps
+      .filter((s) => s.run_id === poisoned.id)
+      .every((s) => s.produced === null));
+  const event = fixtures.guardrailEvents.find((e) => e.run_id === poisoned.id);
+  /** The operator may be the injection's target, so the span is withheld by design — and a
+   *  withheld span without a reason is indistinguishable from missing data. */
+  check('poisoned · withholds the offending span', event?.span_withheld === true);
+  check('poisoned · says why it was withheld', (event?.withheld_reason ?? '').length > 20);
+  check('poisoned · flags the domain', event?.domain_flagged === true);
+  /** An injection is not transient. If it were sweep-eligible the run would clear itself, which is
+   *  the opposite of quarantine. */
+  check('poisoned · does not retry on a clock', poisoned.next_sweep_at === null);
+}
+
+const hostile = narrative('hostile_reply');
+if (hostile) {
+  const event = fixtures.guardrailEvents.find((e) => e.run_id === hostile.id);
+  check('hostile · carries the replies on the escalation', (event?.replies.length ?? 0) >= 3);
+  check('hostile · crosses the configured threshold',
+    (event?.replies.length ?? 0) >= fixtures.settings.negative_engagement_threshold);
+
+  /**
+   * R8, asserted rather than trusted. Reply text has exactly one permitted home; if it leaked into
+   * a step payload it would be in retrieval range and on the console's highest-traffic surface.
+   * This checks the actual strings, not the field names.
+   */
+  const replyText = (event?.replies ?? []).map((r) => r.text);
+  for (const step of fixtures.runSteps.filter((s) => s.run_id === hostile.id)) {
+    const payload = JSON.stringify(step.tool_input ?? {}) + JSON.stringify(step.tool_output ?? {});
+    check(
+      `hostile · ${step.id} carries no reply text`,
+      replyText.every((text) => !payload.includes(text.slice(0, 30))),
+    );
+  }
+
+  /** The agent must have no way to answer. Enforced structurally — there is no reply tool — so the
+   *  assertion is that no step in this run calls one. */
+  check('hostile · the run never calls a reply tool',
+    fixtures.runSteps
+      .filter((s) => s.run_id === hostile.id)
+      .every((s) => s.tool_name !== 'publish_post'));
+}
+
+const reconcile = narrative('auth_revoked');
+if (reconcile) {
+  const steps = fixtures.runSteps.filter((s) => s.run_id === reconcile.id);
+  const timedOut = steps.find((s) => s.error?.kind === 'timeout');
+  const ambiguous = steps.find((s) => s.error?.kind === 'ambiguous_reconcile');
+
+  check('reconcile · the publish call times out', timedOut !== undefined);
+  check('reconcile · it reads the channel back before replaying', ambiguous !== undefined);
+  /** The order is the argument. Reconciling *after* a retry would already have published twice. */
+  check('reconcile · the read-back happens after the timeout, not before',
+    (timedOut?.seq ?? 0) < (ambiguous?.seq ?? 0));
+  check('reconcile · two candidates it cannot tell apart',
+    ambiguous?.error?.kind === 'ambiguous_reconcile' && ambiguous.error.candidates.length === 2);
+  /** The whole point: it does not retry. A `next_sweep_at` here would mean the clock eventually
+   *  replays a publish that may already have landed. */
+  check('reconcile · refuses to retry on a clock', reconcile.next_sweep_at === null);
+  check('reconcile · parks for a human rather than the sweep',
+    reconcile.state === 'parked_blocked' && reconcile.park_reason === 'awaiting_reconcile');
+}
+
 /** Every fixture file declares the schema version it was authored against (D-029). */
 check('fixture set declares the schema version', fixtures.schemaVersion === '1');
 
@@ -325,9 +662,7 @@ check('fixture set declares the schema version', fixtures.schemaVersion === '1')
 
 section('Transitions');
 
-const { approve, reject, escalate, contentDigest, workingDaysUntil } = await import(
-  '../lib/world.ts'
-);
+const { approve, reject, escalate, workingDaysUntil } = await import('../lib/world.ts');
 
 /**
  * The runway arithmetic, checked directly.
@@ -463,6 +798,171 @@ if (pending) {
   check('transitions do not mutate the world they are given',
     pending.state === 'awaiting_approval');
 }
+
+/* ==============================================================================================
+ * SETTINGS TRANSITIONS
+ *
+ * Three writes, and the reason they need assertions rather than a click-through is that two of
+ * them are refusals. A control that silently succeeds when it should refuse looks identical on
+ * screen to one that works.
+ * ============================================================================================*/
+
+const { updateSetting, settingRefusal, toggleGuardrailRule, addBannedClaim, countBannedClaimMatches } =
+  await import('../lib/world.ts');
+
+/* ---- the threshold: the one live control ---------------------------------------------------- */
+
+const moved = updateSetting(fixtures, { kind: 'score_threshold', value: 0.72 }, ctx);
+check('threshold · writes the new value', moved.settings?.score_threshold === 0.72);
+/**
+ * The version, not just the value. "Every change is a versioned event, and every draft records the
+ * settings version it ran under" is what makes edit rate before and after a change comparable — so
+ * a write that moved the number and left no version would silently break the dashboard's one
+ * graded drill-down rather than anything visible here.
+ */
+check('threshold · appends a settings version',
+  (moved.settings?.versions.length ?? 0) === fixtures.settings.versions.length + 1);
+check('threshold · moves current_version_id to the new version',
+  moved.settings?.current_version_id === moved.settings?.versions.at(-1)?.version_id);
+check('threshold · records a per-key diff with both sides',
+  moved.settings?.versions.at(-1)?.diff[0]?.key === 'score_threshold' &&
+  moved.settings?.versions.at(-1)?.diff[0]?.from === fixtures.settings.score_threshold &&
+  moved.settings?.versions.at(-1)?.diff[0]?.to === 0.72);
+
+/** Clamped rather than trusted. A slider cannot produce this; a caller can, and the range is the
+ *  operator-facing promise. */
+const tooLow = updateSetting(fixtures, { kind: 'score_threshold', value: 0.1 }, ctx);
+const tooHigh = updateSetting(fixtures, { kind: 'score_threshold', value: 4 }, ctx);
+check('threshold · clamps below the declared minimum', tooLow.settings?.score_threshold === 0.6);
+check('threshold · clamps above the declared maximum', tooHigh.settings?.score_threshold === 0.95);
+
+/* ---- the refusals, which are the point ------------------------------------------------------ */
+
+/**
+ * `forbidden` existed in `ConsoleError` from D-031 and nothing threw it, so the claim that there
+ * are seven kinds because the copy differs per kind was one the code did not keep. These are the
+ * two sources of a refusal, and both are read from the data rather than from a list of key names.
+ */
+check('refusal · auto-approve is locked',
+  settingRefusal(fixtures, { kind: 'auto_approve', value: true }) !== null);
+check('refusal · the lock names its reason rather than being merely disabled',
+  (settingRefusal(fixtures, { kind: 'auto_approve', value: true }) ?? '').length > 20);
+
+const fixedTrigger = fixtures.settings.escalation_triggers.find((t) => t.is_fixed);
+const tunableTrigger = fixtures.settings.escalation_triggers.find((t) => !t.is_fixed);
+check('a fixed escalation trigger exists to test against', fixedTrigger !== undefined);
+check('a tunable escalation trigger exists to test against', tunableTrigger !== undefined);
+
+if (fixedTrigger && tunableTrigger) {
+  check('refusal · a fixed escalation trigger cannot be disabled',
+    settingRefusal(fixtures,
+      { kind: 'escalation_trigger', trigger: fixedTrigger.trigger, enabled: false }) !== null);
+  /** The other half, and the one that makes the first mean something: a checker that refused
+   *  everything would pass the assertion above and the screen would be inert. */
+  check('a tunable escalation trigger is NOT refused',
+    settingRefusal(fixtures,
+      { kind: 'escalation_trigger', trigger: tunableTrigger.trigger, enabled: false }) === null);
+
+  const toggled = updateSetting(fixtures,
+    { kind: 'escalation_trigger', trigger: tunableTrigger.trigger, enabled: false }, ctx);
+  check('escalation trigger · writes the new enabled state',
+    toggled.settings?.escalation_triggers.find((t) => t.trigger === tunableTrigger.trigger)
+      ?.enabled === false);
+  check('escalation trigger · leaves the other rows alone',
+    toggled.settings?.escalation_triggers.filter((t) => t.enabled).length ===
+      fixtures.settings.escalation_triggers.filter((t) => t.enabled).length - 1);
+}
+
+/* ---- guardrail rules ------------------------------------------------------------------------ */
+
+const disabledRule = fixtures.guardrailRules.find((r) => !r.is_enabled);
+const tunableRule = fixtures.guardrailRules.find((r) => r.is_enabled && !r.is_fixed);
+check('a disabled guardrail rule exists', disabledRule !== undefined);
+check('the disabled rule records when it was switched off', disabledRule?.disabled_at !== null);
+
+if (tunableRule) {
+  const off = toggleGuardrailRule(fixtures, tunableRule.id, false, ctx);
+  check('guardrail · disabling sets is_enabled false',
+    off.guardrailRules?.[0]?.is_enabled === false);
+  /**
+   * The pairing both fields exist for. A-17 alarms on a sudden drop in a rule's block rate, and the
+   * commonest benign cause is somebody switching the rule off — without the date the dashboard
+   * raises a false alarm instead of drawing a disabled-from marker.
+   */
+  check('guardrail · disabling stamps disabled_at', off.guardrailRules?.[0]?.disabled_at !== null);
+  check('guardrail · a toggle is a versioned event too',
+    (off.settings?.versions.length ?? 0) === fixtures.settings.versions.length + 1);
+
+  const on = toggleGuardrailRule(fixtures, tunableRule.id, true, ctx);
+  /** Cleared on re-enable, or a running rule would keep a permanent "switched off on the 6th"
+   *  marker under its chart. */
+  check('guardrail · re-enabling clears disabled_at', on.guardrailRules?.[0]?.disabled_at === null);
+}
+
+const fixedRule = fixtures.guardrailRules.find((r) => r.is_fixed);
+check('a fixed guardrail rule exists', fixedRule !== undefined);
+check('the fixed rule carries a reason a person can read',
+  (fixedRule?.fixed_reason ?? '').length > 20);
+
+/* ---- the banned-claim sweep ------------------------------------------------------------------ */
+
+/**
+ * The bonus, asserted on both outcomes.
+ *
+ * The half that is easy to get wrong is the negative one: a sweep that invalidated everything it
+ * touched would pass a "something was invalidated" check and would be indistinguishable on screen
+ * from one that matches.
+ */
+const before = countBannedClaimMatches(fixtures, DEMO_BANNABLE_PHRASE);
+check(`preview · counts the posts "${DEMO_BANNABLE_PHRASE}" would catch`, before === 1);
+check('preview · a phrase in nothing counts zero',
+  countBannedClaimMatches(fixtures, 'a phrase that appears in no post anywhere') === 0);
+check('preview · an empty phrase counts zero rather than matching everything',
+  countBannedClaimMatches(fixtures, '   ') === 0);
+
+const sweep = addBannedClaim(fixtures, DEMO_BANNABLE_PHRASE, ctx);
+check('sweep · scans every scheduled post', sweep.scanned === scheduled.length);
+check('sweep · invalidates the one that matches', sweep.invalidated.length === 1);
+check('sweep · leaves the one that does not match alone',
+  sweep.scanned - sweep.invalidated.length === 1);
+check('sweep · the invalidated post carries the state',
+  sweep.patch.posts?.[0]?.state === 'invalidated');
+/** A post that reappears without naming the rule that sent it back is indistinguishable from a
+ *  bug, which is what `invalidated_reason` is defined for and why it is defined for this case
+ *  only. */
+check('sweep · names the phrase in the reason the operator reads',
+  (sweep.patch.posts?.[0]?.invalidated_reason ?? '').includes(DEMO_BANNABLE_PHRASE));
+check('sweep · adds the phrase to the banned list',
+  sweep.patch.settings?.tone.banned_phrases.includes(DEMO_BANNABLE_PHRASE) === true);
+check('sweep · is a versioned event',
+  (sweep.patch.settings?.versions.length ?? 0) === fixtures.settings.versions.length + 1);
+
+/**
+ * The re-decision, modelled rather than faked by clearing the old row.
+ *
+ * Two approvals come back: the prior one marked superseded, and a new pending one. Without the
+ * pending row the post would sit in the queue with nothing to decide against and no way out of it;
+ * without the supersede mark, edit rate would count one post twice.
+ */
+const newPending = sweep.patch.approvals?.filter((a) => a.decided_at === null) ?? [];
+const superseded = sweep.patch.approvals?.filter((a) => a.superseded_by !== null) ?? [];
+check('sweep · opens a pending approval so the post can leave the queue', newPending.length === 1);
+check('sweep · marks the prior approval superseded', superseded.length === 1);
+check('sweep · the supersede points at the new pending row',
+  superseded[0]?.superseded_by === newPending[0]?.id);
+check('sweep · the new approval starts its own queue clock', newPending[0]?.queued_at === 0);
+
+/** Published posts are recalled, not invalidated — a different action with a different record and a
+ *  human decision in front of it. A sweep that reached them would be claiming a post already out in
+ *  the world can be un-published by editing a setting. */
+check('sweep · touches no published post',
+  (sweep.patch.posts ?? []).every((p) => p.state !== 'published'));
+
+/** Same purity rule as the decision transitions above. */
+check('settings transitions do not mutate the world they are given',
+  fixtures.settings.score_threshold === 0.85 &&
+  fixtures.settings.tone.banned_phrases.length === 4 &&
+  fixtures.settings.versions.length === 3);
 
 console.log(`\n${checks - failures}/${checks} checks passed.`);
 

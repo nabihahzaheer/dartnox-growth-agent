@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { ErrorPanel } from '@/components/ErrorState';
 import { getWorld } from '@/lib/agentClient';
 import {
   METRICS,
@@ -58,13 +59,19 @@ export default function MetricsPage() {
   const [world, setWorld] = useState<FixtureSet | null>(null);
   const [error, setError] = useState<ConsoleError | null>(null);
   const [cohort, setCohort] = useState<string | null>(null);
+  /** Bumped to re-run the fetch. This screen had no retry at all — a transient failure left it
+   *  permanently blank until the browser's own reload. */
+  const [nonce, setNonce] = useState(0);
+  const reload = useCallback(() => setNonce((n) => n + 1), []);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const next = await getWorld();
-        if (!cancelled) setWorld(next);
+        if (cancelled) return;
+        setWorld(next);
+        setError(null);
       } catch (e) {
         if (!cancelled) setError(e as ConsoleError);
       }
@@ -72,7 +79,7 @@ export default function MetricsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [nonce]);
 
   const descriptorFor = useCallback(
     (id: string): MetricDescriptor | undefined =>
@@ -82,19 +89,6 @@ export default function MetricsPage() {
 
   const cohorts = useMemo(() => (world ? editRateBySettingsVersion(world) : []), [world]);
   const layers = useMemo(() => (world ? blockRateByLayer(world, ROLLING_4W) : []), [world]);
-
-  if (error) {
-    return (
-      <>
-        <Rail />
-        <main className="flex min-w-0 flex-1 items-center justify-center">
-          <p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
-            Could not load metrics.
-          </p>
-        </main>
-      </>
-    );
-  }
 
   return (
     <>
@@ -114,7 +108,17 @@ export default function MetricsPage() {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-4">
-            {!world && <Skeleton />}
+            {/* Error before skeleton, and the skeleton is suppressed once a failure lands —
+                otherwise a failed load shows a permanent shimmer of tiles that will never fill. */}
+            {error && (
+              <ErrorPanel
+                error={error}
+                onRetry={reload}
+                notFoundCopy="No reporting data for this client."
+              />
+            )}
+
+            {!world && !error && <Skeleton />}
 
             {world && (
               <>
@@ -174,17 +178,28 @@ export default function MetricsPage() {
                   title="Edit rate by settings version"
                   caption="Every draft records the settings it was written under, so a change can be judged by what happened after it. This is how a well-meant rule that made the output worse gets caught."
                 >
-                  <BarChart
-                    bars={cohorts.map((c) => ({
-                      id: c.settingsVersionId,
-                      label: c.changeSummary,
-                      value: c.rate,
-                      caption: `${c.edited} edited of ${c.decisions} decisions · ${c.settingsVersionId}`,
-                    }))}
-                    max={60}
-                    selectedId={cohort}
-                    onSelect={setCohort}
-                  />
+                  {/* A chart with no bars renders as an empty box, which reads as broken rather
+                      than as "nothing to show yet". Both charts filter their own rows — cohorts
+                      with no decisions, layers with no evaluations — so both can legitimately
+                      arrive empty. */}
+                  {cohorts.length === 0 ? (
+                    <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+                      No decisions recorded under any settings version yet. This fills in once the
+                      first drafts have been approved or rejected.
+                    </p>
+                  ) : (
+                    <BarChart
+                      bars={cohorts.map((c) => ({
+                        id: c.settingsVersionId,
+                        label: c.changeSummary,
+                        value: c.rate,
+                        caption: `${c.edited} edited of ${c.decisions} decisions · ${c.settingsVersionId}`,
+                      }))}
+                      max={60}
+                      selectedId={cohort}
+                      onSelect={setCohort}
+                    />
+                  )}
 
                   {cohort && (
                     <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
@@ -224,15 +239,22 @@ export default function MetricsPage() {
                   title="Guardrail block rate by layer"
                   caption="Passing evaluations are recorded, which is why this has a denominator at all. A rule that stopped being evaluated would otherwise look exactly like a rule passing everything — and the alarm here is a sudden drop, not a high value."
                 >
-                  <BarChart
-                    bars={layers.map((l) => ({
-                      id: l.layer,
-                      label: `${l.layer} · ${l.layer === 'L1' ? 'input' : l.layer === 'L2' ? 'generation' : l.layer === 'L3' ? 'output' : 'publish'}`,
-                      value: l.rate,
-                      caption: `${l.evaluations} evaluations`,
-                    }))}
-                    max={15}
-                  />
+                  {layers.length === 0 ? (
+                    <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+                      No guardrail evaluations in this window. Passing evaluations are recorded too,
+                      so this being empty means nothing ran — not that nothing was caught.
+                    </p>
+                  ) : (
+                    <BarChart
+                      bars={layers.map((l) => ({
+                        id: l.layer,
+                        label: `${l.layer} · ${l.layer === 'L1' ? 'input' : l.layer === 'L2' ? 'generation' : l.layer === 'L3' ? 'output' : 'publish'}`,
+                        value: l.rate,
+                        caption: `${l.evaluations} evaluations`,
+                      }))}
+                      max={15}
+                    />
+                  )}
                 </Section>
 
                 <p className="pt-1 text-[11px]" style={{ color: 'var(--text-faint)' }}>

@@ -20,15 +20,19 @@
 
 import type {
   Approval,
+  ApprovalId,
   CalendarSlot,
   Draft,
   DraftId,
   DraftVersion,
   DraftVersionId,
   EditTag,
+  EscalationTrigger,
   FixtureSet,
   GuardrailEvent,
   GuardrailEventId,
+  GuardrailRule,
+  GuardrailRuleId,
   MinutesFromAnchor,
   Post,
   PostId,
@@ -36,6 +40,10 @@ import type {
   Run,
   RunId,
   RunStepId,
+  Settings,
+  SettingsDiffEntry,
+  SettingsVersion,
+  SettingsVersionId,
 } from './types.ts';
 
 /**
@@ -72,6 +80,13 @@ export type WorldPatch = {
   runs?: Run[];
   calendarSlots?: CalendarSlot[];
   guardrailEvents?: GuardrailEvent[];
+  guardrailRules?: GuardrailRule[];
+  /**
+   * A singleton, so it is replaced wholesale rather than merged by id like everything else here.
+   * `Settings` has no `id` field because there is exactly one per client — which is correct, and
+   * is why `applyPatch` needs one line of special handling for it.
+   */
+  settings?: Settings;
 };
 
 /** Everything a transition needs that is not in the world: who, when, and the idempotency key. */
@@ -408,6 +423,380 @@ export function escalate(
     drafts: [{ ...draft, state: 'held' }],
     guardrailEvents: [event],
   };
+}
+
+/* ================================================================================================
+ * SETTINGS
+ *
+ * "Every change is a versioned event, and every draft records the settings version it ran under.
+ * That is what makes edit rate before and after a change comparable." — which means a settings
+ * write that only assigns a value is wrong even when the value it assigns is right. Every function
+ * below appends a `SettingsVersion` with a per-key diff and moves `current_version_id`, because the
+ * dashboard's one graded drill-down splits its cohorts on exactly that.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * WHY `updateSetting` TAKES A UNION AND NOT A KEY AND A VALUE
+ *
+ * `(key: string, value: unknown)` is the obvious signature and it gives up everything the rest of
+ * this file is built on. It cannot say that `score_threshold` is a number and `tone.register` is a
+ * string, it cannot stop a caller writing a key that does not exist, and every call site ends in a
+ * cast. D-002's claim is that these signatures are the API contract handed to a backend engineer;
+ * a contract whose payload is `unknown` is a suggestion.
+ *
+ * The union costs one member per settable control. There are five, and the brief names four.
+ * ==============================================================================================*/
+
+export type SettingUpdate =
+  /** The one control with an immediate, run-free effect: the queue re-sorts and review flags
+   *  appear and clear as it moves. */
+  | { kind: 'score_threshold'; value: number }
+  | { kind: 'tone_register'; value: string }
+  /** Always refused. Present in the union rather than absent from it *because* it is refused —
+   *  a control that cannot be operated still has to be expressible, or the screen would be
+   *  rendering a toggle wired to nothing. */
+  | { kind: 'auto_approve'; value: boolean }
+  | { kind: 'escalation_trigger'; trigger: EscalationTrigger; enabled: boolean }
+  | { kind: 'approval_rule'; trigger: EscalationTrigger; enabled: boolean };
+
+/** Human-readable path for the diff row, matching the `field_meta` keys where one exists. */
+function settingKeyPath(update: SettingUpdate): string {
+  switch (update.kind) {
+    case 'score_threshold':
+      return 'score_threshold';
+    case 'tone_register':
+      return 'tone.register';
+    case 'auto_approve':
+      return 'auto_approve.enabled';
+    case 'escalation_trigger':
+      return `escalation_triggers.${update.trigger}`;
+    case 'approval_rule':
+      return `approval_rules.${update.trigger}`;
+  }
+}
+
+/**
+ * Append a version and return the new Settings.
+ *
+ * The version id is derived from the count rather than from a clock, so the same edit produces the
+ * same id on every run — `Math.random()` or `Date.now()` here would make the build non-reproducible
+ * and the drill-down's x-axis unstable between reloads.
+ */
+function withNewVersion(
+  settings: Settings,
+  ctx: DecisionContext,
+  changeSummary: string,
+  diff: SettingsDiffEntry[],
+  mutate: (draft: Settings) => void,
+): Settings {
+  const versionId = `SET-V${settings.versions.length + 1}` as SettingsVersionId;
+  const version: SettingsVersion = {
+    version_id: versionId,
+    changed_at: ctx.now,
+    changed_by: ctx.operatorId,
+    change_summary: changeSummary,
+    diff,
+  };
+
+  const next: Settings = {
+    ...settings,
+    versions: [...settings.versions, version],
+    current_version_id: versionId,
+  };
+  mutate(next);
+  return next;
+}
+
+/** Whether a control refuses to be written, and the sentence saying why. Null means it is tunable.
+ *  Read from the data — `field_meta.is_fixed` and the rule rows' own `is_fixed` — rather than from
+ *  a list of key names here, so a fixture that marks something fixed is obeyed without a code
+ *  change. */
+export function settingRefusal(world: FixtureSet, update: SettingUpdate): string | null {
+  if (update.kind === 'auto_approve') return world.settings.auto_approve.lock_reason;
+
+  if (update.kind === 'escalation_trigger' || update.kind === 'approval_rule') {
+    const rows =
+      update.kind === 'escalation_trigger'
+        ? world.settings.escalation_triggers
+        : world.settings.approval_rules;
+    const row = rows.find((r) => r.trigger === update.trigger);
+    if (!row) return null;
+    return row.is_fixed
+      ? 'This rule cannot be loosened. Relaxing a rule on the evidence of its own false positives ' +
+          'is only safe where a false negative is recoverable, and this one is not.'
+      : null;
+  }
+
+  const meta = world.settings.field_meta[settingKeyPath(update)];
+  return meta?.is_fixed ? 'This control is fixed and cannot be changed.' : null;
+}
+
+/**
+ * Apply one settings change.
+ *
+ * Assumes the caller has already checked `settingRefusal` — this file is pure and throws no
+ * `ConsoleError`, because those belong to the console boundary and not to the transition table
+ * (D-031, A-06's "two contract sets, separate boundaries").
+ */
+export function updateSetting(
+  world: FixtureSet,
+  update: SettingUpdate,
+  ctx: DecisionContext,
+): WorldPatch {
+  const current = world.settings;
+
+  switch (update.kind) {
+    case 'score_threshold': {
+      /** Clamped to the declared range rather than trusted. A slider cannot produce an out-of-range
+       *  value, but a caller can, and the range is the operator-facing promise. */
+      const range = current.field_meta.score_threshold?.range;
+      const value = range
+        ? Math.min(range.max, Math.max(range.min, update.value))
+        : update.value;
+      return {
+        settings: withNewVersion(
+          current,
+          ctx,
+          `Review threshold moved from ${current.score_threshold} to ${value}.`,
+          [{ key: 'score_threshold', from: current.score_threshold, to: value }],
+          (next) => {
+            next.score_threshold = value;
+          },
+        ),
+      };
+    }
+
+    case 'tone_register':
+      return {
+        settings: withNewVersion(
+          current,
+          ctx,
+          'Changed the tone register.',
+          [{ key: 'tone.register', from: current.tone.register, to: update.value }],
+          (next) => {
+            next.tone = { ...current.tone, register: update.value };
+          },
+        ),
+      };
+
+    case 'escalation_trigger':
+    case 'approval_rule': {
+      const isEscalation = update.kind === 'escalation_trigger';
+      const rows = isEscalation ? current.escalation_triggers : current.approval_rules;
+      const updated = rows.map((r) =>
+        r.trigger === update.trigger ? { ...r, enabled: update.enabled } : r,
+      );
+      const verb = update.enabled ? 'Enabled' : 'Disabled';
+      const label = update.trigger.replace(/_/g, ' ');
+      return {
+        settings: withNewVersion(
+          current,
+          ctx,
+          `${verb} the ${label} ${isEscalation ? 'escalation trigger' : 'approval rule'}.`,
+          [
+            {
+              key: settingKeyPath(update),
+              from: String(!update.enabled),
+              to: String(update.enabled),
+            },
+          ],
+          (next) => {
+            if (isEscalation) next.escalation_triggers = updated;
+            else next.approval_rules = updated;
+          },
+        ),
+      };
+    }
+
+    /** Unreachable in practice — the caller refuses this before arriving. Returning an empty patch
+     *  rather than throwing keeps this file free of the console's error taxonomy. */
+    case 'auto_approve':
+      return {};
+  }
+}
+
+/**
+ * Enable or disable a guardrail rule.
+ *
+ * `disabled_at` is written alongside `is_enabled`, and that pairing is the entire reason both
+ * fields exist: A-17 wants a sudden drop in a rule's block rate to raise an alarm, and the
+ * commonest benign cause of that drop is somebody switching the rule off. Without the date the
+ * dashboard raises a false alarm instead of drawing a disabled-from marker.
+ */
+export function toggleGuardrailRule(
+  world: FixtureSet,
+  ruleId: GuardrailRuleId,
+  enabled: boolean,
+  ctx: DecisionContext,
+): WorldPatch {
+  const rule = world.guardrailRules.find((r) => r.id === ruleId);
+  if (!rule) throw new Error(`No guardrail rule ${ruleId}`);
+
+  const next: GuardrailRule = {
+    ...rule,
+    is_enabled: enabled,
+    /** Cleared on re-enable. A rule that carried a stale `disabled_at` would put a permanent
+     *  "switched off on the 6th" marker under a chart of a rule that is running. */
+    disabled_at: enabled ? null : ctx.now,
+  };
+
+  return {
+    guardrailRules: [next],
+    settings: withNewVersion(
+      world.settings,
+      ctx,
+      `${enabled ? 'Enabled' : 'Disabled'} the "${rule.display_name}" guardrail.`,
+      [{ key: `guardrail.${rule.id}`, from: String(rule.is_enabled), to: String(enabled) }],
+      () => {
+        /** Nothing on Settings changes — the rule lives in its own collection. The version is
+         *  written anyway because "every change is a versioned event" is the claim the audit trail
+         *  makes, and a config change that left no trace would quietly falsify it. */
+      },
+    ),
+  };
+}
+
+/* ================================================================================================
+ * ADDING A BANNED CLAIM — the re-validation sweep
+ *
+ * The bonus the brief offers: "Bonus if changing a setting visibly changes simulated agent
+ * behavior." This is the one that changes something already decided rather than something the
+ * agent will do next, which is why it is the strongest version of that claim available.
+ *
+ * WHAT MAKES IT HONEST. The match is `String.includes` against the actual text of the version each
+ * scheduled post binds. It is not a lookup, not a flag on a fixture, and not a scripted outcome:
+ * type a phrase that appears in nothing and nothing happens, which is the property that makes the
+ * case where something *does* happen worth watching.
+ *
+ * WHY THE MATCH IS A LITERAL STRING AND NOT A MODEL. The banned-claim rule's own config says
+ * `match: 'exact_phrase'`. A model would be slower, dearer and less predictable than `includes`,
+ * and an operator adding a phrase to a list expects that phrase to be what is matched.
+ *
+ * WHAT THE SWEEP DOES *NOT* TOUCH. Published posts. A post that is already out is recalled, which
+ * is a different action with a different record (`pulled_at`, `pull_reason`) and a human decision
+ * in front of it. Invalidation is only meaningful before publication — which is the same reason
+ * the effort in this architecture goes before the publish boundary rather than after it.
+ * ==============================================================================================*/
+
+export type BannedClaimSweep = {
+  patch: WorldPatch;
+  /** How many scheduled posts were examined. Shown beside the result, because "1 returned" without
+   *  "of 2 scanned" does not tell the operator whether the rule is narrow or the queue is empty. */
+  scanned: number;
+  invalidated: PostId[];
+};
+
+export function addBannedClaim(
+  world: FixtureSet,
+  phrase: string,
+  ctx: DecisionContext,
+): BannedClaimSweep {
+  const trimmed = phrase.trim();
+  const needle = trimmed.toLowerCase();
+
+  const settings = withNewVersion(
+    world.settings,
+    ctx,
+    `Banned the phrase "${trimmed}".`,
+    [
+      {
+        key: 'tone.banned_phrases',
+        from: world.settings.tone.banned_phrases.join(', '),
+        to: [...world.settings.tone.banned_phrases, trimmed].join(', '),
+      },
+    ],
+    (next) => {
+      next.tone = {
+        ...world.settings.tone,
+        banned_phrases: [...world.settings.tone.banned_phrases, trimmed],
+      };
+    },
+  );
+
+  const scheduled = world.posts.filter((p) => p.state === 'scheduled');
+
+  const posts: Post[] = [];
+  const approvals: Approval[] = [];
+  const invalidated: PostId[] = [];
+
+  for (const post of scheduled) {
+    const draft = world.drafts.find((d) =>
+      d.versions.some((v) => v.id === post.draft_version_id),
+    );
+    const version = draft?.versions.find((v) => v.id === post.draft_version_id);
+    if (!draft || !version) continue;
+
+    if (!version.text.toLowerCase().includes(needle)) continue;
+
+    posts.push({
+      ...post,
+      state: 'invalidated',
+      /** Defined for this case only. The queue row renders it verbatim — a post that reappears
+       *  without saying which rule sent it back is indistinguishable from a bug. */
+      invalidated_reason: `Contains the banned phrase "${trimmed}". The approval bound the text, not the rules, so it no longer covers this post.`,
+    });
+    invalidated.push(post.id);
+
+    /**
+     * The re-decision, modelled properly rather than by clearing the old row.
+     *
+     * `Approval.superseded_by` exists for exactly this: a genuine second decision on the same
+     * version. Mutating the original in place would make the audit trail claim the operator took
+     * one decision when they took two, and would leave edit rate and approval rate disagreeing
+     * with what the queue shows.
+     */
+    const newApprovalId = `APR-RE-${post.id}` as ApprovalId;
+    const prior = world.approvals.find(
+      (a) => a.draft_version_id === post.draft_version_id && a.decided_at !== null,
+    );
+    if (prior) approvals.push({ ...prior, superseded_by: newApprovalId });
+
+    approvals.push({
+      id: newApprovalId,
+      draft_version_id: post.draft_version_id,
+      decision: null,
+      reason_code: null,
+      reason_note: null,
+      /** The clock the queue sorts on starts now, not when the draft was first written. This is a
+       *  new review, and queue-age p95 measures reviews rather than drafts. */
+      queued_at: ctx.now,
+      decided_at: null,
+      seconds_open: null,
+      decided_by: null,
+      operator_id: ctx.operatorId,
+      superseded_by: null,
+      pillar_id: draft.pillar_id,
+      channel_at_decision: draft.channel,
+    });
+  }
+
+  return {
+    patch: {
+      settings,
+      posts: posts.length > 0 ? posts : undefined,
+      approvals: approvals.length > 0 ? approvals : undefined,
+    },
+    scanned: scheduled.length,
+    invalidated,
+  };
+}
+
+/**
+ * How many scheduled posts a phrase would catch, without changing anything.
+ *
+ * Pure and cheap, so the settings screen can call it on every keystroke and show the count before
+ * the operator commits. That signpost is not decoration: a reviewer who has to guess which phrase
+ * occurs in which scheduled post will not find one, and an control that appears to do nothing is
+ * worse than an absent one.
+ */
+export function countBannedClaimMatches(world: FixtureSet, phrase: string): number {
+  const needle = phrase.trim().toLowerCase();
+  if (needle.length === 0) return 0;
+  return world.posts.filter((post) => {
+    if (post.state !== 'scheduled') return false;
+    const draft = world.drafts.find((d) => d.versions.some((v) => v.id === post.draft_version_id));
+    const version = draft?.versions.find((v) => v.id === post.draft_version_id);
+    return version ? version.text.toLowerCase().includes(needle) : false;
+  }).length;
 }
 
 /** Marks an escalation as one that should not have fired. One click, and escalation precision

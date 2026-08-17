@@ -112,7 +112,17 @@ const fieldMeta: Record<string, FieldMeta> = {
     effect_timing: 'immediate',
     is_fixed: false,
     unit: 'score',
-    range: { min: 0.5, max: 0.99 },
+    /**
+     * 0.60–0.95, matching the PRD. This read 0.50–0.99 and the PRD read 0.60–0.95; the code moved
+     * because the PRD is the more recent artifact and the one a reviewer actually opens.
+     *
+     * The narrower band is also the more defensible one. At 0.50 a threshold sitting below almost
+     * every draft the rubric produces stops flagging anything, so the control would still move and
+     * mean nothing — and at 0.99 nothing ever clears it. Neither end is a setting an operator has a
+     * reason to want. Lowering it cannot bypass a guardrail either way: L3 blocks independently of
+     * the score.
+     */
+    range: { min: 0.6, max: 0.95 },
   },
   'tone.register': {
     type: 'string',

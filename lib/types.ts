@@ -1149,8 +1149,12 @@ export type RunStep = {
 
 /* ============================================================================================
  * 17 · RECORD 3.12 · REFLECTIONRULE
- * Six rules: 3 active, 2 suggested, 1 retired. The 15-rule cap is a count over
+ * Five rules: 3 active, 1 suggested, 1 retired. The 15-rule cap is a count over
  * `status === 'active'`, not a field.
+ *
+ * Was six, with two suggested. The second claimed a `cta_changed` pattern that occurs in none of
+ * the retained history, so it could not carry the evidence a suggestion is defined by — see the
+ * header of `fixtures/reflectionRules.ts`.
  * ==========================================================================================*/
 
 export type ReflectionRuleStatus = 'suggested' | 'active' | 'retired';
@@ -1160,8 +1164,17 @@ export type ReflectionRule = {
   client_id: ClientId;
   text: string;
   status: ReflectionRuleStatus;
-  /** The draft versions whose edits produced the suggestion. At least one suggested rule must
-   *  carry its three backing edits — the only visible evidence the reflection loop exists. */
+  /**
+   * The draft versions whose edits produced the suggestion. A `suggested` rule must carry its
+   * three backing edits — that is the only visible evidence in the product that the reflection
+   * loop exists, and a suggestion emitted from the last twenty decisions has all three retained by
+   * construction.
+   *
+   * Empty is meaningful and is not the same as missing: a rule activated before the retained
+   * history window was emitted from decisions this fixture set no longer holds. `scripts/check.mts`
+   * enforces the distinction — every id present must resolve to a human-authored version carrying
+   * this rule's `evidence_tag`, and a `suggested` rule must have three.
+   */
   evidence_ids: DraftVersionId[];
   review_due: MinutesFromAnchor;
   /** Showing three edits without naming the recurring pattern makes the operator re-derive the
@@ -1368,6 +1381,19 @@ export type Settings = {
  * Members are whole records rather than ids: the queue row renders the draft's score, the
  * approval's clock and the events' badges together, and a queue that held ids would make every
  * row do three lookups.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * THE THIRD ARM, AND WHY IT IS THE SAME ARGUMENT AGAIN (D-043)
+ *
+ * A scheduled post that fails re-validation after a settings change goes to `Post.invalidated` and
+ * comes back for a decision. It is not a draft — `Draft` terminates at `approved` (D-032), so the
+ * draft behind it cannot return to `awaiting_approval` — and it is not a run. The board's lifecycle
+ * frame draws it as `scheduled → invalidated → scheduled` and says the queue renders it.
+ *
+ * So the union grows a third member for exactly the reason it had two: a queue typed too narrowly
+ * drops the item the demo is about. The cost is that every queue-rendering component branches on
+ * three kinds instead of two, which is cheap now and expensive after the screen is built against
+ * two — which is why it is done before the screen rather than after.
  */
 export type QueueItem =
   | {
@@ -1381,6 +1407,22 @@ export type QueueItem =
       kind: 'run';
       /** Quarantined or parked. */
       run: Run;
+      events: GuardrailEvent[];
+    }
+  | {
+      kind: 'post';
+      /** `invalidated`. A post whose approval no longer holds under current settings. */
+      post: Post;
+      /**
+       * The draft the post's version belongs to, carried rather than looked up: the row renders the
+       * text that is about to publish, and that text lives on a `DraftVersion`, not on the Post.
+       * Resolving it in the component would make the row do the join the queue exists to have
+       * already done.
+       */
+      draft: Draft;
+      /** The pending re-approval the sweep opened. Never null — a post in the queue with nothing
+       *  to decide against would have no way out of it. */
+      approval: Approval;
       events: GuardrailEvent[];
     };
 

@@ -46,6 +46,7 @@ import {
 import type { BriefRef, ConsoleError, GuardrailEvent, Run, RunId, RunStep } from '@/lib/types';
 import { formatRelative, formatTime } from '@/lib/time';
 import { Badge, RUN_STATE_LABEL, runStateTone } from '@/components/Badge';
+import { ErrorPanel, NotFound } from '@/components/ErrorState';
 import { StepRow } from '@/components/console/StepRow';
 import { ControlBar } from '@/components/console/ControlBar';
 import { Rail } from '@/components/Rail';
@@ -61,10 +62,22 @@ const TRIGGER_LABEL: Record<string, string> = {
 
 /** Status, not prose. Each is what an operator would say out loud about the run. */
 const END_COPY: Record<StreamEndReason, string> = {
-  interrupt: 'Waiting for approval',
-  parked: 'Parked — will retry automatically',
+  /** Not "waiting for approval" — the draft gate is one of four interrupts, and a hostile-reply
+   *  intervention is a decision rather than an approval. This wording is true of all of them. */
+  interrupt: 'Waiting for you',
+  parked: 'Parked — needs a person, and will not retry on its own',
+  quarantined: 'Quarantined before drafting — no draft was produced',
   completed: 'Complete',
   halted: 'Halted · draft left orphaned',
+};
+
+/** Only one of these endings is good news, and the banner should not be green for the others. */
+const END_TONE: Record<StreamEndReason, { bg: string; ink: string }> = {
+  completed: { bg: 'var(--note-bg)', ink: 'var(--note-ink)' },
+  interrupt: { bg: 'var(--note-bg)', ink: 'var(--note-ink)' },
+  parked: { bg: 'var(--state-parked-bg)', ink: 'var(--state-parked)' },
+  quarantined: { bg: 'var(--state-blocked-bg)', ink: 'var(--state-blocked)' },
+  halted: { bg: 'var(--state-blocked-bg)', ink: 'var(--state-blocked)' },
 };
 
 type Source = { runId: RunId; fromSeq: number; nonce: number };
@@ -271,7 +284,7 @@ function Transcript({
         {ended && (
           <p
             className="rounded px-2.5 py-1.5 text-[13px] font-bold"
-            style={{ background: 'var(--note-bg)', color: 'var(--note-ink)' }}
+            style={{ background: END_TONE[ended].bg, color: END_TONE[ended].ink }}
           >
             {END_COPY[ended]}
           </p>
@@ -461,42 +474,25 @@ function EmptyState({ onRun }: { onRun: () => void }) {
   );
 }
 
-/** Seven error kinds exist because the copy differs, and the copy differing is the point. A single
- *  "something went wrong" would waste the taxonomy. */
+/**
+ * The console's failure surface, which replaces the whole screen rather than sitting inside it.
+ *
+ * That is the right call here and not elsewhere: if the run cannot be loaded there is no transcript
+ * to put a panel above. The copy and the kind label come from the shared component, so the seven
+ * kinds cannot say one thing here and another on the queue.
+ */
 function ErrorState({ error, onRetry }: { error: ConsoleError; onRetry: () => void }) {
-  const copy: Record<ConsoleError['kind'], string> = {
-    not_found: 'That run no longer exists.',
-    version_conflict: 'This draft changed since you opened it. Reload to see the current version.',
-    guardrail_block: 'A guardrail blocked this action.',
-    forbidden: 'That control is fixed and cannot be changed.',
-    rate_limited: 'Too many requests. Try again shortly.',
-    unavailable: 'Could not reach the agent runtime. This is usually transient.',
-    timeout: 'The request timed out, so we do not know whether it landed. Check before retrying.',
-  };
-
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-6">
-        <div
-          className="rounded border px-4 py-4"
-          style={{ borderColor: 'var(--state-blocked)', background: 'var(--state-blocked-bg)' }}
-        >
-          <p className="text-[13px] font-medium">{copy[error.kind]}</p>
-          <p
-            className="mt-1 font-mono text-[10px] font-bold uppercase"
-            style={{ color: 'var(--text-muted)', letterSpacing: '0.1em' }}
-          >
-            {error.kind}
-          </p>
-          <button
-            type="button"
-            onClick={onRetry}
-            className="mt-3 rounded border px-2.5 py-1 text-[13px] font-medium"
-            style={{ borderColor: 'var(--border-strong)' }}
-          >
-            Try again
-          </button>
-        </div>
+        {error.kind === 'not_found' ? (
+          <NotFound
+            title="No run to show"
+            detail="Runs start on a schedule — the calendar on Monday, the drafting batch on Wednesday."
+          />
+        ) : (
+          <ErrorPanel error={error} onRetry={onRetry} retryLabel="Try again" />
+        )}
       </div>
     </div>
   );

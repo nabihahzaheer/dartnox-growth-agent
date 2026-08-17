@@ -46,6 +46,8 @@ export const RULE_ENTAILMENT = id('GR-L3-ENTAILMENT');
 export const RULE_SIMILARITY = id('GR-L3-SIMILARITY');
 export const RULE_PII = id('GR-L3-PII');
 export const RULE_COMPETITOR = id('GR-L3-COMPETITOR');
+/** L4's hash check — the rule that makes "a human approved every published post" a fact. */
+export const RULE_HASH_MATCH = id('GR-L4-HASH');
 
 export const guardrailRules: GuardrailRule[] = [
   /* ---------------------------------------------------------------------------------------- *
@@ -267,7 +269,7 @@ export const guardrailRules: GuardrailRule[] = [
    * L4 · ACTION — the last checks before an irreversible step
    * ---------------------------------------------------------------------------------------- */
   {
-    id: id('GR-L4-HASH'),
+    id: RULE_HASH_MATCH,
     layer: 'L4',
     kind: 'content_hash_match',
     config: { algorithm: 'sha256' },

@@ -72,8 +72,21 @@ const pct = (numerator: number, denominator: number, sample_n = denominator) =>
 const publishedIn = (w: FixtureSet, win: Window): Post[] =>
   w.posts.filter((p) => p.state === 'published' && inWindow(p.published_at, win));
 
+/**
+ * Decisions in the window, excluding any that a later decision replaced.
+ *
+ * `superseded_by` was on the record from the start and nothing read it, because nothing could
+ * produce a re-decision. The settings sweep can: adding a banned claim sends an already-approved
+ * post back, and approving it again is a second decision on the same version.
+ *
+ * Counting both would inflate every denominator on this page and would let one post contribute two
+ * approvals to edit rate — the exact disagreement between the metrics and the queue that the field
+ * exists to prevent. C4's "one Approval per decision session" is only true if the readers honour it.
+ */
 const decidedIn = (w: FixtureSet, win: Window): Approval[] =>
-  w.approvals.filter((a) => a.decided_at !== null && inWindow(a.decided_at, win));
+  w.approvals.filter(
+    (a) => a.decided_at !== null && a.superseded_by === null && inWindow(a.decided_at, win),
+  );
 
 /* ================================================================================================
  * BUSINESS
@@ -406,6 +419,9 @@ export function editRateBySettingsVersion(w: FixtureSet): EditRateCohort[] {
     .map((version) => {
       const decisions = w.approvals.filter((a) => {
         if (a.decided_at === null || a.decision === 'reject') return false;
+        /** Same exclusion as `decidedIn`, and for the same reason: a superseded decision counted
+         *  here would put one draft in a cohort twice. */
+        if (a.superseded_by !== null) return false;
         const draft = w.drafts.find((d) => d.versions.some((v) => v.id === a.draft_version_id));
         const stamped = draft?.versions.find((v) => v.id === a.draft_version_id);
         return stamped?.settings_version_id === version.version_id;

@@ -182,7 +182,11 @@ const PLAN: Planned[] = [
         'The reason is arithmetic. Envelope work reduces the load, and the load determines the ' +
         'size of the unit. Do the equipment first and you buy a bigger machine than the building ' +
         'will need, and you pay for it twice — once at purchase, once every winter.',
-      tags: ['claim_softened'],
+      /** Two tags because the edit did two things: it dropped an unsupported timeframe ("in two
+       *  years") and, in dropping it, cut a hedge the sentence did not need. Tags are the evidence
+       *  behind a reflection rule, so an edit that does two things has to say so — a single tag
+       *  here would have hidden one of the two patterns from the reflection job. */
+      tags: ['claim_softened', 'tightened'],
     },
   },
   { dayOffset: -14, channel: 'x', pillar: PILLAR_COMPLIANCE, angle: 'One line on the next period' },
@@ -243,7 +247,17 @@ const PLAN: Planned[] = [
         'They asked, reasonably, why we were talking ourselves out of work. The building was not ' +
         'ready for the bigger job, and doing it anyway would have made that job worse when it ' +
         'came.',
-      tags: ['length_cut', 'hook_rewritten'],
+      /**
+       * `hook_rewritten` was here and is removed, because the diff does not support it: the first
+       * line is byte-identical in both versions. The edit cuts "The answer is that" and
+       * "eventually" — a lead-in and a filler word — which is `tightened`, and shortens the whole
+       * thing, which is `length_cut`.
+       *
+       * Worth naming rather than fixing quietly. A tag is the *evidence* a reflection rule is
+       * built from, so an unearned one is not a mislabel — it is a rule that would be suggested on
+       * a pattern that never happened.
+       */
+      tags: ['length_cut', 'tightened'],
     },
   },
   { dayOffset: -7, channel: 'x', pillar: PILLAR_COMPLIANCE, angle: 'Filing window opens' },
@@ -289,6 +303,23 @@ const PLAN: Planned[] = [
      *  injection-detections tile. */
     outcome: 'quarantined',
   },
+  {
+    /**
+     * Published yesterday, and it exists so the hostile-reply narrative has something real to
+     * happen to.
+     *
+     * A-14 pauses a pillar on negative replies to a post **under 48 hours old**, and before this
+     * the most recent published post was five days back — outside the poll window entirely, so the
+     * narrative would have had to attach itself to a post the system had stopped watching.
+     *
+     * It also fixes something that read oddly on its own: a contracted cadence of eight a week with
+     * nothing published in the last five days.
+     */
+    dayOffset: -1,
+    channel: 'x',
+    pillar: PILLAR_COST,
+    angle: 'What we tell owners about payback',
+  },
 ];
 
 /* ================================================================================================
@@ -310,7 +341,22 @@ const shortBodies: Record<string, string> = {
   'Knob and tube, one line': 'Knob and tube in a wall you were about to insulate is a stop-work, not a detail. Check before the crew arrives.',
   'A topical note on the cold snap': 'Cold snap notes from this week’s jobs.',
   'Sourced from an industry newsletter': '',
+  /** The post the hostile-reply narrative lands on. Deliberately reasonable and deliberately about
+   *  money — the replies it draws are an argument, not an error, which is the case a human has to
+   *  judge rather than a rule catch. */
+  'What we tell owners about payback':
+    'We will not quote a payback figure until we have seen a year of your fuel bills. Anyone who quotes one before that is guessing with your money.',
 };
+
+/**
+ * The post the hostile-reply poll run reports on, derived rather than written down.
+ *
+ * Ids here are positional — `POST-H004` is the fourth plan entry — so a literal in `pipeline.ts`
+ * would silently point at a different post the moment an entry is inserted above. Deriving it is
+ * two lines and cannot drift.
+ */
+export const HOSTILE_REPLY_POST_ID =
+  `POST-H${String(PLAN.length).padStart(3, '0')}` as PostId;
 
 const pillarLabel: Record<string, string> = {
   [PILLAR_COMPLIANCE]: 'compliance',
@@ -513,14 +559,22 @@ PLAN.forEach((entry, index) => {
     variant: outcome === 'quarantined' ? 'poisoned_source' : 'nominal',
   });
 
-  historySteps.push(
-    ...compactTrace(
-      runId,
-      outcome === 'quarantined' ? null : (`DRAFT-H${n}` as DraftId),
-      draftedAt,
-      entry.channel,
-    ),
+  /**
+   * A quarantined run is TRUNCATED, not shortened.
+   *
+   * It halts at the input guardrail, before the drafting node — so its trace has to stop after the
+   * fetch. The first version gave it the same six-step trace as everything else, which meant a run
+   * whose queue row says "no draft produced" opened onto steps reading "Write the draft" and "Score
+   * the draft". Nothing failed; the fixture simply described a run contradicting its own state, and
+   * the way you find it is by clicking the quarantined item in front of someone.
+   */
+  const fullTrace = compactTrace(
+    runId,
+    outcome === 'quarantined' ? null : (`DRAFT-H${n}` as DraftId),
+    draftedAt,
+    entry.channel,
   );
+  historySteps.push(...(outcome === 'quarantined' ? fullTrace.slice(0, 3) : fullTrace));
 
   /**
    * A quarantined run produces no draft at all — it halts at the input guardrail, before the

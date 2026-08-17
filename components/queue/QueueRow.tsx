@@ -13,10 +13,30 @@
  */
 
 import Link from 'next/link';
-import type { QueueItem } from '@/lib/types';
+import type { Draft, QueueItem } from '@/lib/types';
 import { formatRelative } from '@/lib/time';
 import { Badge, RUN_STATE_LABEL, guardrailTone, runStateTone } from '@/components/Badge';
 import { Countdown } from '@/components/Countdown';
+
+/**
+ * The draft an item is about, where it has one.
+ *
+ * Two of the three arms carry a draft and one does not, which is the whole reason the queue is a
+ * union. Every caller that wants "the text and the decision target" goes through this rather than
+ * branching on `kind` again.
+ */
+export function draftOf(item: QueueItem): Draft | null {
+  if (item.kind === 'draft') return item.draft;
+  if (item.kind === 'post') return item.draft;
+  return null;
+}
+
+/** A stable key and a busy-state target for every arm. */
+export function itemId(item: QueueItem): string {
+  if (item.kind === 'draft') return item.draft.id;
+  if (item.kind === 'post') return item.post.id;
+  return item.run.id;
+}
 
 /** Why this item is in front of a person. A-09: in v1 these do not change *whether* a human sees
  *  an item — every post reaches one — they change how it arrives. */
@@ -87,6 +107,95 @@ export function QueueRow({
             {' · '}nothing to do unless it fails again
           </p>
         )}
+      </div>
+    );
+  }
+
+  /* ---- post-backed: approved, scheduled, then un-approved by a settings change (D-043) --------- *
+   *
+   * The row leads with what changed rather than with the post, because the operator already
+   * approved this text once. The question in front of them is not "is this good" — they answered
+   * that — it is "a rule I just added catches something I already said yes to."
+   * -------------------------------------------------------------------------------------------- */
+  if (item.kind === 'post') {
+    const scheduledVersion = item.draft.versions.find(
+      (v) => v.id === item.post.draft_version_id,
+    );
+    return (
+      <div
+        onFocusCapture={onSelect}
+        onClick={onSelect}
+        className="rounded border px-3 py-2.5"
+        style={{ ...frame, opacity: busy ? 0.5 : 1 }}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone="blocked">Returned to you</Badge>
+          <Badge tone="neutral">{item.post.channel === 'linkedin' ? 'LinkedIn' : 'X'}</Badge>
+          <span className="text-[13px] font-medium">
+            Approved, then caught by a rule you just changed
+          </span>
+          <span className="ml-auto flex items-center gap-2">
+            <span className="font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>
+              was publishing {formatRelative(item.post.scheduled_at)}
+            </span>
+            <Link
+              href={`/draft/${item.draft.id}`}
+              className="text-[12px]"
+              style={{ color: 'var(--accent-text)' }}
+            >
+              Open
+            </Link>
+          </span>
+        </div>
+
+        {/* The rule that did it, named. A post that reappears without saying why is indistinguishable
+            from a bug, and `invalidated_reason` exists on the record for this sentence. */}
+        {item.post.invalidated_reason && (
+          <p
+            className="mt-1.5 rounded px-2 py-1 text-[12px]"
+            style={{ background: 'var(--state-blocked-bg)', color: 'var(--state-blocked)' }}
+          >
+            {item.post.invalidated_reason}
+          </p>
+        )}
+
+        <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed">
+          {scheduledVersion?.text}
+        </p>
+
+        <p className="mt-2 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+          It will not publish until you decide again. Nothing was sent.
+        </p>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onApprove}
+            disabled={busy}
+            className="rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-40"
+            style={{ background: 'var(--accent)', color: '#fff' }}
+          >
+            Approve again
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={busy}
+            className="rounded border px-2.5 py-1 text-[13px] disabled:opacity-40"
+            style={{ borderColor: 'var(--border-strong)' }}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={onReject}
+            disabled={busy}
+            className="rounded border px-2.5 py-1 text-[13px] disabled:opacity-40"
+            style={{ borderColor: 'var(--border-strong)' }}
+          >
+            Drop it
+          </button>
+        </div>
       </div>
     );
   }

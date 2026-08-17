@@ -264,6 +264,53 @@ export function StepRow({
                     {event.withheld_reason}
                   </p>
                 )}
+
+                {/*
+                  INBOUND REPLY TEXT, rendered here and nowhere else.
+
+                  R8 gives it exactly one permitted home — the escalation record — because it is
+                  untrusted text from strangers, and the moment it enters retrieval or a drafting
+                  prompt it becomes an injection surface on the one path that reaches a published
+                  account. The `get_engagement` step two rows up carries counts, sentiment labels
+                  and reply *ids* only, deliberately.
+
+                  It was fixtured and rendered nowhere, which made the hostile-reply narrative
+                  arrive with its evidence missing: the operator is asked to decide whether to pull
+                  a post without being shown what people actually said.
+                */}
+                {event.replies.length > 0 && (
+                  <ul className="mt-1.5 space-y-1.5">
+                    {event.replies.map((reply, i) => (
+                      <li
+                        key={`${reply.author_handle}-${i}`}
+                        className="rounded border p-2"
+                        style={{
+                          borderColor:
+                            reply.sentiment === 'severe'
+                              ? 'var(--state-blocked)'
+                              : 'var(--border)',
+                        }}
+                      >
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <span className="font-mono text-[11px] text-[var(--text-faint)]">
+                            {reply.author_handle}
+                          </span>
+                          <Badge tone={reply.sentiment === 'severe' ? 'blocked' : 'awaiting'}>
+                            {reply.sentiment}
+                          </Badge>
+                          <span className="font-mono text-[10px] text-[var(--text-faint)]">
+                            {formatTime(reply.received_at)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[13px] leading-relaxed">{reply.text}</p>
+                      </li>
+                    ))}
+                    <li className="text-[11px] text-[var(--text-faint)]">
+                      Held on this escalation only. Reply text never enters retrieval or a drafting
+                      prompt, and the agent has no reply tool.
+                    </li>
+                  </ul>
+                )}
               </Field>
             )}
 

@@ -23,6 +23,36 @@
  * operator re-derive the cause; naming the pattern without showing the edits asks them to take it
  * on trust. The settings screen renders both, and that pairing is the only visible proof in the
  * product that the reflection loop exists at all.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * THE EVIDENCE IDS WERE DANGLING, AND THE FIX IS NOT ONLY THE IDS — corrected 17 Aug
+ *
+ * Every one of the eighteen ids here pointed at a draft version that does not exist: they were
+ * written as placeholders against the slice fixtures and never reconciled when `history.ts`
+ * arrived with its own id scheme. `scripts/check.mts` walks drafts, approvals, runs, steps and
+ * events for dangling ids and did not walk this collection, so the one place in the fixture set
+ * with a referential defect was the one place nothing looked. The checker now walks it.
+ *
+ * Reconciling them surfaced the real constraint, which is worth stating because it decides the
+ * shape below. **A rule is emitted when a tag recurs three times, and the retained history is
+ * three weeks (D-034).** Five human-edited versions exist in that window. So:
+ *
+ *   · A *suggested* rule was emitted just now, from the last twenty decisions, all of which are
+ *     retained. Its three backing versions must therefore be real, and they are.
+ *
+ *   · An *active* rule activated 31 to 45 days ago was emitted from decisions that reach back
+ *     past the start of the retained window. Its evidence is not in this fixture set, and
+ *     `evidence_ids: []` says exactly that. Pointing it at recent versions instead would have
+ *     been worse than the dangling ids: those at least failed loudly once something looked. A
+ *     rule citing evidence that postdates its own activation fails silently and reads as real.
+ *
+ * REF-003 is the one to check that reasoning against, since it activated only 11 days ago. Twenty
+ * decisions at eight a week reaches back about seventeen days, to roughly day −28; the window
+ * starts at −21. So its three hook rewrites straddle the boundary and are not retained either.
+ *
+ * The count moved from six rules to five. The second suggested rule claimed a `cta_changed`
+ * pattern that occurs nowhere in the history, so it could not be evidenced at all — and one
+ * suggestion a reviewer can expand and verify is worth more than two where one is decoration.
  */
 
 import { minutes } from '../lib/types.ts';
@@ -39,14 +69,34 @@ export const RULE_LEAD_WITH_BUILDING = rid('REF-003');
 
 const DAY = 24 * 60;
 
+/**
+ * The three human-edited versions behind the one suggested rule.
+ *
+ * Named constants rather than inline strings for the same reason the pillar ids are: a branded id
+ * stops a `DraftVersionId` being passed where a `RunId` belongs, and does nothing whatever about
+ * `'DV-H004-2'` being mistyped as `'DV-H04-2'`. Referencing a constant does. These are exactly the
+ * ids this file got wrong, so they are the last place to hand-write a string literal.
+ *
+ * All three are `history.ts` edit pairs tagged `tightened`, and each diff shows it: H004 cuts a
+ * redundant noun, H009 drops an unsupported timeframe, H016 removes a lead-in clause.
+ */
+const EV_TIGHTENED_H004 = vid('DV-H004-2');
+const EV_TIGHTENED_H009 = vid('DV-H009-2');
+const EV_TIGHTENED_H016 = vid('DV-H016-2');
+
 export const reflectionRules: ReflectionRule[] = [
-  /* --- active (3) ------------------------------------------------------------------------- */
+  /* --- active (3) -------------------------------------------------------------------------
+   *
+   * All three activated before the retained window opens, so their backing edits are not in this
+   * fixture set. See the header: an empty array is the honest statement of that, and the settings
+   * screen says "evidence outside the retained history" rather than rendering a blank list.
+   * ---------------------------------------------------------------------------------------- */
   {
     id: rid('REF-001'),
     client_id: CLIENT_ID,
     text: 'Give the figure a source in the same sentence, or cut the figure.',
     status: 'active',
-    evidence_ids: [vid('DV-0031-2'), vid('DV-0038-2'), vid('DV-0044-2')],
+    evidence_ids: [],
     evidence_tag: 'claim_softened',
     activated_at: minutes(-38 * DAY),
     retired_at: null,
@@ -58,7 +108,7 @@ export const reflectionRules: ReflectionRule[] = [
     client_id: CLIENT_ID,
     text: 'Say "owner", not "landlord", in anything public facing.',
     status: 'active',
-    evidence_ids: [vid('DV-0029-2'), vid('DV-0036-2'), vid('DV-0041-2')],
+    evidence_ids: [],
     evidence_tag: 'terminology_corrected',
     activated_at: minutes(-31 * DAY),
     retired_at: null,
@@ -76,7 +126,16 @@ export const reflectionRules: ReflectionRule[] = [
      */
     text: 'Open on the building and what happened in it. The equipment comes second, if at all.',
     status: 'active',
-    evidence_ids: [vid('DV-0047-2'), vid('DV-0051-2'), vid('DV-0055-2')],
+    /**
+     * Empty, and this is the rule to test the header's reasoning against, because it activated
+     * only 11 days ago and the window opens at 21.
+     *
+     * Twenty decisions at eight a week reaches back about seventeen days, to roughly day −28. Its
+     * three hook rewrites therefore straddle the start of the retained window, and none of the
+     * three human edits inside it rewrote a hook. Citing one of them would have made the rule look
+     * evidenced while pointing at edits that did something else.
+     */
+    evidence_ids: [],
     evidence_tag: 'hook_rewritten',
     activated_at: minutes(-11 * DAY),
     retired_at: null,
@@ -84,28 +143,27 @@ export const reflectionRules: ReflectionRule[] = [
     version: 1,
   },
 
-  /* --- suggested (2), awaiting the operator ------------------------------------------------ */
+  /* --- suggested (1), awaiting the operator ------------------------------------------------ */
   {
     id: rid('REF-004'),
     client_id: CLIENT_ID,
-    /** Carries its three backing edits, per the header note. This is the one the settings screen
-     *  expands to show the evidence chain. */
-    text: 'Cut the closing question. Three of the last twenty edits deleted one.',
+    /**
+     * The one rule the settings screen expands to show a complete evidence chain, and the only
+     * visible proof in the product that the reflection loop runs at all.
+     *
+     * It is a suggestion, so it was emitted from the last twenty decisions — all of which are
+     * retained — which is exactly why this is the rule whose evidence can be real. The three
+     * versions below are `history.ts` edit pairs, all human-authored, all tagged `tightened`, and
+     * each diff visibly shows the pattern the text names.
+     *
+     * The rule this replaced claimed a `cta_changed` pattern that occurs nowhere in the history,
+     * so it could never have been evidenced. The text now describes what the three edits actually
+     * did rather than what would have been convenient.
+     */
+    text: 'Say it once. Three of the last twenty edits cut a lead-in or a hedge the sentence did not need.',
     status: 'suggested',
-    evidence_ids: [vid('DV-0058-2'), vid('DV-0061-2'), vid('DV-0064-2')],
-    evidence_tag: 'cta_changed',
-    activated_at: null,
-    retired_at: null,
-    review_due: minutes(7 * DAY),
-    version: 1,
-  },
-  {
-    id: rid('REF-005'),
-    client_id: CLIENT_ID,
-    text: 'Name the neighbourhood, not the address.',
-    status: 'suggested',
-    evidence_ids: [vid('DV-0059-2'), vid('DV-0062-2'), vid('DV-0066-2')],
-    evidence_tag: 'specific_detail_added',
+    evidence_ids: [EV_TIGHTENED_H004, EV_TIGHTENED_H009, EV_TIGHTENED_H016],
+    evidence_tag: 'tightened',
     activated_at: null,
     retired_at: null,
     review_due: minutes(7 * DAY),
@@ -123,7 +181,9 @@ export const reflectionRules: ReflectionRule[] = [
      */
     text: 'Keep posts under 120 words.',
     status: 'retired',
-    evidence_ids: [vid('DV-0022-2'), vid('DV-0026-2'), vid('DV-0030-2')],
+    /** Activated 45 days ago, so its evidence is the furthest outside the retained window of any
+     *  rule here. */
+    evidence_ids: [],
     evidence_tag: 'length_cut',
     activated_at: minutes(-45 * DAY),
     retired_at: minutes(-19 * DAY),

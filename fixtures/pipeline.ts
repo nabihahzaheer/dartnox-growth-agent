@@ -41,6 +41,16 @@
  */
 
 import { minutes } from '../lib/types.ts';
+/**
+ * The digest the running code uses, imported rather than reimplemented.
+ *
+ * `lib/world.ts` imports types and nothing else, so a fixture reaching for it creates no cycle.
+ * The reason to do it rather than copy the four lines: a hash written here and a hash written by
+ * `approve()` have to be produced by the same function, or the L4 match a scheduled post is
+ * supposed to survive would be comparing outputs of two implementations that agree until one is
+ * edited.
+ */
+import { contentDigest } from '../lib/world.ts';
 import type {
   Approval,
   ApprovalId,
@@ -53,6 +63,7 @@ import type {
   GuardrailEvent,
   GuardrailEventId,
   MinutesFromAnchor,
+  Post,
   PostId,
   Run,
   RunId,
@@ -66,9 +77,17 @@ import {
   PILLAR_COMPLIANCE,
   PILLAR_COST,
   PILLAR_FIELD_NOTES,
+  PILLAR_OLD_BUILDINGS,
 } from './client.ts';
 import { OPERATOR_ID, SETTINGS_V3 } from './settings.ts';
-import { RULE_BANNED_CLAIM, RULE_ENTAILMENT, RULE_INJECTION, RULE_PII } from './guardrailRules.ts';
+import {
+  RULE_BANNED_CLAIM,
+  RULE_ENTAILMENT,
+  RULE_HASH_MATCH,
+  RULE_INJECTION,
+  RULE_PII,
+} from './guardrailRules.ts';
+import { HOSTILE_REPLY_POST_ID } from './history.ts';
 import { RULE_LEAD_WITH_BUILDING } from './reflectionRules.ts';
 import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from '../lib/types.ts';
 
@@ -90,10 +109,25 @@ export const RUN_CLEAN = runId('RUN-0141');
 export const RUN_WARNED = runId('RUN-0142');
 export const RUN_LIVE = runId('RUN-0143');
 export const RUN_TOOL_FAILURE = runId('RUN-0144');
+/** The two already-approved children of the same Wednesday batch. See "ALREADY APPROVED" below. */
+export const RUN_PAYBACK = runId('RUN-0145');
+export const RUN_RISERS = runId('RUN-0146');
+/** D-041's remaining three narratives, each playable from the failure drawer. */
+export const RUN_POISONED = runId('RUN-0147');
+export const RUN_HOSTILE = runId('RUN-0148');
+export const RUN_RECONCILE = runId('RUN-0149');
 
 export const DRAFT_CLEAN = draftId('DRAFT-0141');
 export const DRAFT_WARNED = draftId('DRAFT-0142');
 export const DRAFT_LIVE = draftId('DRAFT-0143');
+export const DRAFT_PAYBACK = draftId('DRAFT-0145');
+export const DRAFT_RISERS = draftId('DRAFT-0146');
+
+const SLOT_PAYBACK = slotId('SLOT-0214');
+const SLOT_RISERS = slotId('SLOT-0215');
+
+const V_PAYBACK = versionId('DV-0145-1');
+const V_RISERS = versionId('DV-0146-1');
 
 /* ================================================================================================
  * SCORING
@@ -232,6 +266,49 @@ export const calendarSlots: CalendarSlot[] = [
     slip_reason: null,
     calendar_run_id: runId('RUN-0132'),
   },
+
+  /* ---- the two slots whose drafts are already approved and scheduled ---------------------- */
+  {
+    id: SLOT_PAYBACK,
+    pillar_id: PILLAR_COST,
+    channel: 'linkedin',
+    /** Next Thursday 09:00, inside the LinkedIn window (Thu 08:00–10:00). Both of these sit inside
+     *  their channel's configured posting window on purpose: L4 checks the window before it
+     *  publishes, so a scheduled post outside one would be a fixture that fails its own guardrail. */
+    publish_at: minutes(7 * DAY - 1 * HOUR),
+    angle: 'What "pays for itself" actually depends on',
+    is_topical: false,
+    /**
+     * `awaiting_approval` on a slot whose draft has been approved looks wrong and is correct.
+     *
+     * §4.5 makes slot state derived rather than authored, and `approve()` in `lib/world.ts`
+     * deliberately writes no slot state — it returns drafts, approvals, posts and runs. So a slot
+     * whose draft was approved through the product's own code path still carries whatever it had
+     * before. Authoring these two any other way would make the fixture disagree with what the
+     * running code produces, which is the drift `scripts/check.mts` exists to prevent.
+     *
+     * The honest gap this exposes: `CalendarSlotState` has no member for "approved, scheduled, not
+     * yet published". Nothing renders slot state, and `publishedVsPlanned` excludes future slots
+     * from its window, so it costs nothing today. Recorded rather than papered over.
+     */
+    state: 'awaiting_approval',
+    original_publish_at: null,
+    slip_reason: null,
+    calendar_run_id: runId('RUN-0132'),
+  },
+  {
+    id: SLOT_RISERS,
+    pillar_id: PILLAR_OLD_BUILDINGS,
+    channel: 'x',
+    /** Next Friday 14:00, inside the X window (Fri 08:00–16:00). */
+    publish_at: minutes(8 * DAY + 4 * HOUR),
+    angle: 'Risers sized for a building that no longer exists',
+    is_topical: false,
+    state: 'awaiting_approval',
+    original_publish_at: null,
+    slip_reason: null,
+    calendar_run_id: runId('RUN-0132'),
+  },
 ];
 
 /* ================================================================================================
@@ -332,6 +409,95 @@ const liveText =
   'recorded — not on the drawings, not in the 1987 alteration file, not in anyone’s memory.\n\n' +
   'Three feet of it, running the height of the party wall, packed with what forty years ago ' +
   'someone decided was insulation.';
+
+/* ================================================================================================
+ * DRAFTS 0145 AND 0146 — ALREADY APPROVED, SCHEDULED, NOT YET PUBLISHED
+ *
+ * Two more children of the same Wednesday batch, decided yesterday evening. They exist for a
+ * reason the rest of the set could not supply.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * WHY A SCHEDULED POST HAD TO EXIST AT ALL
+ *
+ * Adding a banned claim re-validates scheduled posts and returns any match to the queue — the
+ * bonus the brief offers, and the one moment it explicitly awards credit for. Before these, every
+ * `Post` in the set was `published`, and the only producer of a `scheduled` one was `approve()`.
+ * So the sweep would have run across an empty set on a cold load and reported nothing, and the
+ * reviewer would have had to approve a draft first and then guess a phrase occurring in that exact
+ * text. A miss reads as a broken feature rather than as a demo they drove wrong.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * WHY TWO AND NOT ONE, WHICH IS THE PART THAT ACTUALLY MATTERS
+ *
+ * One scheduled post cannot show the sweep discriminating. If the only scheduled post comes back
+ * invalidated, "matched the phrase" and "invalidates everything it touches" produce identical
+ * screens, and the reviewer has no way to tell which they are looking at.
+ *
+ * So 0145 carries the phrase and 0146 does not, and the sweep has to leave one of them alone. The
+ * result the operator reads — one of two scheduled posts returned — is the claim being
+ * demonstrated, not the fact that something happened.
+ *
+ * `scripts/check.mts` asserts both halves: that a scheduled post containing the phrase exists, and
+ * that a scheduled post *not* containing it exists.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * THE PHRASE
+ *
+ * "pays for itself" — standard retrofit marketing, and exactly the kind of claim a careful owner's
+ * counsel strikes, because payback depends on fuel price and on how the building is run. It is the
+ * same family as the four already in `tone.banned_phrases` and is deliberately not one of them:
+ * the four existing ones are already caught, so banning any of them again would demonstrate
+ * nothing.
+ *
+ * Note what 0145 does *not* contain: any of `guaranteed savings`, `zero emissions`,
+ * `no upfront cost` or `risk-free`. Its L3 pass event and its `banned_exact_match` deterministic
+ * check both say it is clean, and a draft that tripped an existing rule while claiming to pass
+ * would be a fixture lying about its own guardrails.
+ * ==============================================================================================*/
+
+/**
+ * The phrase the settings demo turns on, named once.
+ *
+ * Exported because three places have to agree about it and none of them can see the others: the
+ * post below has to contain it, the sibling post has to not, and `scripts/check.mts` asserts both.
+ * Left as a literal in each, a reworded post would silently kill the demo and everything would
+ * still pass.
+ *
+ * It is deliberately NOT in `tone.banned_phrases`. Adding a phrase that is already banned would
+ * sweep nothing, because the draft would never have been approved carrying it.
+ */
+export const DEMO_BANNABLE_PHRASE = 'pays for itself';
+
+const paybackText =
+  'Owners ask whether a retrofit pays for itself. It is the right question, and the honest ' +
+  'answer has three variables in it: what you pay for fuel, how the building is actually run, ' +
+  'and which incentives you land.\n\n' +
+  'We have costed the same scope at a four-year payback in one building and eleven in another ' +
+  'two blocks away. The difference was not the equipment. It was a boiler nobody had rebalanced ' +
+  'since 2009, and a super who kept the lobby windows open through February.\n\n' +
+  'Ask for the assumptions behind any payback figure. If nobody will show you them, the figure ' +
+  'is marketing.';
+
+const risersText =
+  'Steam risers in a 1920s building were sized for a heat load that no longer exists.\n\n' +
+  'Half of balancing is undoing decisions made for a building that has since been insulated, ' +
+  'subdivided and re-glazed.';
+
+const paybackScores: ScoreComponents = {
+  brand_voice: 0.91,
+  claim_support: 0.87,
+  pillar_fit: 0.94,
+  channel_fit: 0.88,
+  specificity: 0.84,
+};
+
+const risersScores: ScoreComponents = {
+  brand_voice: 0.89,
+  claim_support: 0.9,
+  pillar_fit: 0.92,
+  channel_fit: 0.87,
+  specificity: 0.76,
+};
 
 export const drafts: Draft[] = [
   {
@@ -439,6 +605,104 @@ export const drafts: Draft[] = [
     applied_reflection_rule_ids: [],
     applied_rejection_reason_ids: [],
   },
+
+  /* ---- approved yesterday evening, scheduled for next week -------------------------------- */
+  {
+    id: DRAFT_PAYBACK,
+    slot_id: SLOT_PAYBACK,
+    pillar_id: PILLAR_COST,
+    channel: 'linkedin',
+    run_id: RUN_PAYBACK,
+    /** Terminal for a Draft (D-032). Everything after this point belongs to the Post. */
+    state: 'approved',
+    queued_at: minutes(-28 * HOUR + 61),
+    current_version_id: V_PAYBACK,
+    versions: [
+      {
+        id: V_PAYBACK,
+        version: 1,
+        created_at: minutes(-28 * HOUR + 58),
+        text: paybackText,
+        /** Agent-authored and approved unedited, so these two add decisions to the edit-rate
+         *  denominator without adding to its numerator. Edit rate moves 25% → 23%, which is inside
+         *  the band either way — worth checking rather than assuming, because two extra approvals
+         *  are exactly the kind of change that quietly reddens a tile. */
+        author: 'agent',
+        /**
+         * Computed by the same function `approve()` uses, not a hand-typed literal.
+         *
+         * L4 publishes only on a hash match against the approved version, and the settings sweep
+         * invalidates by comparing that same pair. A fixture hash that did not actually digest its
+         * own text would make both mechanisms look like they work while comparing two constants.
+         */
+        content_hash: contentDigest(paybackText),
+        settings_version_id: SETTINGS_V3,
+        token_count: paybackText.trim().split(/\s+/).length,
+        edit_tags: [],
+      },
+    ],
+    score_components: paybackScores,
+    score_weights: WEIGHTS,
+    composite_score: composite(paybackScores),
+    deterministic_checks: [
+      { check: 'length', result: 'pass', detail: '104 tokens, LinkedIn limit 2800 characters.' },
+      { check: 'placeholders', result: 'pass', detail: 'No unresolved placeholders.' },
+      { check: 'disclaimers', result: 'pass', detail: 'No disclaimer required for this pillar.' },
+      { check: 'links', result: 'pass', detail: 'No outbound links.' },
+      /** True at authoring time, and it has to be: "pays for itself" is not yet banned. That is the
+       *  whole point — the reviewer adds it, and this draft's already-scheduled post comes back. */
+      { check: 'banned_exact_match', result: 'pass', detail: 'No banned phrase present.' },
+    ],
+    degraded: false,
+    blocked_reason: null,
+    similarity: null,
+    variant_group_id: null,
+    source_refs: ['https://www.nyserda.ny.gov/all-programs/clean-heat'],
+    example_refs: [],
+    applied_reflection_rule_ids: [],
+    applied_rejection_reason_ids: [],
+  },
+  {
+    id: DRAFT_RISERS,
+    slot_id: SLOT_RISERS,
+    pillar_id: PILLAR_OLD_BUILDINGS,
+    channel: 'x',
+    run_id: RUN_RISERS,
+    state: 'approved',
+    queued_at: minutes(-28 * HOUR + 69),
+    current_version_id: V_RISERS,
+    versions: [
+      {
+        id: V_RISERS,
+        version: 1,
+        created_at: minutes(-28 * HOUR + 66),
+        text: risersText,
+        author: 'agent',
+        content_hash: contentDigest(risersText),
+        settings_version_id: SETTINGS_V3,
+        token_count: risersText.trim().split(/\s+/).length,
+        edit_tags: [],
+      },
+    ],
+    score_components: risersScores,
+    score_weights: WEIGHTS,
+    composite_score: composite(risersScores),
+    deterministic_checks: [
+      { check: 'length', result: 'pass', detail: '33 tokens, X limit 280 characters.' },
+      { check: 'placeholders', result: 'pass', detail: 'No unresolved placeholders.' },
+      { check: 'disclaimers', result: 'pass', detail: 'No disclaimer required for this pillar.' },
+      { check: 'links', result: 'pass', detail: 'No outbound links.' },
+      { check: 'banned_exact_match', result: 'pass', detail: 'No banned phrase present.' },
+    ],
+    degraded: false,
+    blocked_reason: null,
+    similarity: null,
+    variant_group_id: null,
+    source_refs: [],
+    example_refs: [],
+    applied_reflection_rule_ids: [],
+    applied_rejection_reason_ids: [],
+  },
 ];
 
 /* ================================================================================================
@@ -480,6 +744,89 @@ export const approvals: Approval[] = [
     pillar_id: PILLAR_COST,
     channel_at_decision: 'x',
   },
+
+  /* ---- decided yesterday evening. `decided_at` non-null is what makes these not pending ---- */
+  {
+    id: approvalId('APR-0145'),
+    draft_version_id: V_PAYBACK,
+    decision: 'approve',
+    reason_code: null,
+    reason_note: null,
+    queued_at: minutes(-28 * HOUR + 61),
+    decided_at: minutes(-19 * HOUR),
+    /** Inclusive of reading time. Both are comfortably over fifteen seconds, so neither lands in
+     *  the rubber-stamp bucket — a pair of approvals that both read as reflex clicks would move
+     *  that tile for a reason that has nothing to do with the operator. */
+    seconds_open: 112,
+    decided_by: 'operator',
+    operator_id: OPERATOR_ID,
+    superseded_by: null,
+    pillar_id: PILLAR_COST,
+    channel_at_decision: 'linkedin',
+  },
+  {
+    id: approvalId('APR-0146'),
+    draft_version_id: V_RISERS,
+    decision: 'approve',
+    reason_code: null,
+    reason_note: null,
+    queued_at: minutes(-28 * HOUR + 69),
+    decided_at: minutes(-19 * HOUR + 4),
+    seconds_open: 64,
+    decided_by: 'operator',
+    operator_id: OPERATOR_ID,
+    superseded_by: null,
+    pillar_id: PILLAR_OLD_BUILDINGS,
+    channel_at_decision: 'x',
+  },
+];
+
+/* ================================================================================================
+ * POSTS — the only `scheduled` records in the set
+ *
+ * R6/D-032: Post is authoritative from scheduling onward, which is why these are Posts and not a
+ * draft state. Each binds the digest of the exact version that was approved — L4 publishes only on
+ * a match against it, and the settings sweep invalidates by comparing that same pair.
+ *
+ * `published_at`, `platform_post_id` and `platform_url` are null because nothing has published.
+ * That is the distinction the whole record exists for: scheduled is not published, and B1 having
+ * only `scheduled_at` was the omission that made four metrics uncomputable.
+ * ==============================================================================================*/
+
+export const scheduledPosts: Post[] = [
+  {
+    id: 'POST-0145' as PostId,
+    draft_version_id: V_PAYBACK,
+    channel: 'linkedin',
+    scheduled_at: minutes(7 * DAY - 1 * HOUR),
+    state: 'scheduled',
+    published_at: null,
+    platform_post_id: null,
+    platform_url: null,
+    approved_content_hash: contentDigest(paybackText),
+    idempotency_key: `pub:${DRAFT_PAYBACK}:${V_PAYBACK}`,
+    /** LinkedIn is not pay-per-use; X is. The two addends behind cost per post. */
+    platform_cost_usd: 0,
+    invalidated_reason: null,
+    pulled_at: null,
+    pull_reason: null,
+  },
+  {
+    id: 'POST-0146' as PostId,
+    draft_version_id: V_RISERS,
+    channel: 'x',
+    scheduled_at: minutes(8 * DAY + 4 * HOUR),
+    state: 'scheduled',
+    published_at: null,
+    platform_post_id: null,
+    platform_url: null,
+    approved_content_hash: contentDigest(risersText),
+    idempotency_key: `pub:${DRAFT_RISERS}:${V_RISERS}`,
+    platform_cost_usd: 0.02,
+    invalidated_reason: null,
+    pulled_at: null,
+    pull_reason: null,
+  },
 ];
 
 /* ================================================================================================
@@ -487,6 +834,12 @@ export const approvals: Approval[] = [
  * ==============================================================================================*/
 
 const BATCH_START = minutes(-28 * HOUR);
+
+/** Start offsets for the three failure narratives, in minutes before the anchor. Declared here
+ *  rather than beside their step arrays because the runs array below needs them first. */
+const POISONED_START = -186;
+const HOSTILE_START = -52;
+const RECONCILE_START = -140;
 
 export const runs: Run[] = [
   {
@@ -600,6 +953,175 @@ export const runs: Run[] = [
      *  death. This is what the `<Countdown>` component renders on the queue's run-backed row. */
     next_sweep_at: minutes(25),
     variant: 'tool_failure',
+  },
+
+  /* ---- the two children that got all the way through --------------------------------------- */
+  {
+    id: RUN_PAYBACK,
+    client_id: CLIENT_ID,
+    type: 'draft',
+    /** Same parent as the two still waiting. The batch fans out into children that each finish on
+     *  their own — which is what makes "two of eight are still in the queue and two are already
+     *  scheduled" an ordinary Thursday rather than a broken run. */
+    parent_run_id: RUN_PARENT,
+    /** `completed`, not `awaiting_human`: the interrupt was cleared when the operator approved. */
+    state: 'completed',
+    checkpoint_ref: 'ckpt:0145:final',
+    trigger: 'schedule.weekly_draft',
+    park_reason: null,
+    end_reason: null,
+    started_at: minutes(-28 * HOUR + 3),
+    ended_at: minutes(-19 * HOUR),
+    step_cap: 20,
+    degraded: false,
+    settings_version_id: SETTINGS_V3,
+    target_draft_id: DRAFT_PAYBACK,
+    target_post_id: 'POST-0145' as PostId,
+    next_sweep_at: null,
+    variant: 'nominal',
+  },
+  {
+    id: RUN_RISERS,
+    client_id: CLIENT_ID,
+    type: 'draft',
+    parent_run_id: RUN_PARENT,
+    state: 'completed',
+    checkpoint_ref: 'ckpt:0146:final',
+    trigger: 'schedule.weekly_draft',
+    park_reason: null,
+    end_reason: null,
+    started_at: minutes(-28 * HOUR + 3),
+    ended_at: minutes(-19 * HOUR + 4),
+    step_cap: 20,
+    degraded: false,
+    settings_version_id: SETTINGS_V3,
+    target_draft_id: DRAFT_RISERS,
+    target_post_id: 'POST-0146' as PostId,
+    next_sweep_at: null,
+    variant: 'nominal',
+  },
+
+  /* ---- the publish runs those approvals created -------------------------------------------- *
+   *
+   * Queued, with no steps, waiting for the scheduler to reach their slot. Shape and id copied from
+   * what `approve()` writes rather than invented — `RUN-P<draft number>`, `step_cap` 20, started_at
+   * equal to the post's scheduled time — so a reviewer who approves something in the queue gets a
+   * rail entry indistinguishable from these two.
+   *
+   * A draft run never stays open waiting on a clock. That is the whole reason publishing is a
+   * separate run and not a final step on the drafting graph.
+   * ---------------------------------------------------------------------------------------------- */
+  {
+    id: runId('RUN-P0145'),
+    client_id: CLIENT_ID,
+    type: 'publish',
+    parent_run_id: null,
+    state: 'queued',
+    checkpoint_ref: '',
+    trigger: 'schedule.weekly_draft',
+    park_reason: null,
+    end_reason: null,
+    started_at: minutes(7 * DAY - 1 * HOUR),
+    ended_at: null,
+    step_cap: 20,
+    degraded: false,
+    settings_version_id: SETTINGS_V3,
+    target_draft_id: DRAFT_PAYBACK,
+    target_post_id: 'POST-0145' as PostId,
+    next_sweep_at: null,
+    variant: 'nominal',
+  },
+  {
+    id: runId('RUN-P0146'),
+    client_id: CLIENT_ID,
+    type: 'publish',
+    parent_run_id: null,
+    state: 'queued',
+    checkpoint_ref: '',
+    trigger: 'schedule.weekly_draft',
+    park_reason: null,
+    end_reason: null,
+    started_at: minutes(8 * DAY + 4 * HOUR),
+    ended_at: null,
+    step_cap: 20,
+    degraded: false,
+    settings_version_id: SETTINGS_V3,
+    target_draft_id: DRAFT_RISERS,
+    target_post_id: 'POST-0146' as PostId,
+    next_sweep_at: null,
+    variant: 'nominal',
+  },
+
+  /* ---- the three remaining failure narratives (D-041) -------------------------------------- */
+  {
+    id: RUN_POISONED,
+    client_id: CLIENT_ID,
+    type: 'draft',
+    parent_run_id: null,
+    /** Human clearance only, and no draft was produced. The queue's run-backed arm exists for
+     *  exactly this shape. */
+    state: 'quarantined',
+    checkpoint_ref: 'ckpt:0147:guard_input',
+    trigger: 'manual.run_now',
+    park_reason: 'injection_quarantine',
+    end_reason: null,
+    started_at: minutes(POISONED_START),
+    ended_at: minutes(POISONED_START + 1),
+    step_cap: 20,
+    degraded: false,
+    settings_version_id: SETTINGS_V3,
+    target_draft_id: null,
+    target_post_id: null,
+    /** No sweep. An injection is not transient — the domain stays flagged until a person clears it,
+     *  which is the difference between `quarantined` and `parked_transient`. */
+    next_sweep_at: null,
+    variant: 'poisoned_source',
+  },
+  {
+    id: RUN_HOSTILE,
+    client_id: CLIENT_ID,
+    type: 'poll',
+    parent_run_id: null,
+    state: 'awaiting_human',
+    checkpoint_ref: 'ckpt:0148:interrupt:post_publish_intervention',
+    trigger: 'poll.engagement',
+    park_reason: null,
+    end_reason: null,
+    started_at: minutes(HOSTILE_START),
+    ended_at: null,
+    step_cap: 20,
+    degraded: false,
+    settings_version_id: SETTINGS_V3,
+    target_draft_id: null,
+    target_post_id: HOSTILE_REPLY_POST_ID,
+    next_sweep_at: null,
+    variant: 'hostile_reply',
+  },
+  {
+    id: RUN_RECONCILE,
+    client_id: CLIENT_ID,
+    type: 'publish',
+    parent_run_id: null,
+    /**
+     * `parked_blocked`, not `parked_transient`. The distinction is the release event: a transient
+     * park is re-armed by the clock, and this one cannot be — no amount of waiting resolves which
+     * of two candidate posts is ours. It waits for a person.
+     */
+    state: 'parked_blocked',
+    checkpoint_ref: 'ckpt:0149:step:6',
+    trigger: 'schedule.weekly_draft',
+    park_reason: 'awaiting_reconcile',
+    end_reason: null,
+    started_at: minutes(RECONCILE_START),
+    ended_at: null,
+    step_cap: 20,
+    degraded: false,
+    settings_version_id: SETTINGS_V3,
+    target_draft_id: null,
+    target_post_id: null,
+    /** Deliberately null: retrying is the one thing this branch exists to refuse. */
+    next_sweep_at: null,
+    variant: 'auth_revoked',
   },
 ];
 
@@ -1355,11 +1877,369 @@ const toolFailureSteps: RunStep[] = [
   }),
 ];
 
+/* ================================================================================================
+ * THE TWO APPROVED CHILDREN
+ *
+ * Shorter than the showcase trace on purpose. These runs exist so the rail is not showing two
+ * scheduled posts whose runs open to an empty screen, and so cost per post has steps to sum — not
+ * to be read closely. The showcase is RUN-0141 and nothing should compete with it.
+ *
+ * Both END AT THE APPROVAL INTERRUPT and go no further, which is the same shape `approve()`
+ * produces: a draft run stops for the human, and clearing it creates a *separate queued publish
+ * run* rather than the draft run carrying on to publish. Writing a `schedule_post` step onto the
+ * end of these would have been the obvious way to show the post being created and would have made
+ * the fixture describe an architecture the code does not implement.
+ * ==============================================================================================*/
+
+const APPROVED_START = -28 * HOUR + 3;
+
+function approvedChildSteps(
+  run: RunId,
+  draft: DraftId,
+  prefix: string,
+  channel: 'linkedin' | 'x',
+  deadline: MinutesFromAnchor,
+): RunStep[] {
+  const id = (seq: number) => stepId(`${prefix}-0${seq}`);
+  return [
+    step({
+      id: id(1), run_id: run, seq: 1, type: 'thinking',
+      label: 'Load slot context',
+      started_at: t(APPROVED_START, 0), latency_ms: 2400, playback_ms: 620,
+      model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
+      tokens_in: 2140, tokens_out: 168, cost_model_usd: 0.0341,
+      thinking_text:
+        'Slot is a ' + (channel === 'linkedin' ? 'LinkedIn' : 'X') + ' post for next week. Pulling ' +
+        'the pillar description, the active writing rules and the tone settings before drafting.',
+    }),
+    step({
+      id: id(2), run_id: run, seq: 2, type: 'tool_call',
+      label: 'retrieve_examples',
+      started_at: t(APPROVED_START, 6), latency_ms: 900, playback_ms: 480,
+      tool_name: 'retrieve_examples',
+      tool_input: { pillar_id: 'PIL-002', channel, k: 3 },
+    }),
+    step({
+      id: id(3), run_id: run, seq: 3, type: 'tool_result',
+      label: 'retrieve_examples → skipped',
+      started_at: t(APPROVED_START, 8), latency_ms: 120, playback_ms: 460,
+      tool_name: 'retrieve_examples',
+      /** N7: retrieval stays off below twenty published posts, because under that there is nothing
+       *  to rank. `skipped` is its own outcome for exactly this — it is not an error and it is not
+       *  a success, and collapsing it into either would hide a live policy. */
+      outcome: 'skipped',
+      tool_output: { skipped: true, reason: 'Retrieval enables at 20 published posts.' },
+    }),
+    step({
+      id: id(4), run_id: run, seq: 4, type: 'action',
+      label: 'Write the draft',
+      started_at: t(APPROVED_START, 11), latency_ms: 19_400, playback_ms: 900,
+      model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
+      tokens_in: 3860, tokens_out: 341, cost_model_usd: 0.0724,
+      produced: { entity_type: 'draft', id: draft },
+      applied_inputs: [
+        { kind: 'setting', id: 'tone.register', label: 'plain, technical, first person plural' },
+        { kind: 'setting', id: 'tone.banned_phrases', label: '4 banned phrases in force' },
+      ],
+    }),
+    step({
+      id: id(5), run_id: run, seq: 5, type: 'guardrail',
+      label: 'L3 output checks',
+      started_at: t(APPROVED_START, 32), latency_ms: 3100, playback_ms: 700,
+      guardrail_event_id: eventId(`GE-${prefix.replace('RS-', '')}-01`),
+    }),
+    step({
+      id: id(6), run_id: run, seq: 6, type: 'action',
+      label: 'Score the draft',
+      started_at: t(APPROVED_START, 37), latency_ms: 5400, playback_ms: 760,
+      model: 'claude-sonnet-5', model_snapshot: 'sonnet-5-2026-04-02',
+      tokens_in: 2980, tokens_out: 214, cost_model_usd: 0.0168,
+      cost_platform_usd: 0,
+    }),
+    step({
+      id: id(7), run_id: run, seq: 7, type: 'interrupt',
+      label: 'Waiting for approval',
+      started_at: t(APPROVED_START, 44), latency_ms: 0, playback_ms: 600,
+      interrupt: {
+        gate: 'draft_approval',
+        awaiting: 'operator',
+        options: ['approve', 'approve_with_edits', 'reject', 'escalate'],
+        deadline,
+      },
+    }),
+  ];
+}
+
+const paybackSteps = approvedChildSteps(
+  RUN_PAYBACK, DRAFT_PAYBACK, 'RS-0145', 'linkedin', minutes(7 * DAY - 25 * HOUR),
+);
+const risersSteps = approvedChildSteps(
+  RUN_RISERS, DRAFT_RISERS, 'RS-0146', 'x', minutes(8 * DAY - 20 * HOUR),
+);
+
+/* ================================================================================================
+ * THE THREE REMAINING FAILURE NARRATIVES (D-041)
+ *
+ * Tool failure already ships as RUN-0144. These are the other three, each written as a run the
+ * drawer can play rather than as a paragraph in a document — the brief grades failure handling
+ * first, and a demonstrated recovery path costs less to believe than a described one.
+ *
+ * All three END BADLY ON PURPOSE and none of them produces a draft. That is the point: the
+ * interesting property of this architecture is not that it drafts, it is what it refuses to do when
+ * something is wrong.
+ * ==============================================================================================*/
+
+/* ---- 1 · POISONED SOURCE — quarantined before any model reads the text --------------------- */
+
+const poisonedSteps: RunStep[] = [
+  step({
+    id: stepId('RS-0147-01'), run_id: RUN_POISONED, seq: 1, type: 'thinking',
+    label: 'Load slot context', started_at: t(POISONED_START, 0),
+    latency_ms: 2300, playback_ms: 600,
+    model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
+    tokens_in: 2050, tokens_out: 151, cost_model_usd: 0.0327,
+    thinking_text:
+      'Compliance-clock slot for next week. The pillar leans on published guidance, so this one ' +
+      'wants a trade source rather than a crew brief.',
+  }),
+  step({
+    id: stepId('RS-0147-02'), run_id: RUN_POISONED, seq: 2, type: 'tool_call',
+    label: 'search_sources', started_at: t(POISONED_START, 5),
+    latency_ms: 1400, playback_ms: 520, tool_name: 'search_sources',
+    tool_input: { query: 'Local Law 97 2030 caps multifamily', allowlist_only: true, k: 4 },
+  }),
+  step({
+    id: stepId('RS-0147-03'), run_id: RUN_POISONED, seq: 3, type: 'tool_result',
+    label: 'search_sources → 2 allowlisted results', started_at: t(POISONED_START, 8),
+    latency_ms: 900, playback_ms: 520, tool_name: 'search_sources', outcome: 'ok',
+    /** The domain allowlist has already done its job here: four results, two from domains the
+     *  client approved. The two it dropped never reach the fetch. */
+    tool_output: { returned: 2, dropped_not_allowlisted: 2 },
+  }),
+  step({
+    id: stepId('RS-0147-04'), run_id: RUN_POISONED, seq: 4, type: 'tool_call',
+    label: 'fetch_source', started_at: t(POISONED_START, 12),
+    latency_ms: 2600, playback_ms: 600, tool_name: 'fetch_source',
+    tool_input: { url: 'https://buildingsnyenergy.example.com/newsletter/week-33' },
+  }),
+  step({
+    id: stepId('RS-0147-05'), run_id: RUN_POISONED, seq: 5, type: 'tool_result',
+    label: 'fetch_source → 1 document', started_at: t(POISONED_START, 17),
+    latency_ms: 1800, playback_ms: 640, tool_name: 'fetch_source', outcome: 'ok',
+    sources: [
+      {
+        url: 'https://buildingsnyenergy.example.com/newsletter/week-33',
+        domain: 'buildingsnyenergy.example.com',
+        title: 'Week 33 — compliance roundup',
+        publisher: 'Buildings NY Energy',
+        fetched_at: t(POISONED_START, 17),
+        /** The summary is what a *reader* would take from the page. The instruction aimed at the
+         *  agent is not in it, and is not shown anywhere, which is the whole point below. */
+        summary:
+          'Roundup of filing deadlines and two enforcement notices. Nothing new on the 2030 caps.',
+        citations: [],
+        /** The rule ran on the fetched text before any model saw it, and this is its verdict. */
+        guard_result: 'fail',
+        why_selected: 'On the source allowlist and covers the compliance pillar weekly.',
+      },
+    ],
+  }),
+  step({
+    id: stepId('RS-0147-06'), run_id: RUN_POISONED, seq: 6, type: 'guardrail',
+    label: 'L1 · instructions hidden in a source', started_at: t(POISONED_START, 21),
+    latency_ms: 900, playback_ms: 900,
+    /** A cheap classifier, and it runs *before* the capable model. Ordering is the defence: a model
+     *  that has already read the injected text cannot un-read it. */
+    model: 'guard-class-sm', model_snapshot: 'guard-class-sm-2026-02-11',
+    tokens_in: 1840, tokens_out: 12, cost_model_usd: 0.0009,
+    guardrail_event_id: eventId('GE-0147-01'),
+  }),
+  step({
+    id: stepId('RS-0147-07'), run_id: RUN_POISONED, seq: 7, type: 'action',
+    label: 'Quarantine the run · flag the domain', started_at: t(POISONED_START, 23),
+    latency_ms: 300, playback_ms: 760,
+    tool_name: 'notify_operator',
+    tool_input: { event: 'injection_quarantine', domain: 'buildingsnyenergy.example.com' },
+    /** No `produced`. The run halts before the drafting node, so there is no draft to point at —
+     *  which is exactly why the queue holds a union and not an array of drafts (D-033). */
+  }),
+];
+
+/* ---- 2 · HOSTILE REPLY — the only failure whose resolution is a human decision -------------- */
+
+const hostileSteps: RunStep[] = [
+  step({
+    id: stepId('RS-0148-01'), run_id: RUN_HOSTILE, seq: 1, type: 'thinking',
+    label: 'Poll posts under 48 hours old', started_at: t(HOSTILE_START, 0),
+    latency_ms: 400, playback_ms: 520,
+    thinking_text:
+      'Two posts are inside the reply window. Checking both for new replies since the last sweep.',
+  }),
+  step({
+    id: stepId('RS-0148-02'), run_id: RUN_HOSTILE, seq: 2, type: 'tool_call',
+    label: 'get_engagement', started_at: t(HOSTILE_START, 2),
+    latency_ms: 1600, playback_ms: 560, tool_name: 'get_engagement',
+    tool_input: { post_id: HOSTILE_REPLY_POST_ID, since_minutes: 30 },
+  }),
+  step({
+    id: stepId('RS-0148-03'), run_id: RUN_HOSTILE, seq: 3, type: 'tool_result',
+    label: 'get_engagement → 4 new replies, 3 negative', started_at: t(HOSTILE_START, 5),
+    latency_ms: 2100, playback_ms: 700, tool_name: 'get_engagement', outcome: 'ok',
+    /**
+     * R8, and this is the collision it exists to resolve. The tool output carries counts, sentiment
+     * labels and reply *ids* — never the reply text. Inbound text from strangers has exactly one
+     * permitted home, the escalation record, and putting it here would leak it onto the highest
+     * traffic screen in the product and into anything that later reads a trace.
+     */
+    tool_output: {
+      replies_new: 4,
+      sentiment: { neutral: 1, negative: 2, severe: 1 },
+      reply_ids: ['r_8841', 'r_8843', 'r_8847', 'r_8850'],
+      note: 'Reply text is held on the escalation record only.',
+    },
+  }),
+  step({
+    id: stepId('RS-0148-04'), run_id: RUN_HOSTILE, seq: 4, type: 'action',
+    label: 'Pause the pillar · What it actually costs', started_at: t(HOSTILE_START, 9),
+    latency_ms: 250, playback_ms: 860,
+    /**
+     * The pillar, not the account and not nothing. The theme is the likely cause, so pausing
+     * everything overreacts and pausing nothing repeats the mistake. The other three pillars keep
+     * publishing on schedule.
+     */
+    tool_input: { pillar_id: PILLAR_COST, scope: 'remaining_scheduled_this_pillar', affected: 2 },
+  }),
+  step({
+    id: stepId('RS-0148-05'), run_id: RUN_HOSTILE, seq: 5, type: 'action',
+    label: 'notify_operator · Slack, then email at 30 minutes',
+    started_at: t(HOSTILE_START, 10), latency_ms: 700, playback_ms: 640,
+    tool_name: 'notify_operator', outcome: 'ok',
+    tool_input: { channel: 'slack', escalate_to_email_after_minutes: 30 },
+    guardrail_event_id: eventId('GE-0148-01'),
+  }),
+  step({
+    id: stepId('RS-0148-06'), run_id: RUN_HOSTILE, seq: 6, type: 'interrupt',
+    label: 'Waiting for you · resume, delete, or keep paused',
+    started_at: t(HOSTILE_START, 11), latency_ms: 0, playback_ms: 700,
+    interrupt: {
+      gate: 'post_publish_intervention',
+      awaiting: 'operator',
+      /**
+       * Three options and no reply. The agent never answers a comment — enforced structurally
+       * rather than by policy, because no reply tool exists in its tool set. `delete_post` is in
+       * `ToolName` and is operator-initiated only.
+       */
+      options: ['resume', 'pull', 'pause_pillar'],
+      deadline: minutes(12 * 60),
+    },
+  }),
+];
+
+/* ---- 3 · AUTH REVOCATION, REDUCED TO ITS AMBIGUOUS RECONCILE (D-041) ------------------------ *
+ *
+ * The full narrative costs three screen surfaces: a reconnect affordance, the parked siblings
+ * releasing on reconnect, and this. `BACKLOG.md` ranks the whole thing as a cut candidate while
+ * separately calling this branch the architecture's most distinctive honesty claim — which points
+ * at a split rather than a verdict. The two records that carry the argument stay; the choreography
+ * goes.
+ *
+ * WHAT THE ARGUMENT IS. The publish call timed out. At the time of writing no platform in scope
+ * honours an idempotency key, so replaying it might post twice, and not replaying it might post
+ * nothing. The system reads the channel back and finds two candidates it cannot tell apart — so it
+ * refuses to guess and parks for a person. Most systems retry here and hope.
+ * -------------------------------------------------------------------------------------------- */
+
+const reconcileSteps: RunStep[] = [
+  step({
+    id: stepId('RS-0149-01'), run_id: RUN_RECONCILE, seq: 1, type: 'guardrail',
+    label: 'L4 · publish only what was approved', started_at: t(RECONCILE_START, 0),
+    latency_ms: 120, playback_ms: 560,
+    guardrail_event_id: eventId('GE-0149-01'),
+  }),
+  step({
+    id: stepId('RS-0149-02'), run_id: RUN_RECONCILE, seq: 2, type: 'tool_call',
+    label: 'publish_post', started_at: t(RECONCILE_START, 2),
+    latency_ms: 30_000, playback_ms: 900, tool_name: 'publish_post',
+    tool_input: {
+      channel: 'linkedin',
+      idempotency_key: 'pub:DRAFT-H016:DV-H016-2',
+      approved_hash: 'fnv1a:…',
+    },
+  }),
+  step({
+    id: stepId('RS-0149-03'), run_id: RUN_RECONCILE, seq: 3, type: 'tool_result',
+    label: 'publish_post → timed out', started_at: t(RECONCILE_START, 34),
+    latency_ms: 30_000, playback_ms: 820, tool_name: 'publish_post', outcome: 'error',
+    /** Ambiguous, not failed. The request may have been received. This is the distinction the
+     *  whole branch exists for. */
+    error: { kind: 'timeout' },
+  }),
+  step({
+    id: stepId('RS-0149-04'), run_id: RUN_RECONCILE, seq: 4, type: 'thinking',
+    label: 'Do not replay — read the channel back first',
+    started_at: t(RECONCILE_START, 66), latency_ms: 200, playback_ms: 900,
+    thinking_text:
+      'A timeout is not a failure. The platform does not honour our idempotency key, so replaying ' +
+      'could publish a second copy under the client’s name. Reading the channel back is the only ' +
+      'safe next step.',
+  }),
+  step({
+    id: stepId('RS-0149-05'), run_id: RUN_RECONCILE, seq: 5, type: 'tool_call',
+    label: 'reconcile_published', started_at: t(RECONCILE_START, 68),
+    latency_ms: 2400, playback_ms: 700, tool_name: 'reconcile_published',
+    tool_input: { channel: 'linkedin', window_minutes: 15, match_on: 'approved_hash' },
+  }),
+  step({
+    id: stepId('RS-0149-06'), run_id: RUN_RECONCILE, seq: 6, type: 'tool_result',
+    label: 'reconcile_published → ambiguous, 2 candidates',
+    started_at: t(RECONCILE_START, 72), latency_ms: 1100, playback_ms: 900,
+    tool_name: 'reconcile_published', outcome: 'error',
+    /**
+     * Two posts in the window, neither an exact hash match — the platform normalises whitespace on
+     * ingest, so a byte comparison cannot settle it. Guessing in either direction is worse than
+     * asking: publish again and the client has two; assume it published and the slot silently
+     * misses.
+     */
+    error: {
+      kind: 'ambiguous_reconcile',
+      /** Whole-minute offsets. Every timestamp in this system is a signed offset from the anchor
+       *  (R2), and this payload is rendered as raw JSON in the trace — a fractional offset like
+       *  `-139.41666666` reads as a floating-point bug rather than as a minute-resolution
+       *  timestamp, which is a distraction on the one step whose payload a reviewer will read. */
+      candidates: [
+        {
+          platform_post_id: 'li_88213004',
+          platform_url: 'https://example.com/linkedin/88213004',
+          published_at: minutes(RECONCILE_START + 1),
+        },
+        {
+          platform_post_id: 'li_88213119',
+          platform_url: 'https://example.com/linkedin/88213119',
+          published_at: minutes(RECONCILE_START + 2),
+        },
+      ],
+    },
+  }),
+  step({
+    id: stepId('RS-0149-07'), run_id: RUN_RECONCILE, seq: 7, type: 'action',
+    label: 'Park for a human · we do not know whether this published',
+    started_at: t(RECONCILE_START, 75), latency_ms: 250, playback_ms: 820,
+    tool_name: 'notify_operator', outcome: 'ok',
+    tool_input: { event: 'awaiting_reconcile', candidates: 2, auto_retry: false },
+    guardrail_event_id: eventId('GE-0149-02'),
+  }),
+];
+
 export const runSteps: RunStep[] = [
   ...cleanSteps,
   ...warnedSteps,
   ...liveSteps,
   ...toolFailureSteps,
+  ...paybackSteps,
+  ...risersSteps,
+  ...poisonedSteps,
+  ...hostileSteps,
+  ...reconcileSteps,
 ];
 
 /**
@@ -1566,5 +2446,168 @@ export const guardrailEvents: GuardrailEvent[] = [
     detail:
       'fetch_source returned 503 three times. Run parked; the hourly sweep will resume it from ' +
       'the checkpoint. No draft was produced.',
+  },
+
+  /**
+   * The two approved children's L3 evaluations.
+   *
+   * R7 again, and it is load-bearing here rather than book-keeping: `GE-0145-01` records that the
+   * banned-claim rule ran against DRAFT-0145 and passed. When the reviewer adds "pays for itself"
+   * and the sweep sends that post back, the pair reads as a rule whose *result changed* because
+   * the configuration changed — which is the claim — rather than as a rule that had never looked
+   * at the post before.
+   */
+  passEvent(
+    'GE-0145-01',
+    RUN_PAYBACK,
+    stepId('RS-0145-05'),
+    DRAFT_PAYBACK,
+    RULE_BANNED_CLAIM,
+    t(APPROVED_START, 33),
+    'No banned phrase present. 104 tokens, inside the LinkedIn limit. No outbound links.',
+  ),
+  passEvent(
+    'GE-0146-01',
+    RUN_RISERS,
+    stepId('RS-0146-05'),
+    DRAFT_RISERS,
+    RULE_BANNED_CLAIM,
+    t(APPROVED_START, 33),
+    'No banned phrase present. 33 tokens, inside the X limit.',
+  ),
+
+  /* ---- the three failure narratives' events ------------------------------------------------ */
+  {
+    /**
+     * THE INJECTION DETECTION, and the one event in the set that deliberately withholds its own
+     * evidence.
+     *
+     * `span_withheld` exists because the operator may be the injection's target: a hidden
+     * instruction is written to be read by whoever reads it, and rendering it in a console to prove
+     * the rule fired would deliver the payload to the person the rule protects. So the operator
+     * gets the verdict, the rule and the domain, and never the text.
+     */
+    id: eventId('GE-0147-01'),
+    run_id: RUN_POISONED,
+    run_step_id: stepId('RS-0147-06'),
+    draft_id: null,
+    rule_id: RULE_INJECTION,
+    trigger_kind: 'guardrail',
+    result: 'fail',
+    evaluated_at: t(POISONED_START, 21),
+    offending_span: null,
+    span_withheld: true,
+    withheld_reason:
+      'The text is withheld. An injected instruction targets whoever reads it, and that could be ' +
+      'you. The domain is flagged and the slot will be redrafted from other sources.',
+    escalation_tier: 'operator',
+    escalation_trigger: 'guardrail_fail',
+    raised_at: t(POISONED_START, 21),
+    acknowledged_at: null,
+    was_unnecessary: null,
+    labelled_at: null,
+    labelled_by: null,
+    source_url: 'https://buildingsnyenergy.example.com/newsletter/week-33',
+    domain_flagged: true,
+    replies: [],
+    decision_deadline: null,
+    detail:
+      'A fetched source carried instructions aimed at the agent rather than at a reader. ' +
+      'Quarantined before drafting; no draft was produced.',
+  },
+  {
+    /**
+     * R8's only permitted home for inbound reply text.
+     *
+     * It is not on the RunStep, not in retrieval, and not in any drafting prompt. Reply text is
+     * untrusted input from strangers, and the moment it enters a prompt it becomes an injection
+     * surface on the one path that reaches a published account.
+     */
+    id: eventId('GE-0148-01'),
+    run_id: RUN_HOSTILE,
+    run_step_id: stepId('RS-0148-05'),
+    draft_id: null,
+    rule_id: null,
+    /** No rule behind it — this is engagement, not a guardrail. `trigger_kind` is what makes the
+     *  null `rule_id` well-formed rather than broken. */
+    trigger_kind: 'engagement',
+    result: 'fail',
+    evaluated_at: t(HOSTILE_START, 9),
+    offending_span: null,
+    span_withheld: false,
+    withheld_reason: null,
+    escalation_tier: 'operator',
+    escalation_trigger: 'negative_engagement',
+    raised_at: t(HOSTILE_START, 9),
+    acknowledged_at: null,
+    was_unnecessary: null,
+    labelled_at: null,
+    labelled_by: null,
+    source_url: null,
+    domain_flagged: false,
+    replies: [
+      {
+        author_handle: '@rk_property',
+        text: 'Easy to say when you are the one billing for the year of monitoring.',
+        sentiment: 'negative',
+        received_at: t(HOSTILE_START, -40),
+      },
+      {
+        author_handle: '@bkbuildings',
+        text: 'Every contractor says this and every one of them still quotes a number by week two.',
+        sentiment: 'negative',
+        received_at: t(HOSTILE_START, -22),
+      },
+      {
+        author_handle: '@sunsetmgmt',
+        text: 'This reads as a way to avoid committing to anything. Owners need numbers to plan.',
+        sentiment: 'severe',
+        received_at: t(HOSTILE_START, -6),
+      },
+    ],
+    /** 12 hours, and it is a real deadline: the pillar stays paused until a person decides, so
+     *  silence costs the client two scheduled posts. */
+    decision_deadline: minutes(12 * 60),
+    detail:
+      'Three negative replies in one poll window on a post under 48 hours old, against a threshold ' +
+      'of 3. The "What it actually costs" pillar is paused; the other three are unaffected.',
+  },
+  passEvent(
+    'GE-0149-01',
+    RUN_RECONCILE,
+    stepId('RS-0149-01'),
+    null,
+    RULE_HASH_MATCH,
+    t(RECONCILE_START, 0),
+    'Text matches the approved version exactly. Cleared to publish.',
+  ),
+  {
+    id: eventId('GE-0149-02'),
+    run_id: RUN_RECONCILE,
+    run_step_id: stepId('RS-0149-07'),
+    draft_id: null,
+    rule_id: null,
+    /** Not a guardrail and not engagement — the publish effector failed ambiguously. */
+    trigger_kind: 'tool_failure',
+    result: 'fail',
+    evaluated_at: t(RECONCILE_START, 75),
+    offending_span: null,
+    span_withheld: false,
+    withheld_reason: null,
+    escalation_tier: 'operator',
+    escalation_trigger: 'tool_failure',
+    raised_at: t(RECONCILE_START, 75),
+    acknowledged_at: null,
+    was_unnecessary: null,
+    labelled_at: null,
+    labelled_by: null,
+    source_url: null,
+    domain_flagged: false,
+    replies: [],
+    decision_deadline: null,
+    detail:
+      'The publish call timed out and the channel read back two candidates that cannot be told ' +
+      'apart. We do not know whether this published. Parked rather than retried — replaying could ' +
+      'post a second copy under the client’s name.',
   },
 ];

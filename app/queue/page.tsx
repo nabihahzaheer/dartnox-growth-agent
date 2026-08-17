@@ -36,7 +36,8 @@ import type {
   Settings,
 } from '@/lib/types';
 import { Rail } from '@/components/Rail';
-import { QueueRow } from '@/components/queue/QueueRow';
+import { QueueRow, draftOf, itemId } from '@/components/queue/QueueRow';
+import { ErrorPanel, NotFound } from '@/components/ErrorState';
 import { DecisionDialogs } from '@/components/queue/DecisionDialogs';
 
 export default function QueuePage() {
@@ -116,9 +117,14 @@ export default function QueuePage() {
    */
   const decide = useCallback(
     async (decision: ReviewDecision, describe: string) => {
-      if (!current || current.kind !== 'draft') return;
-      const draft = current.draft;
-      setBusy(draft.id);
+      /**
+       * Two of the three arms are decidable and one is not: a parked or quarantined run has no
+       * draft to decide against, and clearing it is a different action. `draftOf` is the one place
+       * that branch lives, so a fourth arm would not mean auditing every handler.
+       */
+      const draft = current ? draftOf(current) : null;
+      if (!draft) return;
+      setBusy(itemId(current!));
       try {
         await submitReview(draft.id, draft.current_version_id, decision, {
           // Derived from the draft and the decision, so a double click replays rather than
@@ -154,11 +160,16 @@ export default function QueuePage() {
 
       if (e.key === 'j') select(Math.min(selected + 1, items.length - 1));
       if (e.key === 'k') select(Math.max(selected - 1, 0));
-      if (e.key === 'a' && current?.kind === 'draft') {
+
+      /** Decidable means "has a draft behind it" — the draft arm and the returned-post arm. A
+       *  parked run is skipped by the verbs rather than by the cursor, so `j`/`k` still move
+       *  through everything. */
+      const decidable = current ? draftOf(current) !== null : false;
+      if (e.key === 'a' && decidable) {
         void decide({ kind: 'approve' }, 'Approved · scheduled and queued to publish');
       }
-      if (e.key === 'r' && current?.kind === 'draft') setDialog('reject');
-      if (e.key === 'e' && current?.kind === 'draft') setDialog('edit');
+      if (e.key === 'r' && decidable) setDialog('reject');
+      if (e.key === 'e' && decidable) setDialog('edit');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -175,7 +186,9 @@ export default function QueuePage() {
           <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-1">
             <span className="text-[13px] font-bold">Queue</span>
             <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-              {loading ? 'Loading…' : `${items.length} waiting on you`}
+              {/* Three states. `loading ? … : count` claimed "0 waiting on you" on a failed
+                  load — asserting an empty queue when the queue is simply unknown. */}
+              {loading ? 'Loading…' : error ? 'could not load' : `${items.length} waiting on you`}
             </span>
             <span
               className="ml-auto font-mono text-[10px]"
@@ -201,19 +214,27 @@ export default function QueuePage() {
 
             {loading && <LoadingRows />}
 
-            {!loading && items.length === 0 && !error && <EmptyQueue />}
+            {!loading && items.length === 0 && !error && <NotFound
+                title="Nothing waiting"
+                detail="The next drafting batch runs Wednesday 06:00."
+              />}
 
             {!loading &&
               items.map((item, index) => (
                 <QueueRow
-                  key={item.kind === 'draft' ? item.draft.id : item.run.id}
+                  key={itemId(item)}
                   item={item}
                   threshold={settings?.score_threshold ?? 0.85}
                   selected={index === selected}
-                  busy={busy === (item.kind === 'draft' ? item.draft.id : null)}
+                  busy={busy === itemId(item)}
                   onSelect={() => select(index)}
                   onApprove={() =>
-                    void decide({ kind: 'approve' }, 'Approved · scheduled and queued to publish')
+                    void decide(
+                      { kind: 'approve' },
+                      item.kind === 'post'
+                        ? 'Approved again · rescheduled, and the approval binds the current rules'
+                        : 'Approved · scheduled and queued to publish',
+                    )
                   }
                   onEdit={() => {
                     select(index);
@@ -234,13 +255,13 @@ export default function QueuePage() {
           </div>
         </div>
 
-        {settings && current?.kind === 'draft' && (
+        {settings && current && draftOf(current) && (
           <DecisionDialogs
             // Remount on a different draft, so its state initialises from that draft rather than
             // being reset in an effect.
-            key={current.draft.id}
+            key={draftOf(current)!.id}
             open={dialog}
-            draft={current.draft}
+            draft={draftOf(current)!}
             reasons={settings.rejection_reason_set}
             onClose={() => setDialog(null)}
             onReject={(code: RejectionReasonCode, note, label) =>
@@ -276,43 +297,4 @@ function LoadingRows() {
   );
 }
 
-function EmptyQueue() {
-  return (
-    <div className="py-12 text-center">
-      <p className="text-[13px] font-medium">Nothing waiting</p>
-      <p className="mx-auto mt-1 max-w-sm text-[13px]" style={{ color: 'var(--text-muted)' }}>
-        The next drafting batch runs Wednesday 06:00.
-      </p>
-    </div>
-  );
-}
 
-function ErrorPanel({ error, onRetry }: { error: ConsoleError; onRetry: () => void }) {
-  const copy: Record<ConsoleError['kind'], string> = {
-    not_found: 'That draft no longer exists.',
-    /** The one that earns its place: an approval binds a version, so deciding against a stale one
-     *  would break the chain the publish-time hash check depends on. */
-    version_conflict: 'This draft changed while you had it open. Reload before deciding.',
-    guardrail_block: 'A guardrail blocked that.',
-    forbidden: 'That control is fixed and cannot be changed.',
-    rate_limited: 'Too many requests. Try again shortly.',
-    unavailable: 'Could not reach the agent runtime.',
-    timeout: 'Timed out — we do not know whether it landed. Reload before retrying.',
-  };
-  return (
-    <div
-      className="rounded border px-3 py-2.5"
-      style={{ borderColor: 'var(--state-blocked)', background: 'var(--state-blocked-bg)' }}
-    >
-      <p className="text-[13px] font-medium">{copy[error.kind]}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="mt-2 rounded border px-2.5 py-1 text-[13px]"
-        style={{ borderColor: 'var(--border-strong)' }}
-      >
-        Reload
-      </button>
-    </div>
-  );
-}

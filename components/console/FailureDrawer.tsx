@@ -24,18 +24,49 @@ import { useEffect, useRef, useState } from 'react';
 import { isFailureActive, setFailure } from '@/lib/agentClient';
 
 type Switch = {
-  id: 'tool_failure' | 'next_read_fails';
+  id: 'tool_failure' | 'next_read_fails' | 'poisoned_source' | 'hostile_reply' | 'auth_revoked';
   label: string;
   effect: string;
 };
 
+/**
+ * Four narratives plus one transport fault. Capped deliberately (D-020) — the panel is a way to
+ * make recovery paths observable, not a control surface that grows.
+ *
+ * The four run switches are ordered by what they demonstrate rather than alphabetically: a retry
+ * loop, a refusal to draft, a decision only a human can take, and a refusal to guess.
+ */
 const SWITCHES: Switch[] = [
   {
     id: 'tool_failure',
-    label: 'Next run hits a failing source',
+    label: 'A source stops responding',
     effect:
-      'Run now streams the tool-failure variant instead: three attempts with jittered backoff, ' +
-      'then the run parks and the hourly sweep picks it up.',
+      'Three attempts with jittered backoff, then the run parks and the hourly sweep picks it up. ' +
+      'Transient, so the clock releases it rather than a person.',
+  },
+  {
+    id: 'poisoned_source',
+    label: 'A source carries instructions aimed at the agent',
+    effect:
+      'The input guardrail scores the fetched page before any model reads it, and quarantines the ' +
+      'run before drafting. You see the rule, the verdict and the domain — never the text, because ' +
+      'you may be its target. No draft is produced, so it reaches the queue as a run.',
+  },
+  {
+    id: 'hostile_reply',
+    label: 'A published post turns hostile',
+    effect:
+      'Three negative replies inside one poll window pause that pillar’s remaining scheduled ' +
+      'posts, while the other three pillars keep running. You get the replies and three options: ' +
+      'resume, delete, or keep it paused. The agent never replies — there is no reply tool.',
+  },
+  {
+    id: 'auth_revoked',
+    label: 'A publish call times out',
+    effect:
+      'The platform honours no idempotency key, so replaying could post twice. The run reads the ' +
+      'channel back, finds two candidates it cannot tell apart, and parks rather than guessing. ' +
+      'It does not retry — that is the point.',
   },
   {
     id: 'next_read_fails',
@@ -49,9 +80,21 @@ const SWITCHES: Switch[] = [
 export function FailureDrawer() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
-  /** Mirrors the client's switch set so the checkboxes reflect real state rather than their own.
-   *  The client is the source of truth; this is a view of it. */
-  const [armed, setArmed] = useState<Record<string, boolean>>({});
+  /**
+   * Mirrors the client's switch set, and now actually does.
+   *
+   * This was `useState({})`, which meant the comment above it was false: the switches live in
+   * module state and survive navigation, so leaving the console and coming back re-mounted the
+   * drawer showing every box unchecked while the client still had one armed. Clicking it then
+   * *disarmed* the switch the operator was trying to arm.
+   *
+   * The lazy initialiser reads the client on mount, which is what makes this a view of the truth
+   * rather than a second copy of it. Found by arming a switch, navigating away and back, and
+   * wondering why nothing failed.
+   */
+  const [armed, setArmed] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(SWITCHES.map((s) => [s.id, isFailureActive(s.id)])),
+  );
 
   useEffect(() => {
     const dialog = dialogRef.current;

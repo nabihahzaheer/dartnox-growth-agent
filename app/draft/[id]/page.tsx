@@ -32,6 +32,7 @@ import {
 import type { ConsoleError, DraftId } from '@/lib/types';
 import { formatDateTime, formatRelative } from '@/lib/time';
 import { Badge, guardrailTone } from '@/components/Badge';
+import { BackToQueue, ErrorPanel, NotFound } from '@/components/ErrorState';
 import { Rail } from '@/components/Rail';
 import { StepRow } from '@/components/console/StepRow';
 
@@ -90,7 +91,32 @@ export default function DraftPage({ params }: { params: Promise<{ id: string }> 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-4">
             {loading && <Skeleton />}
-            {error && <ErrorPanel error={error} />}
+
+            {/*
+              `not_found` is an empty state, not a failure — D-031's own table says so, and this
+              screen was rendering it in a red blocked-state panel. A draft that does not exist is
+              not a fault: nothing broke and nothing needs retrying, so colouring it as a failure
+              points the operator at the wrong problem.
+
+              Every other kind is a real failure and now offers a retry. Previously this screen had
+              none, so a transient error on this route was unrecoverable without the browser's own
+              reload button.
+            */}
+            {error?.kind === 'not_found' && (
+              <NotFound
+                title="No draft with that id"
+                detail="It may have been part of a run that was halted before it produced one."
+              >
+                <BackToQueue />
+              </NotFound>
+            )}
+
+            {error && error.kind !== 'not_found' && (
+              <ErrorPanel error={error} onRetry={() => setNonce((n) => n + 1)}>
+                <BackToQueue />
+              </ErrorPanel>
+            )}
+
             {detail && <Detail detail={detail} onLabel={label} />}
           </div>
         </div>
@@ -358,18 +384,3 @@ function Skeleton() {
   );
 }
 
-function ErrorPanel({ error }: { error: ConsoleError }) {
-  return (
-    <div
-      className="rounded border px-3 py-2.5"
-      style={{ borderColor: 'var(--state-blocked)', background: 'var(--state-blocked-bg)' }}
-    >
-      <p className="text-[13px] font-medium">
-        {error.kind === 'not_found' ? 'No draft with that id.' : 'Could not load this draft.'}
-      </p>
-      <Link href="/queue" className="mt-2 inline-block text-[13px]" style={{ color: 'var(--accent-text)' }}>
-        Back to the queue
-      </Link>
-    </div>
-  );
-}

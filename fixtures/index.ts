@@ -50,6 +50,7 @@ import {
   guardrailEvents,
   runSteps,
   runs,
+  scheduledPosts,
 } from './pipeline.ts';
 import {
   historyApprovals,
@@ -89,7 +90,14 @@ export const fixtures: FixtureSet = {
   calendarSlots: [...calendarSlots, ...historySlots],
   drafts: [...drafts, ...historyDrafts],
   approvals: [...approvals, ...historyApprovals],
-  posts: historyPosts,
+  /**
+   * The two scheduled posts first, then everything that already published.
+   *
+   * This collection used to be `historyPosts` alone, which meant every Post in the set was
+   * `published` and the settings screen's banned-claim sweep had nothing to sweep on a cold load.
+   * See the "ALREADY APPROVED" note in `pipeline.ts` for why there are two rather than one.
+   */
+  posts: [...scheduledPosts, ...historyPosts],
   metricSnapshots: historySnapshots,
   guardrailRules,
   guardrailEvents: [...guardrailEvents, ...historyEvents],
