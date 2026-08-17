@@ -103,10 +103,7 @@ export default function MetricsPage() {
             <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
               Rolling 4 weeks · monthly where the denominator needs it
             </span>
-            <span className="w-full text-[11px]" style={{ color: 'var(--text-faint)' }}>
-              Every figure is computed from the records on each render, so a decision in the queue
-              moves these. Nothing here is stored.
-            </span>
+
           </div>
         </div>
 
@@ -180,7 +177,7 @@ export default function MetricsPage() {
                 {/* ---- THE DRILL-DOWN ------------------------------------------------------- */}
                 <Section
                   title="Edit rate by settings version"
-                  caption="Every draft records the settings it was written under, so a change can be judged by what happened after it. This is how a well-meant rule that made the output worse gets caught."
+                  caption="Edit rate before and after each settings change."
                 >
                   {/* A chart with no bars renders as an empty box, which reads as broken rather
                       than as "nothing to show yet". Both charts filter their own rows — cohorts
@@ -188,8 +185,7 @@ export default function MetricsPage() {
                       arrive empty. */}
                   {cohorts.length === 0 ? (
                     <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-                      No decisions recorded under any settings version yet. This fills in once the
-                      first drafts have been approved or rejected.
+                      No decisions yet.
                     </p>
                   ) : (
                     <BarChart
@@ -241,12 +237,11 @@ export default function MetricsPage() {
                 {/* ---- SECOND CHART -------------------------------------------------------- */}
                 <Section
                   title="Guardrail block rate by layer"
-                  caption="Passing evaluations are recorded, which is why this has a denominator at all. A rule that stopped being evaluated would otherwise look exactly like a rule passing everything — and the alarm here is a sudden drop, not a high value."
+                  caption="Share of evaluations that warned or blocked. Watch for sudden drops."
                 >
                   {layers.length === 0 ? (
                     <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-                      No guardrail evaluations in this window. Passing evaluations are recorded too,
-                      so this being empty means nothing ran — not that nothing was caught.
+                      No evaluations in this window.
                     </p>
                   ) : (
                     <BarChart
@@ -262,9 +257,7 @@ export default function MetricsPage() {
                 </Section>
 
                 <p className="pt-1 text-[11px]" style={{ color: 'var(--text-faint)' }}>
-                  Four further metrics — queue age p95, guardrail block rate in aggregate, injection
-                  detections and time-to-decision by pillar — are defined in the descriptor file and
-                  not surfaced here. That is a scoping decision, not an omission.
+                  Four more metrics are defined and not shown here.
                 </p>
               </>
             )}

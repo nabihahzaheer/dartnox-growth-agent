@@ -957,13 +957,22 @@ export const runs: Run[] = [
     id: RUN_LIVE,
     client_id: CLIENT_ID,
     type: 'draft',
-    /** No parent: triggered by hand a few minutes ago, not by the Wednesday batch. `manual.run_now`
-     *  is also §6b's unlock — it is what makes every "next draft" setting demonstrable, because
-     *  without a run on demand a tone change takes effect at a moment nobody is watching. */
-    parent_run_id: null,
+    parent_run_id: RUN_PARENT,
     state: 'running',
     checkpoint_ref: 'ckpt:0143:step:6',
-    trigger: 'manual.run_now',
+    /**
+     * `schedule.weekly_draft`, not `manual.run_now`.
+     *
+     * This run is already in flight when the console opens, and its trigger made the header read
+     * "Started by you" — for a run the operator had not started. So the one screen whose job is to
+     * explain what the agent is doing opened by telling you a thing you knew to be false, and the
+     * obvious next question was "why is it running, I did not press anything".
+     *
+     * It is a child of the Wednesday batch like the others, which is the honest answer: the agent
+     * runs on a schedule, and you arrive mid-flight. `manual.run_now` still exists and is what the
+     * Start-a-new-run button produces.
+     */
+    trigger: 'schedule.weekly_draft',
     park_reason: null,
     end_reason: null,
     /** Four minutes ago. The console must be able to attach to this rather than only to runs it

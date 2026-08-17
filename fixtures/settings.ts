@@ -290,9 +290,7 @@ export const settings: Settings = {
   auto_approve: {
     enabled: false,
     locked: true,
-    lock_reason:
-      'Off for v1 by design. Every post is read and approved by a person. Unlocking requires all ' +
-      'six client-level prerequisites below, and each draft still qualifies individually.',
+    lock_reason: 'Off for v1. Unlocking needs all six prerequisites below.',
     /**
      * A-09 lists ten prerequisites. Only these six are client-level and static; the other four are
      * per-draft (score above threshold, all guardrails pass, not degraded, pillar not

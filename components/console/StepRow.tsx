@@ -313,8 +313,7 @@ export function StepRow({
                       </li>
                     ))}
                     <li className="text-[11px] text-[var(--text-faint)]">
-                      Held on this escalation only. Reply text never enters retrieval or a drafting
-                      prompt, and the agent has no reply tool.
+                      Held here only. The agent has no reply tool.
                     </li>
                   </ul>
                 )}
@@ -355,8 +354,7 @@ export function StepRow({
                   ))}
                 </ol>
                 <p className="mt-1 text-[11px] text-[var(--text-faint)]">
-                  Posting times come from the client’s best historical slots, not from a model call.
-                  Nothing drafts until the owner approves this.
+                  Nothing drafts until the owner approves.
                 </p>
               </Field>
             )}
@@ -379,10 +377,8 @@ export function StepRow({
               <Field label={`waiting on ${step.interrupt.awaiting}`}>
                 <p className="text-[13px] text-[var(--text-muted)]">
                   {step.interrupt.awaiting === 'stakeholder'
-                    ? 'The owner approves this by email, through a signed expiring link. They have no console account.'
-                    : 'You can ' +
-                      step.interrupt.options.map((o) => o.replace(/_/g, ' ')).join(', ') +
-                      ' — all of it from the queue.'}
+                    ? 'Approved by the owner by email.'
+                    : 'Approve, edit, reject or escalate from the queue.'}
                 </p>
 
                 {step.interrupt.awaiting === 'operator' && onDecide && (

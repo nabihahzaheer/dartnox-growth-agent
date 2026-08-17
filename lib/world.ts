@@ -732,7 +732,7 @@ export function addBannedClaim(
       state: 'invalidated',
       /** Defined for this case only. The queue row renders it verbatim — a post that reappears
        *  without saying which rule sent it back is indistinguishable from a bug. */
-      invalidated_reason: `Contains the banned phrase "${trimmed}". The approval bound the text, not the rules, so it no longer covers this post.`,
+      invalidated_reason: `Contains "${trimmed}".`,
     });
     invalidated.push(post.id);
 

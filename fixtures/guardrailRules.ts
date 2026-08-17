@@ -71,14 +71,10 @@ export const guardrailRules: GuardrailRule[] = [
      */
     is_fixed: true,
     display_name: 'Instructions hidden in a source',
-    description:
-      'Scores every fetched page for text aimed at the agent rather than at a reader. A hit ' +
-      'quarantines the run before drafting and flags the domain. You see the verdict and the ' +
-      'domain, never the text.',
+    description: 'Scores fetched pages for text aimed at the agent. A hit quarantines the run.',
     is_enabled: true,
     disabled_at: null,
-    fixed_reason:
-      'Cannot be tuned down. A missed injection is not recoverable, and you may be its target.',
+    fixed_reason: 'A missed injection is not recoverable.',
     default_config: { classifier: 'guard-class-sm', threshold: 0.6, action_on_hit: 'quarantine' },
     effect_timing: 'next_draft',
   },
@@ -90,10 +86,7 @@ export const guardrailRules: GuardrailRule[] = [
     severity: 'block',
     is_fixed: false,
     display_name: 'Source must be on the allowlist',
-    description:
-      'The agent only reads from domains on the source allowlist. The list is built with you ' +
-      'during onboarding; it is not a blocklist, because a blocklist only forbids what someone ' +
-      'already thought of.',
+    description: 'The agent reads only from allowlisted domains.',
     is_enabled: true,
     disabled_at: null,
     fixed_reason: '',
@@ -112,7 +105,7 @@ export const guardrailRules: GuardrailRule[] = [
     severity: 'block',
     is_fixed: false,
     display_name: 'Channel length limit',
-    description: 'Hard platform limits. No model needed — this is counting.',
+    description: 'Hard platform limits. No model needed.',
     is_enabled: true,
     disabled_at: null,
     fixed_reason: '',
@@ -127,10 +120,7 @@ export const guardrailRules: GuardrailRule[] = [
     severity: 'block',
     is_fixed: false,
     display_name: 'Outbound links must be allowlisted',
-    description:
-      'Separate from the source allowlist. Where the agent may read and where a published post ' +
-      'may link are different questions, and conflating them once made posts unable to link to ' +
-      'your own site.',
+    description: 'Where a post may link. Separate from the source allowlist.',
     is_enabled: true,
     disabled_at: null,
     fixed_reason: '',
@@ -151,9 +141,7 @@ export const guardrailRules: GuardrailRule[] = [
     severity: 'block',
     is_fixed: false,
     display_name: 'Banned phrases',
-    description:
-      'Exact phrases you have ruled out, matched literally against the draft. Editing the list ' +
-      're-validates anything already scheduled.',
+    description: 'Exact phrases you have ruled out. Editing re-checks scheduled posts.',
     is_enabled: true,
     disabled_at: null,
     fixed_reason: '',
@@ -172,12 +160,10 @@ export const guardrailRules: GuardrailRule[] = [
      *  noticing it afterwards. */
     is_fixed: true,
     display_name: 'Regulated or legal claims',
-    description:
-      'Statements about compliance obligations, penalties or eligibility. Wording varies too ' +
-      'much for a phrase list, so this is a classifier. A hit goes to the owner, not to you.',
+    description: 'Compliance, penalty and eligibility claims. A hit goes to the owner.',
     is_enabled: true,
     disabled_at: null,
-    fixed_reason: 'Cannot be tuned down. A published regulated claim cannot be un-published.',
+    fixed_reason: 'A published regulated claim cannot be withdrawn.',
     default_config: { classifier: 'claim-class', threshold: 0.5, tier: 'stakeholder' },
     effect_timing: 'next_guardrail_run',
   },
@@ -192,10 +178,7 @@ export const guardrailRules: GuardrailRule[] = [
     severity: 'warn',
     is_fixed: false,
     display_name: 'Numbers need a source',
-    description:
-      'Every quantitative claim about the world or about performance is checked against the ' +
-      'sources the draft actually used. "Three tips" needs no source; "payback in four years" ' +
-      'does.',
+    description: 'Every figure is checked against the sources the draft cited.',
     is_enabled: true,
     disabled_at: null,
     fixed_reason: '',
@@ -213,9 +196,7 @@ export const guardrailRules: GuardrailRule[] = [
     severity: 'warn',
     is_fixed: false,
     display_name: 'Too close to something recent',
-    description:
-      'Compares each draft against what you published in the last 30 days on that channel, and ' +
-      'against the other drafts in the same batch. A warning shows both side by side.',
+    description: 'Compares against the last 30 days and the rest of the batch.',
     is_enabled: true,
     disabled_at: null,
     fixed_reason: '',
@@ -230,9 +211,7 @@ export const guardrailRules: GuardrailRule[] = [
     severity: 'block',
     is_fixed: false,
     display_name: 'Personal details',
-    description:
-      'Names, addresses and unit numbers. A field-notes post about a specific building is the ' +
-      'obvious way this gets tripped, which is why it blocks rather than warns.',
+    description: 'Names, addresses and unit numbers.',
     is_enabled: true,
     disabled_at: null,
     fixed_reason: '',
@@ -257,9 +236,7 @@ export const guardrailRules: GuardrailRule[] = [
     is_enabled: false,
     disabled_at: minutes(-11 * 24 * 60),
     display_name: 'Competitor mentions',
-    description:
-      'Flags drafts naming another contractor. Off since the 6th — it was firing on generic ' +
-      'trade references.',
+    description: 'Flags drafts naming another contractor.',
     fixed_reason: '',
     default_config: { classifier: 'competitor-class', threshold: 0.5 },
     effect_timing: 'next_guardrail_run',
@@ -277,14 +254,10 @@ export const guardrailRules: GuardrailRule[] = [
     /** See the header note: the third fixed rule, on its merits. */
     is_fixed: true,
     display_name: 'Publish only what was approved',
-    description:
-      'The text about to go out is hashed and compared against the version you approved. A ' +
-      'mismatch parks the post for investigation rather than publishing either version.',
+    description: 'Compares the outgoing text against the version you approved.',
     is_enabled: true,
     disabled_at: null,
-    fixed_reason:
-      'Cannot be switched off. This is the check that makes "a human approved every published ' +
-      'post" a fact rather than an intention.',
+    fixed_reason: 'This is what makes human approval a fact.',
     default_config: { algorithm: 'sha256' },
     effect_timing: 'next_publish',
   },
@@ -296,7 +269,7 @@ export const guardrailRules: GuardrailRule[] = [
     severity: 'block',
     is_fixed: false,
     display_name: 'Channel is connected',
-    description: 'Nothing publishes to a channel whose login has expired or been revoked.',
+    description: 'Nothing publishes to a disconnected channel.',
     is_enabled: true,
     disabled_at: null,
     fixed_reason: '',
@@ -313,9 +286,7 @@ export const guardrailRules: GuardrailRule[] = [
     severity: 'block',
     is_fixed: false,
     display_name: 'Inside the posting window',
-    description:
-      'A post more than two hours past its slot escalates instead of publishing. Out-of-window ' +
-      'is the one L4 failure that reschedules itself rather than needing you.',
+    description: 'More than two hours late escalates instead of publishing.',
     is_enabled: true,
     disabled_at: null,
     fixed_reason: '',

@@ -134,7 +134,7 @@ export default function SettingsPage() {
           style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
         >
           <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="text-[13px] font-bold">Settings &amp; guardrails</span>
+            <span className="text-[13px] font-bold">Settings</span>
             {/* Three states, not two. The first version read `data ? version : 'Loading…'`, which
                 left the header saying "Loading…" underneath a rendered error panel — caught by
                 looking at the page with the read deliberately broken, which is the only way it
@@ -146,13 +146,7 @@ export default function SettingsPage() {
                   ? 'could not load'
                   : 'Loading…'}
             </span>
-            <span className="ml-auto font-mono text-[10px]" style={{ color: 'var(--text-faint)' }}>
-              every change is a versioned event
-            </span>
-            <span className="w-full text-[11px]" style={{ color: 'var(--text-faint)' }}>
-              What the agent may write and what stops it. Each control says when it takes effect —
-              most apply to the next run, two apply immediately.
-            </span>
+
           </div>
         </div>
 
@@ -177,7 +171,7 @@ export default function SettingsPage() {
                 <Threshold data={data} busy={busy} onWrite={write} />
                 <Rules
                   title="Approval rules"
-                  caption="What forces an item in front of a person. In v1 none of these change whether a draft is seen — every post is reviewed regardless — they change how it arrives: flagged, sorted up, and with the approve control removed where a guardrail failed."
+                  caption="What forces an item in front of a person."
                   rows={data.settings.approval_rules}
                   kind="approval_rule"
                   standing={data.settings.phase === 'v1_all_human'}
@@ -186,7 +180,7 @@ export default function SettingsPage() {
                 />
                 <Rules
                   title="Escalation triggers"
-                  caption="Which conditions raise an escalation, and to whom. Operator-tier escalations change how an item arrives; owner-tier ones reach someone who otherwise sees only the calendar, so those genuinely change who is involved."
+                  caption="What raises an escalation, and to whom."
                   rows={data.settings.escalation_triggers}
                   kind="escalation_trigger"
                   busy={busy}
@@ -198,13 +192,8 @@ export default function SettingsPage() {
                 <VersionHistory data={data} />
 
                 <p className="pt-1 text-[11px]" style={{ color: 'var(--text-faint)' }}>
-                  This screen is deliberately the thinnest of the five. The brief names four
-                  controls — tone, thresholds, approval rules, escalation triggers — and its closing
-                  instruction says to choose an alive console over a fifth polished screen. Cadence,
-                  posting windows, the two allowlists, approved entities, terminology, the budget
-                  cap, auto-pull, the negative-engagement threshold, the rejection-reason set and the
-                  weekend contact are all modelled and are not rendered here. That is a scoping
-                  decision, and the README says so.
+                  Cadence, allowlists, entities, terminology, budget and alerting are modelled and
+                  not shown here. See the README.
                 </p>
               </>
             )}
@@ -311,7 +300,7 @@ function Tone({
   return (
     <Section
       title="Tone"
-      caption="How the agent writes, and what it may not say. The register feeds the drafting prompt; the banned phrases are matched literally by a guardrail, with no model involved."
+      caption="How the agent writes, and what it may not say."
     >
       <div className="space-y-3">
         <div>
@@ -335,7 +324,7 @@ function Tone({
               onClick={() =>
                 void onWrite('register', async () => {
                   await updateSettings({ kind: 'tone_register', value: register });
-                  return 'Register saved · it applies from the next draft, not to anything already written';
+                  return 'Register saved · applies from the next draft';
                 })
               }
               className="shrink-0 rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-30"
@@ -345,7 +334,7 @@ function Tone({
             </button>
           </div>
           <p className="mt-1 text-[11px]" style={{ color: 'var(--text-faint)' }}>
-            Writing as “{settings.tone.person}”. Sample: {settings.tone.sample}
+            Writes as “{settings.tone.person}”.
           </p>
         </div>
 
@@ -388,8 +377,8 @@ function Tone({
                   const result = await addBannedPhrase(trimmed);
                   setPhrase('');
                   return result.invalidated === 0
-                    ? `“${trimmed}” banned · ${result.scanned} scheduled posts re-validated, none affected`
-                    : `“${trimmed}” banned · ${result.invalidated} of ${result.scanned} scheduled posts failed re-validation and are back in the queue`;
+                    ? `“${trimmed}” banned · no scheduled posts affected`
+                    : `“${trimmed}” banned · ${result.invalidated} of ${result.scanned} posts back in the queue`;
                 })
               }
               className="shrink-0 rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-30"
@@ -406,20 +395,14 @@ function Tone({
           */}
           <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
             {trimmed.length === 0 ? (
-              <>
-                {scheduledCount} {scheduledCount === 1 ? 'post is' : 'posts are'} scheduled and not
-                yet published. Adding a phrase re-validates{' '}
-                {scheduledCount === 1 ? 'it' : 'all of them'}, and any post containing it returns to
-                the queue.
-              </>
+              <>Re-checks {scheduledCount} scheduled posts.</>
             ) : alreadyBanned ? (
-              <>Already on the list — nothing to add.</>
+              <>Already banned.</>
             ) : matches === 0 ? (
-              <>Appears in none of the {scheduledCount} scheduled posts. Nothing would come back.</>
+              <>No match in {scheduledCount} scheduled posts.</>
             ) : (
               <span style={{ color: 'var(--state-awaiting)' }}>
-                Appears in {matches} of {scheduledCount} scheduled posts. Banning it returns{' '}
-                {matches === 1 ? 'that post' : 'those posts'} to the queue for a fresh decision.
+                Matches {matches} of {scheduledCount} scheduled posts — {matches === 1 ? 'it returns' : 'they return'} to the queue.
               </span>
             )}
           </p>
@@ -466,7 +449,7 @@ function Threshold({
   return (
     <Section
       title="Score threshold"
-      caption="The composite score a draft has to clear to arrive unflagged. It changes how an item is presented, never whether it is reviewed — and lowering it cannot bypass a guardrail, because L3 blocks independently of the score."
+      caption="Score a draft must clear to arrive unflagged."
     >
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
@@ -496,7 +479,7 @@ function Threshold({
           onClick={() =>
             void onWrite('threshold', async () => {
               await updateSettings({ kind: 'score_threshold', value });
-              return `Threshold now ${value.toFixed(2)} · the queue has re-sorted and review flags have moved`;
+              return `Threshold now ${value.toFixed(2)} · queue re-sorted`;
             })
           }
           className="shrink-0 rounded px-2.5 py-1 text-[13px] font-medium disabled:opacity-30"
@@ -545,16 +528,14 @@ function Threshold({
         })}
         {awaitingDecision.length === 0 && (
           <li className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-            Nothing is waiting on a decision, so moving this changes nothing you can see right now.
+            Nothing waiting.
           </li>
         )}
       </ul>
 
       {willChange && (
         <p className="mt-2 text-[11px]" style={{ color: 'var(--state-awaiting)' }}>
-          Saving would flag {flaggedNow.length} of {awaitingDecision.length} waiting drafts, up from{' '}
-          {flaggedCommitted.length}. Flagged items sort to the top of the queue with the reason
-          named.
+          Would flag {flaggedNow.length} of {awaitingDecision.length}, up from {flaggedCommitted.length}.
         </p>
       )}
     </Section>
@@ -603,7 +584,7 @@ function Rules({
           >
             <span className="text-[13px] font-medium">Every post is reviewed by a person</span>
             <span className="ml-auto">
-              <Locked reason="The v1 invariant. Not a condition, so it has no toggle — it is the phase the client is in, and leaving it is what ends v1." />
+              <Locked reason="Not a condition, so it has no toggle." />
             </span>
           </li>
         )}
@@ -620,8 +601,8 @@ function Rules({
                 <Locked
                   reason={
                     row.tier === 'stakeholder'
-                      ? 'Owner-tier. A false negative here is not recoverable.'
-                      : 'A guardrail failure always blocks. Making this optional would make the guardrail advisory.'
+                      ? 'Not recoverable if missed.'
+                      : 'A failure always blocks.'
                   }
                 />
               ) : (
@@ -637,7 +618,7 @@ function Rules({
                           trigger: row.trigger,
                           enabled: !row.enabled,
                         });
-                        return `${row.trigger.replace(/_/g, ' ')} ${!row.enabled ? 'enabled' : 'disabled'} · recorded as a new settings version`;
+                        return `${row.trigger.replace(/_/g, ' ')} ${!row.enabled ? 'enabled' : 'disabled'}`;
                       })
                     }
                   />
@@ -668,16 +649,16 @@ function Guardrails({
   onWrite: (key: string, run: () => Promise<string>) => Promise<void>;
 }) {
   const layers: { layer: GuardrailRule['layer']; label: string }[] = [
-    { layer: 'L1', label: 'input · on fetched sources, before any model reads them' },
-    { layer: 'L2', label: 'generation · shape of the output, no model needed' },
-    { layer: 'L3', label: 'output · is this safe to publish under the client’s name' },
-    { layer: 'L4', label: 'action · the last checks before an irreversible step' },
+    { layer: 'L1', label: 'sources' },
+    { layer: 'L2', label: 'output shape' },
+    { layer: 'L3', label: 'content' },
+    { layer: 'L4', label: 'pre-publish' },
   ];
 
   return (
     <Section
       title="Guardrail rules"
-      caption="Orchestrator-owned steps, not tools the model can decline to call. Each returns pass, warn or fail: a warn routes to a human, a fail blocks. Passing evaluations are recorded too, which is why block rate has a denominator at all."
+      caption="Checks the agent cannot skip. Pass, warn or fail."
     >
       <div className="space-y-3">
         {layers.map(({ layer, label }) => {
@@ -719,8 +700,8 @@ function Guardrails({
                                 void onWrite(`rule:${rule.id}`, async () => {
                                   await toggleGuardrail(rule.id, !rule.is_enabled);
                                   return rule.is_enabled
-                                    ? `“${rule.display_name}” switched off · the dashboard will mark the date rather than alarming on the drop`
-                                    : `“${rule.display_name}” switched back on`;
+                                    ? `“${rule.display_name}” switched off`
+                                    : `“${rule.display_name}” switched on`;
                                 })
                               }
                             />
@@ -744,9 +725,7 @@ function Guardrails({
                     */}
                     {!rule.is_enabled && rule.disabled_at !== null && (
                       <p className="text-[11px]" style={{ color: 'var(--state-parked)' }}>
-                        Off since {formatDateTime(rule.disabled_at)}. Its block rate reads zero from
-                        that date because it stopped running, not because it stopped catching
-                        anything.
+                        Off since {formatDateTime(rule.disabled_at)}.
                       </p>
                     )}
                   </li>
@@ -779,7 +758,7 @@ function AutoApprove({
   return (
     <Section
       title="Auto-approve"
-      caption="Off for the whole of v1, and this is the screen where that is a visible decision rather than a missing feature."
+      caption="Off in v1. Every post is reviewed."
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[13px] font-medium">Publish without per-item review</span>
@@ -843,9 +822,7 @@ function AutoApprove({
         here would show a green tick beside a draft that would not itself have qualified.
       */}
       <p className="mt-2 text-[11px]" style={{ color: 'var(--text-faint)' }}>
-        Four further conditions are per-draft rather than client-level — score above threshold, all
-        guardrails passing, the run not degraded, and the pillar not set to always review — so they
-        are checked on each draft and are not shown here.
+        Four more conditions are checked per draft, not here.
       </p>
     </Section>
   );
@@ -869,7 +846,7 @@ function LearnedRules({
   return (
     <Section
       title="Learned writing rules"
-      caption="A weekly job compares what the agent wrote against what you shipped. A kind of edit recurring three times in the last twenty decisions becomes a suggestion, which stays editable until you activate it. Capped at fifteen active."
+      caption="Patterns found in your edits. Three occurrences make a suggestion."
     >
       <ul className="space-y-2">
         {[...suggested, ...active, ...retired].map((rule) => {
@@ -939,7 +916,7 @@ function LearnedRules({
                 </details>
               ) : (
                 <p className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
-                  Backing edits predate the retained history, so they are not shown.
+                  Evidence not retained.
                 </p>
               )}
             </li>
@@ -960,7 +937,7 @@ function VersionHistory({ data }: { data: SettingsScreen }) {
   return (
     <Section
       title="Change history"
-      caption="Every change is a versioned event with a per-key diff, and every draft records the version it ran under. That is what makes edit rate before and after a change comparable — and it is the x-axis of the drill-down on the metrics screen."
+      caption="Every change, dated, with what it changed."
     >
       <ul className="space-y-2">
         {versions.map((version, index) => (
@@ -1001,9 +978,8 @@ function VersionHistory({ data }: { data: SettingsScreen }) {
 
       <p className="mt-2 text-[11px]" style={{ color: 'var(--text-faint)' }}>
         <Link href="/metrics" style={{ color: 'var(--accent-text)' }}>
-          Edit rate by settings version
-        </Link>{' '}
-        on the metrics screen splits decisions into cohorts either side of each change.
+          Edit rate by version →
+        </Link>
       </p>
     </Section>
   );
@@ -1050,7 +1026,7 @@ function RefusalPanel({ reason, onDismiss }: { reason: string; onDismiss: () => 
         className="mt-2 rounded border px-2.5 py-1 text-[13px]"
         style={{ borderColor: 'var(--border-strong)' }}
       >
-        Understood
+        Dismiss
       </button>
     </div>
   );

@@ -103,8 +103,7 @@ export function QueueRow({
 
         {item.run.next_sweep_at !== null && (
           <p className="mt-1 text-[12px]" style={{ color: 'var(--text-muted)' }}>
-            Retrying automatically in <Countdown deadline={item.run.next_sweep_at} expiredLabel="any moment" />
-            {' · '}nothing to do unless it fails again
+            Retries in <Countdown deadline={item.run.next_sweep_at} expiredLabel="any moment" />
           </p>
         )}
       </div>
@@ -131,9 +130,7 @@ export function QueueRow({
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="blocked">Returned to you</Badge>
           <Badge tone="neutral">{item.post.channel === 'linkedin' ? 'LinkedIn' : 'X'}</Badge>
-          <span className="text-[13px] font-medium">
-            Approved, then caught by a rule you just changed
-          </span>
+          <span className="text-[13px] font-medium">Caught by a rule you changed</span>
           <span className="ml-auto flex items-center gap-2">
             <span className="font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>
               was publishing {formatRelative(item.post.scheduled_at)}
@@ -164,7 +161,7 @@ export function QueueRow({
         </p>
 
         <p className="mt-2 text-[12px]" style={{ color: 'var(--text-muted)' }}>
-          It will not publish until you decide again. Nothing was sent.
+          Nothing was sent.
         </p>
 
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
@@ -335,7 +332,7 @@ export function QueueRow({
         </button>
         {blocked && (
           <span className="text-[12px]" style={{ color: 'var(--state-blocked)' }}>
-            Blocked by a guardrail — edit it or drop the slot
+            Blocked — edit or drop it
           </span>
         )}
       </div>

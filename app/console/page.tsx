@@ -248,17 +248,7 @@ export default function ConsolePage() {
               <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
                 {TRIGGER_LABEL[run.trigger] ?? run.trigger} · {formatRelative(run.started_at)}
               </span>
-              {/* ORIENTATION. Nothing on any screen said what the screen was for, which is the
-                  difference between a reviewer understanding this in five seconds and guessing at
-                  it. One line, and it names the split that is otherwise invisible: this screen
-                  watches, the queue decides. */}
-              <span
-                className="w-full text-[11px]"
-                style={{ color: 'var(--text-faint)' }}
-              >
-                One run is one unit of work — plan the week, write one post, publish one post, or
-                check replies. Watch it here; decide in the queue.
-              </span>
+
             </>
           ) : (
             <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
@@ -460,25 +450,14 @@ function RunStream({
         {steps.map((step, index) => (
           <Fragment key={step.id}>
             {/*
-              You did not start this run — it was already going when the console opened. Without a
-              marker, the first live step looks like something your arrival caused.
+              No "live from here" divider.
 
-              This is its own <li> rather than a wrapper around the step. The first version wrapped
-              both in <li className="contents">, which nests an <li> inside an <li> — invalid HTML,
-              and React reports it as a hydration error. An <ol> may only contain <li> children, so
-              a divider inside one has to be a list item too.
+              There was one, marking where replayed history ended and live steps began. It was
+              solving a problem the product does not have: an operator watching an agent does not
+              need to know which steps arrived before they opened the tab, and no application
+              annotates its own feed that way. Steps that arrive live already animate in, which is
+              the same information without a label.
             */}
-            {index === historyLength && historyLength > 0 && (
-              <li
-                aria-hidden
-                className="flex items-center gap-2 py-1 font-mono text-[10px] font-bold uppercase"
-                style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}
-              >
-                <span className="h-px flex-1" style={{ background: 'var(--border)' }} />
-                Live from here
-                <span className="h-px flex-1" style={{ background: 'var(--border)' }} />
-              </li>
-            )}
             <StepRow
               step={step}
               event={events.find((e) => e.run_step_id === step.id)}

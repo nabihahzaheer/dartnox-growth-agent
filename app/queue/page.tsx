@@ -166,7 +166,7 @@ export default function QueuePage() {
        *  through everything. */
       const decidable = current ? draftOf(current) !== null : false;
       if (e.key === 'a' && decidable) {
-        void decide({ kind: 'approve' }, 'Approved · scheduled and queued to publish');
+        void decide({ kind: 'approve' }, 'Approved · scheduled');
       }
       if (e.key === 'r' && decidable) setDialog('reject');
       if (e.key === 'e' && decidable) setDialog('edit');
@@ -196,10 +196,7 @@ export default function QueuePage() {
             >
               j / k move · a approve · e edit · r reject
             </span>
-            <span className="w-full text-[11px]" style={{ color: 'var(--text-faint)' }}>
-              Everything waiting on a decision, in one list — drafts, runs that never produced one,
-              and posts sent back by a settings change. This is where you approve, edit and reject.
-            </span>
+
           </div>
         </div>
 
@@ -236,8 +233,8 @@ export default function QueuePage() {
                     void decide(
                       { kind: 'approve' },
                       item.kind === 'post'
-                        ? 'Approved again · rescheduled, and the approval binds the current rules'
-                        : 'Approved · scheduled and queued to publish',
+                        ? 'Approved again · rescheduled'
+                        : 'Approved · scheduled',
                     )
                   }
                   onEdit={() => {
@@ -251,7 +248,7 @@ export default function QueuePage() {
                   onEscalate={() =>
                     void decide(
                       { kind: 'escalate', tier: 'stakeholder', detail: 'Raised by the operator.' },
-                      'Escalated to the owner · draft held',
+                      'Escalated to the owner',
                     )
                   }
                 />
@@ -271,13 +268,13 @@ export default function QueuePage() {
             onReject={(code: RejectionReasonCode, note, label) =>
               void decide(
                 { kind: 'reject', reasonCode: code, note },
-                `Rejected · ${label}. Slot moved and a redraft queued — the next run will name this reason.`,
+                `Rejected · ${label}. Redraft queued.`,
               )
             }
             onSaveEdit={(text, tags) =>
               void decide(
                 { kind: 'approve_with_edits', text, editTags: tags },
-                'Approved with your edits · the approval binds your version, not the agent’s',
+                'Approved with your edits',
               )
             }
           />
