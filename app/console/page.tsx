@@ -31,7 +31,7 @@
  * drafting step reads.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   getActiveRun,
   getGuardrailEvents,
@@ -44,28 +44,30 @@ import {
 } from '@/lib/agentClient';
 import type { BriefRef, ConsoleError, GuardrailEvent, Run, RunId, RunStep } from '@/lib/types';
 import { formatRelative, formatTime } from '@/lib/time';
-import { Badge, runStateTone } from '@/components/Badge';
+import { Badge, RUN_STATE_LABEL, runStateTone } from '@/components/Badge';
 import { StepRow } from '@/components/console/StepRow';
-import { Composer } from '@/components/console/Composer';
+import { ControlBar } from '@/components/console/ControlBar';
+import { Rail } from '@/components/Rail';
 
 const LIVE_RUN_ID = 'RUN-0143' as RunId;
 const LIVE_RUN_THROUGH_SEQ = 6;
 const TOOL_FAILURE_RUN_ID = 'RUN-0144' as RunId;
 
 const TRIGGER_LABEL: Record<string, string> = {
-  'schedule.weekly_plan': 'Monday planning schedule',
-  'schedule.weekly_draft': 'Wednesday drafting batch',
+  'schedule.weekly_plan': 'Monday schedule',
+  'schedule.weekly_draft': 'Wednesday batch',
   'manual.run_now': 'Started by you',
-  'poll.performance': 'Daily performance poll',
-  'poll.engagement': '30-minute reply poll',
-  'sweep.resume': 'Hourly resume sweep',
+  'poll.performance': 'Daily poll',
+  'poll.engagement': 'Reply poll',
+  'sweep.resume': 'Retry sweep',
 };
 
+/** Status, not prose. Each is what an operator would say out loud about the run. */
 const END_COPY: Record<StreamEndReason, string> = {
-  interrupt: 'Waiting for a person. The run is holding its place, not finished.',
-  parked: 'Parked after a failure. The hourly sweep will resume it from its checkpoint.',
-  completed: 'Run complete.',
-  halted: 'Halted by you. Any draft it was producing is left orphaned.',
+  interrupt: 'Waiting for approval',
+  parked: 'Parked — will retry automatically',
+  completed: 'Complete',
+  halted: 'Halted · draft left orphaned',
 };
 
 type Source = { runId: RunId; fromSeq: number; nonce: number };
@@ -128,6 +130,20 @@ export default function ConsolePage() {
     void startRun(target, 0);
   }, [startRun]);
 
+  /**
+   * Opening a run from the rail replays it rather than streaming it. A run that finished yesterday
+   * did not just happen, and animating it as though it did would be the console lying about time.
+   *
+   * `fromSeq: Infinity` puts every step in the history batch, so the emitter delivers them at once
+   * and immediately reports the end — no special case, the same code path.
+   */
+  const openRun = useCallback(
+    (id: RunId) => {
+      void startRun(id, id === LIVE_RUN_ID ? LIVE_RUN_THROUGH_SEQ : Number.POSITIVE_INFINITY);
+    },
+    [startRun],
+  );
+
   const halt = useCallback(async () => {
     if (!run) return;
     try {
@@ -158,20 +174,25 @@ export default function ConsolePage() {
   if (error) {
     return (
       <>
-        <ErrorState error={error} onRetry={() => void startRun(LIVE_RUN_ID, 0)} />
-        <Composer
-          onSubmitBrief={sendBrief}
-          onRunNow={runNow}
-          onHalt={halt}
-          canHalt={false}
-          busy={loading}
-        />
+        <Rail selectedRunId={run?.id ?? null} onSelectRun={openRun} />
+        <main className="flex min-w-0 flex-1 flex-col">
+          <ErrorState error={error} onRetry={() => void startRun(LIVE_RUN_ID, 0)} />
+          <ControlBar
+            onSubmitBrief={sendBrief}
+            onRunNow={runNow}
+            onHalt={halt}
+            canHalt={false}
+            busy={loading}
+          />
+        </main>
       </>
     );
   }
 
   return (
     <>
+      <Rail selectedRunId={run?.id ?? null} onSelectRun={openRun} />
+      <main className="flex min-w-0 flex-1 flex-col">
       {/* Context strip. Fixed, because "which run is this and why did it fire" should never scroll
           away from the thing it describes. */}
       <div
@@ -182,7 +203,9 @@ export default function ConsolePage() {
           {run ? (
             <>
               <span className="font-mono text-[13px]">{run.id}</span>
-              <Badge tone={runStateTone(run.state)}>{run.state.replace(/_/g, ' ')}</Badge>
+              <Badge tone={runStateTone(run.state)}>
+                {RUN_STATE_LABEL[run.state] ?? run.state}
+              </Badge>
               {run.variant !== 'nominal' && (
                 <Badge tone="parked" mono>
                   {run.variant}
@@ -211,13 +234,14 @@ export default function ConsolePage() {
         onRunNow={runNow}
       />
 
-      <Composer
+      <ControlBar
         onSubmitBrief={sendBrief}
         onRunNow={runNow}
         onHalt={halt}
         canHalt={streaming}
         busy={loading}
       />
+      </main>
     </>
   );
 }
@@ -260,7 +284,7 @@ function Transcript({
 
         {ended && (
           <p
-            className="rounded px-3 py-2 text-[13px] font-medium"
+            className="rounded px-2.5 py-1.5 text-[13px] font-bold"
             style={{ background: 'var(--note-bg)', color: 'var(--note-ink)' }}
           >
             {END_COPY[ended]}
@@ -276,9 +300,8 @@ function Transcript({
         ))}
 
         {briefs.length > 0 && (
-          <p className="pt-1 text-right text-[11px]" style={{ color: 'var(--text-faint)' }}>
-            {briefs.length === 1 ? 'This brief' : `These ${briefs.length} briefs`} will be read by
-            the next drafting run.
+          <p className="pt-0.5 text-right text-[11px]" style={{ color: 'var(--text-faint)' }}>
+            Queued for the next run
           </p>
         )}
       </div>
@@ -368,12 +391,33 @@ function RunStream({
           without the whole list being re-read. Not `assertive` — this is a feed, not an alarm. */}
       <ol className="space-y-2" aria-live="polite" aria-relevant="additions" aria-label="Agent activity">
         {steps.map((step, index) => (
-          <StepRow
-            key={step.id}
-            step={step}
-            event={events.find((e) => e.run_step_id === step.id)}
-            isNew={index >= historyLength}
-          />
+          <Fragment key={step.id}>
+            {/*
+              You did not start this run — it was already going when the console opened. Without a
+              marker, the first live step looks like something your arrival caused.
+
+              This is its own <li> rather than a wrapper around the step. The first version wrapped
+              both in <li className="contents">, which nests an <li> inside an <li> — invalid HTML,
+              and React reports it as a hydration error. An <ol> may only contain <li> children, so
+              a divider inside one has to be a list item too.
+            */}
+            {index === historyLength && historyLength > 0 && (
+              <li
+                aria-hidden
+                className="flex items-center gap-2 py-1 font-mono text-[10px] font-bold uppercase"
+                style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}
+              >
+                <span className="h-px flex-1" style={{ background: 'var(--border)' }} />
+                Live from here
+                <span className="h-px flex-1" style={{ background: 'var(--border)' }} />
+              </li>
+            )}
+            <StepRow
+              step={step}
+              event={events.find((e) => e.run_step_id === step.id)}
+              isNew={index >= historyLength}
+            />
+          </Fragment>
         ))}
       </ol>
 

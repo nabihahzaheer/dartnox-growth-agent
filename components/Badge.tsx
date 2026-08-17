@@ -28,6 +28,24 @@ export function runStateTone(state: string): BadgeTone {
   return 'neutral';
 }
 
+/**
+ * What an operator would call the state, not what the enum calls it.
+ *
+ * `awaiting_human` is a state name from the state machine. Nobody says that. It lives here rather
+ * than in each screen so the rail and the run header cannot end up calling the same state two
+ * different things.
+ */
+export const RUN_STATE_LABEL: Record<string, string> = {
+  running: 'Running',
+  awaiting_human: 'Needs you',
+  parked_transient: 'Parked',
+  parked_blocked: 'Blocked',
+  quarantined: 'Quarantined',
+  completed: 'Done',
+  abandoned: 'Halted',
+  queued: 'Queued',
+};
+
 export function guardrailTone(result: string): BadgeTone {
   if (result === 'pass') return 'approved';
   if (result === 'warn') return 'awaiting';

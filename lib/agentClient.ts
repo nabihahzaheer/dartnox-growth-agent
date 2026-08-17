@@ -232,6 +232,59 @@ export async function haltRun(id: RunId): Promise<Run> {
 }
 
 /**
+ * A run described in terms of the work it is doing rather than its id and type.
+ *
+ * `RUN-0143 · draft` is an identifier and a category. It tells an operator nothing about what the
+ * agent is actually doing. Resolving the run to its draft, its pillar and its channel turns the
+ * list into a list of *work* — which is what a person scanning it is looking for.
+ *
+ * The join lives here rather than in the component because in production it is a server-side
+ * concern: one query returning a list ready to render, not four round trips per row.
+ */
+export type RunSummary = {
+  run: Run;
+  /** What this run is doing. */
+  title: string;
+  /** Where it is going, when it fired. */
+  detail: string;
+};
+
+export async function getRunSummaries(): Promise<RunSummary[]> {
+  return read(LATENCY_MS.list, () =>
+    world.runs.map((run) => {
+      const draft = run.target_draft_id
+        ? world.drafts.find((d) => d.id === run.target_draft_id)
+        : undefined;
+      const slot = draft ? world.calendarSlots.find((s) => s.id === draft.slot_id) : undefined;
+      const pillar = draft ? world.pillars.find((p) => p.id === draft.pillar_id) : undefined;
+
+      if (run.type === 'planning') {
+        return { run, title: 'Plan next week', detail: 'Calendar · 8 slots' };
+      }
+      if (run.type === 'publish') {
+        return { run, title: 'Publish', detail: slot ? slot.angle : 'Scheduled post' };
+      }
+      if (run.type === 'poll') {
+        return { run, title: 'Check replies', detail: 'Posts under 48h' };
+      }
+      // Draft runs. The parent of a batch has no draft of its own.
+      if (!draft) {
+        return {
+          run: run,
+          title: run.parent_run_id ? 'Draft' : 'Weekly drafting batch',
+          detail: run.state === 'parked_transient' ? 'Source unavailable' : '8 posts',
+        };
+      }
+      return {
+        run,
+        title: `Draft · ${pillar?.name ?? 'Unknown pillar'}`,
+        detail: `${draft.channel === 'linkedin' ? 'LinkedIn' : 'X'}${slot ? ` · ${slot.angle}` : ''}`,
+      };
+    }),
+  );
+}
+
+/**
  * Operator briefs submitted through the console, newest first.
  *
  * A-01 ranks briefs first among the three source types, and the reason is worth stating: a
