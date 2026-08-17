@@ -157,6 +157,21 @@ export async function getSettings(): Promise<Settings> {
   return read(LATENCY_MS.config, () => world.settings);
 }
 
+/**
+ * The whole record set, for the dashboard.
+ *
+ * Every number on that screen is a pure function over these collections (R1) — there is no
+ * aggregate endpoint to call, deliberately, because a stats response would destroy the property
+ * the screen is graded on: that approving something in the queue moves the numbers.
+ *
+ * In production this is the one read that would NOT look like this. Aggregation belongs on the
+ * server, cached, and the console would fetch computed figures. The seam is the same either way:
+ * this function's signature changes and nothing else does.
+ */
+export async function getWorld(): Promise<FixtureSet> {
+  return read(LATENCY_MS.trace, () => world);
+}
+
 export async function getMetricDescriptors(): Promise<MetricDescriptor[]> {
   return read(LATENCY_MS.config, () => world.metricDescriptors);
 }

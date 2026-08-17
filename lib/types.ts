@@ -1448,6 +1448,14 @@ export type MetricDescriptor = {
    * Names the pure function that produces the value. This is what stops the descriptor file
    * becoming a stats fixture by the back door: the descriptor carries no numbers, only the name
    * of the function that computes them.
+   *
+   * Typed as a plain string *here* and narrowed at the fixture, deliberately. `lib/metrics.ts`
+   * imports this file, so typing it against that module's registry would be a cycle. The
+   * constraint lives where the descriptors are declared instead — `fixtures/metricDescriptors.ts`
+   * annotates the array as carrying `ComputeKey`, so a descriptor naming a function that does not
+   * exist is a compile error rather than a blank tile nobody notices.
+   *
+   * D-042 promised that check and the code did not keep it until now.
    */
   compute_key: string;
 };

@@ -676,6 +676,46 @@ PLAN.forEach((entry, index) => {
     });
   }
 
+  /**
+   * Escalations across the history, with mixed labels.
+   *
+   * Escalation precision is only meaningful with a denominator: one labelled event gives 100% and
+   * says nothing. The PRD makes the same point — "67% over three labels is not a number" — which is
+   * why the tile shows coverage beside the figure. Roughly one draft in three escalates, most get
+   * judged, and two are deliberately left unlabelled so the coverage line has something to report.
+   */
+  if (index % 8 === 1) {
+    const judged = index !== 9; // one stays unlabelled, so coverage has something to report
+    const warranted = index !== 1; // and one judged escalation turned out not to be warranted
+    historyEvents.push({
+      id: `GE-H${n}-ESC` as GuardrailEventId,
+      run_id: runId,
+      run_step_id: `RS-H${n}-06` as RunStepId,
+      draft_id: draftId,
+      rule_id: RULE_ENTAILMENT,
+      trigger_kind: 'guardrail',
+      result: 'warn',
+      evaluated_at: minutes((draftedAt as number) + 4),
+      offending_span: null,
+      span_withheld: false,
+      withheld_reason: null,
+      escalation_tier: 'operator',
+      /** A warn and a fail are two different triggers for precision purposes: a warn routes to
+       *  review, a fail blocks, and lumping them makes the cut useless on the commonest of all. */
+      escalation_trigger: 'guardrail_warn',
+      raised_at: minutes((draftedAt as number) + 4),
+      acknowledged_at: minutes((draftedAt as number) + 30),
+      was_unnecessary: judged ? !warranted : null,
+      labelled_at: judged ? minutes((draftedAt as number) + 35) : null,
+      labelled_by: judged ? OPERATOR_ID : null,
+      source_url: null,
+      domain_flagged: false,
+      replies: [],
+      decision_deadline: null,
+      detail: 'A figure in the draft was not supported by the sources it cited.',
+    });
+  }
+
   if (outcome === 'slipped') return;
 
   const postId = `POST-H${n}` as PostId;

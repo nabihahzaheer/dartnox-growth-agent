@@ -22,6 +22,7 @@ import { formatRelative } from '@/lib/time';
 const SCREENS = [
   { href: '/console', label: 'Console' },
   { href: '/queue', label: 'Queue' },
+  { href: '/metrics', label: 'Metrics' },
 ] as const;
 
 export function Rail({

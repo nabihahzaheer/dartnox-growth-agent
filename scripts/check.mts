@@ -229,15 +229,44 @@ check(
   fixtures.guardrailEvents.some((e) => e.result === 'pass'),
 );
 
-/** A `warn` is not a draft state. A warned draft sits in `awaiting_approval` and renders its
- *  warning from the event — and two drafts differing only by guardrail result is the only place
- *  the three-state result becomes legible in the product. */
+/**
+ * `warn` is not a draft state (§4.7). A warned draft carries an ordinary state and renders its
+ * warning from the event.
+ *
+ * The first version of this asserted that every warned draft is `awaiting_approval`, which failed
+ * the moment history existed — a draft warned three weeks ago was subsequently approved, and that
+ * is correct behaviour. The assertion had quietly encoded "warned" as though it were a state,
+ * which is the exact thing the rule forbids. Narrowed to what the spec actually claims:
+ *
+ *   · no draft ever carries a state named after a guardrail result
+ *   · a warned draft still awaiting a decision sits in `awaiting_approval` and nowhere else
+ *   · two `awaiting_approval` drafts differ only by guardrail result, which is the only place in
+ *     the product the three-state result becomes legible
+ */
 const warned = fixtures.guardrailEvents.filter((e) => e.result === 'warn');
 check('at least one warn event exists', warned.length > 0);
+
 for (const e of warned) {
   const d = fixtures.drafts.find((x) => x.id === e.draft_id);
-  if (d) check(`${e.id} · its draft is awaiting_approval, not a "warn" state`, d.state === 'awaiting_approval');
+  if (!d) continue;
+  check(`${e.id} · its draft has no warn-shaped state`, !['warn', 'warned'].includes(d.state));
+
+  const pending = fixtures.approvals.some(
+    (a) => a.draft_version_id === d.current_version_id && a.decided_at === null,
+  );
+  if (pending) {
+    check(`${e.id} · undecided warned draft is awaiting_approval`, d.state === 'awaiting_approval');
+  }
 }
+
+/** The legibility claim itself, asserted rather than assumed: one warned and one clean draft, both
+ *  waiting, so the difference is visible on screen rather than only in the data. */
+const waiting = fixtures.drafts.filter((d) => d.state === 'awaiting_approval');
+const waitingWarned = waiting.filter((d) =>
+  fixtures.guardrailEvents.some((e) => e.draft_id === d.id && e.result === 'warn'),
+);
+check('a warned draft and a clean draft are both awaiting review',
+  waitingWarned.length > 0 && waiting.length > waitingWarned.length);
 
 /** `escalation_trigger` is non-null exactly when something was escalated. The two fields overlap
  *  deliberately and answer different questions; this keeps them consistent. */

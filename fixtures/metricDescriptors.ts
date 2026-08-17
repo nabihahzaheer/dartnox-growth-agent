@@ -39,11 +39,20 @@
  */
 
 import type { MetricDescriptor } from '../lib/types.ts';
+import type { ComputeKey } from '../lib/metrics.ts';
 import { FIXTURE_SCHEMA_VERSION, type FixtureSchemaVersion } from '../lib/types.ts';
 
 export const schemaVersion: FixtureSchemaVersion = FIXTURE_SCHEMA_VERSION;
 
-export const metricDescriptors: MetricDescriptor[] = [
+/**
+ * `compute_key` narrowed to the metric registry's actual keys.
+ *
+ * D-042 conceded that naming a function by string lets the descriptor and the function drift, and
+ * said the fix was to type the key against the map. This is that: rename or delete a metric
+ * function and every descriptor pointing at it fails the build, instead of the dashboard rendering
+ * a tile that silently computes nothing.
+ */
+export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })[] = [
   /* ============================ BUSINESS ================================================== */
   {
     id: 'published_vs_planned',
@@ -59,27 +68,42 @@ export const metricDescriptors: MetricDescriptor[] = [
       'pattern of guardrail blocks is a drafting problem.',
     phase: 'both',
     empty_state: { status: 'no_data', copy: 'No slots planned in this period yet.' },
+    /**
+     * MONTHLY, and the window is the point rather than a default.
+     *
+     * At a weekly denominator of eight, one missed slot reads as 87.5% — below the 90% gate — so
+     * every ordinary week would look like a failure and the gate would stop meaning anything. A
+     * monthly denominator of ~35 absorbs a single miss and still catches a pattern.
+     */
     window_default: 'period',
     compute_key: 'publishedVsPlanned',
   },
   {
-    id: 'hours_saved',
-    label: 'Hours saved',
+    id: 'time_saved',
+    label: 'Time saved',
     family: 'business',
     /** The definition carries its own arithmetic because the number is otherwise unfalsifiable.
      *  The baseline is a captured input on Client, timed during onboarding — not a guess. */
+    /**
+     * A SHARE, not a raw hour count.
+     *
+     * Hours saved grows with volume, so it goes up when the client buys more posts and says
+     * nothing about whether the system is working. The share — saved over what writing them by
+     * hand would have cost — is flat against volume and is the number that actually steers.
+     */
     definition:
-      'Posts published x your measured manual time per post, minus the minutes actually spent in ' +
-      'the review queue.',
-    unit: 'hours',
-    healthy_range: { min: 0, max: null },
+      'Time the system saved as a share of what writing those posts by hand would have cost: ' +
+      '(posts x your timed baseline − minutes spent in the queue) / (posts x baseline).',
+    unit: '%',
+    healthy_range: { min: 60, max: null },
     action_when_outside:
-      'If this goes negative, review is costing more than writing did. Look at time-to-decision ' +
-      'and at how many drafts needed edits.',
+      'Below 60%, reviewing costs most of what writing did. Look at time-to-decision and at how ' +
+      'many drafts needed edits. The baseline is timed at onboarding — a made-up multiplier makes ' +
+      'this decorative.',
     phase: 'both',
     empty_state: { status: 'no_data', copy: 'Awaiting first publish.' },
     window_default: 'period',
-    compute_key: 'hoursSaved',
+    compute_key: 'timeSaved',
   },
   {
     id: 'engagement_vs_baseline',
@@ -87,7 +111,8 @@ export const metricDescriptors: MetricDescriptor[] = [
     family: 'business',
     definition:
       'Median engagement rate on agent-published posts against your own pre-existing median for ' +
-      'that channel.',
+      'that channel. Mature posts only — engagement is still accruing before day seven, so an ' +
+      'immature post drags the median down for reasons that are not about the post.',
     unit: 'x baseline',
     healthy_range: { min: 1, max: null },
     action_when_outside:
@@ -118,10 +143,16 @@ export const metricDescriptors: MetricDescriptor[] = [
       'Model spend plus platform API spend, divided by posts published. Both addends are summed ' +
       'from individual run steps, never from a stored total.',
     unit: 'USD',
-    healthy_range: { min: null, max: 4 },
+    /**
+     * No static band, deliberately. The ceiling is the client's monthly cap divided by planned
+     * posts, so it moves when either moves — writing a fixed number here would be a band that
+     * silently stops matching the budget it is supposed to enforce. The tile derives it.
+     */
+    healthy_range: { min: null, max: null },
     action_when_outside:
-      'Check the rewrite count first — a draft rewritten three times costs roughly three drafts. ' +
-      'Then check poll intervals.',
+      'The ceiling is the monthly cap divided by planned posts. Over it, check the rewrite count ' +
+      'first — a draft rewritten three times costs roughly three drafts — then poll intervals. ' +
+      'Raising the cap is a client decision, not an engineering one.',
     phase: 'both',
     empty_state: { status: 'no_data', copy: 'No runs in this period.' },
     window_default: 'period',
@@ -137,8 +168,14 @@ export const metricDescriptors: MetricDescriptor[] = [
       'Share of approved posts where a person changed the text before approving. Counted from ' +
       'version authorship, not from the decision label.',
     unit: '%',
-    /** A-17's phase-conditioned pair. v1 tolerates 30%; after auto-approve exists the same number
-     *  has to be under 20%, because nobody is reading the ones that skip review. */
+    /**
+     * 30% in v1, 20% after auto-approve exists — because at that point nobody is reading the ones
+     * that skip review.
+     *
+     * This descriptor is the v1 one and carried 20, which is the *other* phase's number. At our
+     * actual edit rate of 24% the tile would have rendered a healthy value as out of range: a
+     * false alarm on the metric most likely to be looked at. Found by reconciling against the PRD.
+     */
     healthy_range: { min: null, max: 30 },
     action_when_outside:
       'Look at the edit tags. A tag recurring three times in twenty decisions should already have ' +
@@ -175,8 +212,13 @@ export const metricDescriptors: MetricDescriptor[] = [
     definition:
       'Median seconds an item was open in front of the operator, including time spent editing.',
     unit: 'seconds',
-    healthy_range: { min: 15, max: 600 },
-    action_when_outside: 'Sustained rises mean the handoff payload is not answering the question.',
+    /** Two minutes. Section 1's cadence sizing rests on this number: eight posts at ~2 minutes is
+     *  one short weekly session, and the same approve-everything rule at 10 minutes is an
+     *  afternoon. If this rises, the volume the client contracted stops being reviewable. */
+    healthy_range: { min: 15, max: 120 },
+    action_when_outside:
+      'Sustained rises mean the handoff payload is not answering the question, and the contracted ' +
+      'volume stops fitting in one session.',
     phase: 'both',
     empty_state: { status: 'no_data', copy: 'No decisions in this period.' },
     window_default: 'rolling_4w',
@@ -237,6 +279,11 @@ export const metricDescriptors: MetricDescriptor[] = [
      *  being evaluated looks identical to a rule that is passing everything. */
     definition: 'Share of evaluations that warned or blocked, broken down by layer and by rule.',
     unit: '%',
+    /**
+     * The band is relative, not absolute: within 50% of the trailing four-week rate. There is no
+     * correct absolute block rate — it depends entirely on what the drafts are like — so the only
+     * meaningful alarm is a *change*, and a sudden drop is the one that matters.
+     */
     healthy_range: { min: null, max: null },
     action_when_outside:
       'A sudden drop is the alarm, not a high value. Check first whether somebody switched the ' +
@@ -245,6 +292,29 @@ export const metricDescriptors: MetricDescriptor[] = [
     empty_state: { status: 'no_data', copy: 'No guardrail evaluations in this period.' },
     window_default: 'rolling_4w',
     compute_key: 'guardrailBlockRate',
+  },
+  {
+    /**
+     * Added 17 Aug. The PRD names escalation rate and precision together and this file had only
+     * precision.
+     *
+     * They are not redundant, and the pairing is the point: precision cannot tell you escalations
+     * tripled, and rate cannot tell you they were justified. A system escalating everything scores
+     * perfect precision; a system escalating nothing scores none at all.
+     */
+    id: 'escalation_rate',
+    label: 'Escalation rate',
+    family: 'agent_quality',
+    definition: 'Share of drafts that raised an escalation of any tier.',
+    unit: '%',
+    healthy_range: { min: null, max: 25 },
+    action_when_outside:
+      'Above 25%, escalation has stopped being exceptional and the queue is being sorted rather ' +
+      'than triaged. Cut by trigger to find which rule is doing it.',
+    phase: 'both',
+    empty_state: { status: 'no_data', copy: 'No drafts in this period.' },
+    window_default: 'rolling_4w',
+    compute_key: 'escalationRate',
   },
   {
     id: 'escalation_precision',
@@ -274,7 +344,7 @@ export const metricDescriptors: MetricDescriptor[] = [
     label: 'Injection detections',
     family: 'agent_quality',
     definition: 'Sources quarantined for carrying instructions aimed at the agent.',
-    unit: 'count',
+    unit: '',
     /** Any detection is worth a look, so there is no healthy band — this is a count you read, not
      *  a rate you tune. */
     healthy_range: { min: null, max: null },
