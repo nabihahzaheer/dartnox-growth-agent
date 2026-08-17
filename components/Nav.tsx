@@ -27,7 +27,7 @@ export function Nav() {
             aria-current={active ? 'page' : undefined}
             className="rounded px-2 py-1 text-sm transition-colors"
             style={{
-              color: active ? 'var(--accent)' : 'var(--text-muted)',
+              color: active ? 'var(--accent-text)' : 'var(--text-muted)',
               background: active ? 'var(--accent-soft)' : 'transparent',
             }}
           >

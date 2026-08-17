@@ -58,7 +58,13 @@ function Json({ value }: { value: unknown }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <div className="font-mono text-[11px] uppercase tracking-wide text-[var(--text-faint)]">
+      {/* Courier caps in grey with no square. The PDF distinguishes a section eyebrow (blue,
+          squared) from a table header (grey, bare) exactly this way, and collapsing the two would
+          flatten the hierarchy. */}
+      <div
+        className="font-mono text-[10px] font-bold uppercase"
+        style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}
+      >
         {label}
       </div>
       {children}

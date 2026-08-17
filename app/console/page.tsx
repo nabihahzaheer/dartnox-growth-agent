@@ -35,6 +35,7 @@ import { formatRelative } from '@/lib/time';
 import { Badge, runStateTone } from '@/components/Badge';
 import { StepRow } from '@/components/console/StepRow';
 import { FailureDrawer } from '@/components/console/FailureDrawer';
+import { Eyebrow, Note } from '@/components/Eyebrow';
 
 /** The run the fixtures leave mid-flight, and how far it had got when we attached. */
 const LIVE_RUN_ID = 'RUN-0143' as RunId;
@@ -153,14 +154,17 @@ export default function ConsolePage() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6">
       <header className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-base font-semibold">Console</h1>
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div className="space-y-1">
+            <Eyebrow>Operator console</Eyebrow>
+            <h1 className="text-xl font-bold leading-tight">The agent, working</h1>
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={runNow}
               className="rounded border px-2.5 py-1 text-sm font-medium"
-              style={{ borderColor: 'var(--border-strong)', color: 'var(--accent)' }}
+              style={{ borderColor: 'var(--border-strong)', color: 'var(--accent-text)' }}
             >
               Run now
             </button>
@@ -185,9 +189,12 @@ export default function ConsolePage() {
 
         {run && (
           <div
-            className="rounded border px-3 py-2"
+            className="rounded border px-3 py-2.5"
             style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
           >
+            <div className="mb-1.5">
+              <Eyebrow>Current run</Eyebrow>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-sm">{run.id}</span>
               <Badge tone={runStateTone(run.state)}>{run.state.replace(/_/g, ' ')}</Badge>
@@ -210,6 +217,12 @@ export default function ConsolePage() {
       {loading && <LoadingState />}
 
       {source && (
+        <div className="mb-1.5 pt-1">
+          <Eyebrow>Activity</Eyebrow>
+        </div>
+      )}
+
+      {source && (
         <RunStream
           // Remounting on a new source is what resets the feed. Resetting state inside the effect
           // instead would mean a synchronous setState during an effect, which cascades renders —
@@ -222,14 +235,9 @@ export default function ConsolePage() {
         />
       )}
 
-      {ended && (
-        <p
-          className="rounded border px-3 py-2 text-[13px]"
-          style={{ borderColor: 'var(--border)', background: 'var(--surface-sunk)' }}
-        >
-          {END_COPY[ended]}
-        </p>
-      )}
+      {/* The document reserves its green block for the thing you must not miss. A run stopping —
+          and *why* it stopped — is that thing on this screen. */}
+      {ended && <Note>{END_COPY[ended]}</Note>}
 
       {!loading && !source && !ended && <EmptyState onRun={runNow} />}
     </div>
@@ -346,7 +354,7 @@ function EmptyState({ onRun }: { onRun: () => void }) {
         type="button"
         onClick={onRun}
         className="mt-3 rounded border px-2.5 py-1 text-sm font-medium"
-        style={{ borderColor: 'var(--border-strong)', color: 'var(--accent)' }}
+        style={{ borderColor: 'var(--border-strong)', color: 'var(--accent-text)' }}
       >
         Run now
       </button>
@@ -374,7 +382,10 @@ function ErrorState({ error, onRetry }: { error: ConsoleError; onRetry: () => vo
         style={{ borderColor: 'var(--state-blocked)', background: 'var(--state-blocked-bg)' }}
       >
         <p className="text-sm font-medium">{copy[error.kind]}</p>
-        <p className="mt-1 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+        <p
+          className="mt-1 font-mono text-[11px] uppercase"
+          style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}
+        >
           {error.kind}
         </p>
         <button
