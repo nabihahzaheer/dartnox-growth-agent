@@ -88,6 +88,10 @@ export default function QueuePage() {
         setItems(queue);
         setSettings(config);
         setError(null);
+        // Clamp here, where the new length is known. The first version guessed at it in the
+        // decision handler using the *old* length, which is off by one whenever a decision removes
+        // the last row.
+        setSelected((i) => Math.min(i, Math.max(0, queue.length - 1)));
         selectedAt.current = Date.now();
       } catch (e) {
         if (!cancelled) setError(e as ConsoleError);
@@ -123,7 +127,6 @@ export default function QueuePage() {
           secondsOpen: Math.max(1, Math.round((Date.now() - selectedAt.current) / 1000)),
         });
         setLastAction(describe);
-        setSelected((i) => Math.max(0, Math.min(i, items.length - 2)));
         reload();
       } catch (e) {
         setError(e as ConsoleError);
@@ -132,7 +135,7 @@ export default function QueuePage() {
         setDialog(null);
       }
     },
-    [current, items.length, reload],
+    [current, reload],
   );
 
   /**

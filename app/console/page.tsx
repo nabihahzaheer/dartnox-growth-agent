@@ -35,11 +35,12 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import {
   getActiveRun,
   getGuardrailEvents,
-  getRun,
   haltRun,
-  isFailureActive,
+  openRun,
+  runNow as startRunNow,
   streamRun,
   submitBrief,
+  type RunAttachment,
   type StreamEndReason,
 } from '@/lib/agentClient';
 import type { BriefRef, ConsoleError, GuardrailEvent, Run, RunId, RunStep } from '@/lib/types';
@@ -48,10 +49,6 @@ import { Badge, RUN_STATE_LABEL, runStateTone } from '@/components/Badge';
 import { StepRow } from '@/components/console/StepRow';
 import { ControlBar } from '@/components/console/ControlBar';
 import { Rail } from '@/components/Rail';
-
-const LIVE_RUN_ID = 'RUN-0143' as RunId;
-const LIVE_RUN_THROUGH_SEQ = 6;
-const TOOL_FAILURE_RUN_ID = 'RUN-0144' as RunId;
 
 const TRIGGER_LABEL: Record<string, string> = {
   'schedule.weekly_plan': 'Monday schedule',
@@ -84,10 +81,10 @@ export default function ConsolePage() {
   useEffect(() => {
     let cancelled = false;
     getActiveRun()
-      .then(async (active) => {
+      .then(async ({ run: active, fromSeq }) => {
         if (cancelled) return;
         setRun(active);
-        setSource({ runId: active.id, fromSeq: LIVE_RUN_THROUGH_SEQ, nonce: 0 });
+        setSource({ runId: active.id, fromSeq, nonce: 0 });
         setEvents(await getGuardrailEvents(active.id));
       })
       .catch((e: ConsoleError) => {
@@ -101,21 +98,22 @@ export default function ConsolePage() {
     };
   }, []);
 
-  const startRun = useCallback(async (targetId: RunId, fromSeq: number) => {
+  /** One path for "show me this run", whether it came from the rail or from Run now. The client
+   *  decides which run and where to attach; this only renders the answer. */
+  const attach = useCallback(async (load: () => Promise<RunAttachment>) => {
     setLoading(true);
     setError(null);
     setEnded(null);
     try {
-      const next = await getRun(targetId);
+      const { run: next, fromSeq } = await load();
       setRun(next);
-      setEvents(await getGuardrailEvents(targetId));
-      // A new nonce remounts the stream, so starting a run is a fresh instance rather than a reset.
-      setSource((current) => ({ runId: targetId, fromSeq, nonce: (current?.nonce ?? 0) + 1 }));
+      setEvents(await getGuardrailEvents(next.id));
+      // A new nonce remounts the stream, so this is a fresh instance rather than a reset.
+      setSource((current) => ({ runId: next.id, fromSeq, nonce: (current?.nonce ?? 0) + 1 }));
       /**
        * Pending briefs clear when a run starts, because the run has now consumed them — the
-       * drafting step's own detail panel shows which brief it read. Leaving them queued below the
-       * transcript would imply they are still waiting, which would be the one thing on this screen
-       * that is not true.
+       * drafting step shows which brief it read. Leaving them queued would imply they were still
+       * waiting, which would be the one thing on this screen that is not true.
        */
       setBriefs([]);
     } catch (e) {
@@ -125,24 +123,12 @@ export default function ConsolePage() {
     }
   }, []);
 
-  const runNow = useCallback(() => {
-    const target = isFailureActive('tool_failure') ? TOOL_FAILURE_RUN_ID : LIVE_RUN_ID;
-    void startRun(target, 0);
-  }, [startRun]);
+  const runNow = useCallback(() => void attach(startRunNow), [attach]);
 
-  /**
-   * Opening a run from the rail replays it rather than streaming it. A run that finished yesterday
-   * did not just happen, and animating it as though it did would be the console lying about time.
-   *
-   * `fromSeq: Infinity` puts every step in the history batch, so the emitter delivers them at once
-   * and immediately reports the end — no special case, the same code path.
-   */
-  const openRun = useCallback(
-    (id: RunId) => {
-      void startRun(id, id === LIVE_RUN_ID ? LIVE_RUN_THROUGH_SEQ : Number.POSITIVE_INFINITY);
-    },
-    [startRun],
-  );
+  /** Opening a run from the rail replays it rather than streaming it — a run that finished
+   *  yesterday did not just happen, and animating it would be the console lying about time. The
+   *  client decides that, since it is a fact about the run. */
+  const showRun = useCallback((id: RunId) => void attach(() => openRun(id)), [attach]);
 
   const halt = useCallback(async () => {
     if (!run) return;
@@ -174,9 +160,9 @@ export default function ConsolePage() {
   if (error) {
     return (
       <>
-        <Rail selectedRunId={run?.id ?? null} onSelectRun={openRun} />
+        <Rail selectedRunId={run?.id ?? null} onSelectRun={showRun} />
         <main className="flex min-w-0 flex-1 flex-col">
-          <ErrorState error={error} onRetry={() => void startRun(LIVE_RUN_ID, 0)} />
+          <ErrorState error={error} onRetry={runNow} />
           <ControlBar
             onSubmitBrief={sendBrief}
             onRunNow={runNow}
@@ -191,7 +177,7 @@ export default function ConsolePage() {
 
   return (
     <>
-      <Rail selectedRunId={run?.id ?? null} onSelectRun={openRun} />
+      <Rail selectedRunId={run?.id ?? null} onSelectRun={showRun} />
       <main className="flex min-w-0 flex-1 flex-col">
       {/* Context strip. Fixed, because "which run is this and why did it fire" should never scroll
           away from the thing it describes. */}

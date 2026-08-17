@@ -62,11 +62,7 @@ export function QueueRow({
   if (item.kind === 'run') {
     const failure = item.events.find((e) => e.result !== 'pass');
     return (
-      <div
-        onClick={onSelect}
-        className="cursor-default rounded border px-3 py-2.5"
-        style={frame}
-      >
+      <div onFocusCapture={onSelect} onClick={onSelect} className="rounded border px-3 py-2.5" style={frame}>
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={runStateTone(item.run.state)}>
             {RUN_STATE_LABEL[item.run.state] ?? item.run.state}
@@ -103,6 +99,12 @@ export function QueueRow({
 
   return (
     <div
+      /**
+       * `onFocusCapture` as well as `onClick`: tabbing into a row's buttons selects it, so a
+       * keyboard user's idea of "the current item" matches the highlight. Without it, Tab moves
+       * focus while the selection — and therefore what `a` and `r` act on — stays behind.
+       */
+      onFocusCapture={onSelect}
       onClick={onSelect}
       className="rounded border px-3 py-2.5"
       style={{ ...frame, opacity: busy ? 0.5 : 1 }}

@@ -35,6 +35,7 @@ import type {
   RejectionReasonCode,
   Run,
   RunId,
+  RunStepId,
 } from './types.ts';
 
 /**
@@ -104,6 +105,12 @@ function pendingApproval(world: FixtureSet, draft: Draft): Approval {
   );
   if (!approval) throw new Error(`No pending approval for ${draft.id}`);
   return approval;
+}
+
+function lastStepOf(world: FixtureSet, runId: RunId): RunStepId {
+  const step = world.runSteps.filter((s) => s.run_id === runId).at(-1);
+  if (!step) throw new Error(`Run ${runId} has no steps to attach an escalation to`);
+  return step.id;
 }
 
 function slotFor(world: FixtureSet, draft: Draft): CalendarSlot | undefined {
@@ -355,9 +362,17 @@ export function escalate(
   const event: GuardrailEvent = {
     id: `GE-ESC-${draft.id}` as GuardrailEventId,
     run_id: draft.run_id,
-    /** Attached to the run's last step, since an operator escalation is not produced by a check. */
-    run_step_id: (world.runSteps.filter((s) => s.run_id === draft.run_id).at(-1)?.id ??
-      world.runSteps[0].id),
+    /**
+     * The last step of *this draft's* run — an operator escalation is not produced by a check, so
+     * it attaches to where the run stopped.
+     *
+     * The first version fell back to `world.runSteps[0]` when the run had no steps, which would
+     * have pointed the event at a step belonging to an entirely different run. Referential
+     * integrity would still have passed, because the step exists; it would simply have been the
+     * wrong one, and the console renders events at their step's position in the stream. A run with
+     * no steps is a broken fixture, so it throws rather than quietly picking something.
+     */
+    run_step_id: lastStepOf(world, draft.run_id),
     draft_id: draft.id,
     /** Null, and well-formed: `trigger_kind` is what makes it so. Minting a synthetic rule for
      *  "the operator escalated" would corrupt the per-rule block-rate chart with a row that is not

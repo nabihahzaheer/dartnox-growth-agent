@@ -36,7 +36,7 @@
  * rather than the aliasing bug it is.
  */
 
-import { fixtures } from '@/fixtures';
+import { fixtures, LIVE_RUN_EMITTED_THROUGH_SEQ } from '@/fixtures';
 import { NOW } from '@/lib/time';
 import {
   approve,
@@ -59,6 +59,7 @@ import type {
   GuardrailEventId,
   QueueItem,
   RejectionReasonCode,
+  RunVariant,
   MetricDescriptor,
   Pillar,
   Run,
@@ -193,16 +194,57 @@ export async function getRunSteps(id: RunId, throughSeq?: number): Promise<RunSt
   );
 }
 
-/** The run the console opens on: whatever is live, or the most recent one that stopped for a
- *  human. Falls back to the newest run so the screen is never empty by accident. */
-export async function getActiveRun(): Promise<Run> {
+/**
+ * A run and where to start watching it.
+ *
+ * `fromSeq` belongs here rather than in the console because *how far a run has already got* is a
+ * fact about the run, not a rendering decision. The first version hardcoded both the run ids and
+ * the offset in the component — while `fixtures/pipeline.ts` exported the offset with a comment
+ * saying it lived there "so the fixture, not the code, decides where the story is up to". The
+ * comment was right and the code ignored it, and the exported constant was used by nothing.
+ *
+ * D-002 says no component imports a fixture. A component that hardcodes fixture ids has the same
+ * coupling with none of the type safety.
+ */
+export type RunAttachment = { run: Run; fromSeq: number };
+
+/** Replaying a finished run: every step is history, so it renders at once and does not animate. */
+const REPLAY_ALL = Number.POSITIVE_INFINITY;
+
+/** The run the console opens on: whatever is live, else the most recent one that stopped for a
+ *  human. Never empty by accident. */
+export async function getActiveRun(): Promise<RunAttachment> {
   return read(LATENCY_MS.list, () => {
     const running = world.runs.find((r) => r.state === 'running');
-    if (running) return running;
+    if (running) return { run: running, fromSeq: LIVE_RUN_EMITTED_THROUGH_SEQ };
     const waiting = world.runs.find((r) => r.state === 'awaiting_human');
-    if (waiting) return waiting;
-    return world.runs.at(-1) ?? fail({ kind: 'not_found' });
+    if (waiting) return { run: waiting, fromSeq: REPLAY_ALL };
+    const last = world.runs.at(-1);
+    return last ? { run: last, fromSeq: REPLAY_ALL } : fail({ kind: 'not_found' });
   });
+}
+
+/** Opening a past run from the rail. It already happened, so it replays rather than streams. */
+export async function openRun(id: RunId): Promise<RunAttachment> {
+  const run = await getRun(id);
+  const isLive = run.state === 'running';
+  return { run, fromSeq: isLive ? LIVE_RUN_EMITTED_THROUGH_SEQ : REPLAY_ALL };
+}
+
+/**
+ * Start a run on demand.
+ *
+ * The client picks which pre-written sequence to play, because which variant an armed failure
+ * switch selects is a property of the simulation, not of the screen. §6b's unlock: without a run
+ * on demand, every "next draft" setting takes effect at a moment nobody is watching.
+ */
+export async function runNow(): Promise<RunAttachment> {
+  const variant: RunVariant = activeFailures.has('tool_failure') ? 'tool_failure' : 'nominal';
+  const run =
+    world.runs.find((r) => r.type === 'draft' && r.variant === variant && r.target_draft_id) ??
+    world.runs.find((r) => r.variant === variant);
+  if (!run) fail({ kind: 'not_found' });
+  return { run, fromSeq: 0 };
 }
 
 /** The guardrail events raised by a run, so the console can render each check at its position in
