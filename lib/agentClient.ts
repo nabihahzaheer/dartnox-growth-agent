@@ -47,24 +47,26 @@ import {
   type WorldPatch,
 } from '@/lib/world';
 import type {
+  Approval,
+  BriefRef,
+  CalendarSlot,
   Client,
   ConsoleError,
   Draft,
   DraftId,
-  BriefRef,
   DraftVersionId,
   EditTag,
   FixtureSet,
   GuardrailEvent,
   GuardrailEventId,
-  QueueItem,
-  RejectionReasonCode,
-  RunVariant,
   MetricDescriptor,
   Pillar,
+  QueueItem,
+  RejectionReasonCode,
   Run,
   RunId,
   RunStep,
+  RunVariant,
   Settings,
 } from '@/lib/types';
 
@@ -192,6 +194,56 @@ export async function getRunSteps(id: RunId, throughSeq?: number): Promise<RunSt
       .filter((s) => s.run_id === id && (throughSeq === undefined || s.seq <= throughSeq))
       .sort((a, b) => a.seq - b.seq),
   );
+}
+
+/**
+ * Everything the detail view opens.
+ *
+ * The brief asks for "one item opened fully… including the agent's reasoning trace and history."
+ * That is a join across five collections, and doing it in the component would mean five awaits and
+ * five loading states for one screen. In production this is one endpoint returning one document,
+ * so it is one call here.
+ */
+export type DraftDetail = {
+  draft: Draft;
+  /** The run that produced it, and its full trace. B1's Draft had no path to its run at all, which
+   *  would have made this screen unbuildable — the single most load-bearing omission found while
+   *  deriving the fixture set. */
+  run: Run | null;
+  steps: RunStep[];
+  events: GuardrailEvent[];
+  approval: Approval | null;
+  slot: CalendarSlot | null;
+  pillar: Pillar | null;
+  /** The sibling treatment of the same angle on the other channel, if there is one. Variants are
+   *  not versions: channel fit is scored per channel and an approval binds one version to one
+   *  publication. */
+  sibling: Draft | null;
+};
+
+export async function getDraftDetail(id: DraftId): Promise<DraftDetail> {
+  return read(LATENCY_MS.detail, () => {
+    const draft = world.drafts.find((d) => d.id === id);
+    if (!draft) fail({ kind: 'not_found' });
+
+    const run = world.runs.find((r) => r.id === draft.run_id) ?? null;
+    return {
+      draft,
+      run,
+      steps: world.runSteps.filter((s) => s.run_id === draft.run_id).sort((a, b) => a.seq - b.seq),
+      events: world.guardrailEvents.filter((e) => e.draft_id === draft.id),
+      approval:
+        world.approvals.find((a) => a.draft_version_id === draft.current_version_id) ?? null,
+      slot: world.calendarSlots.find((s) => s.id === draft.slot_id) ?? null,
+      pillar: world.pillars.find((p) => p.id === draft.pillar_id) ?? null,
+      sibling:
+        draft.variant_group_id === null
+          ? null
+          : (world.drafts.find(
+              (d) => d.variant_group_id === draft.variant_group_id && d.id !== draft.id,
+            ) ?? null),
+    };
+  });
 }
 
 /**

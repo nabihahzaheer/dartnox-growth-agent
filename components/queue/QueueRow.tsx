@@ -12,6 +12,7 @@
  * and putting it here would make the queue unreadable at forty items.
  */
 
+import Link from 'next/link';
 import type { QueueItem } from '@/lib/types';
 import { formatRelative } from '@/lib/time';
 import { Badge, RUN_STATE_LABEL, guardrailTone, runStateTone } from '@/components/Badge';
@@ -121,8 +122,18 @@ export function QueueRow({
               {e.result}
             </Badge>
           ))}
-        <span className="ml-auto font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>
-          {approval ? `waiting ${formatRelative(approval.queued_at).replace(' ago', '')}` : ''}
+        <span className="ml-auto flex items-center gap-2">
+          <span className="font-mono text-[11px]" style={{ color: 'var(--text-faint)' }}>
+            {approval ? `waiting ${formatRelative(approval.queued_at).replace(' ago', '')}` : ''}
+          </span>
+          {/* The queue carries enough to decide; the detail view is for when it is not enough. */}
+          <Link
+            href={`/draft/${draft.id}`}
+            className="text-[12px]"
+            style={{ color: 'var(--accent-text)' }}
+          >
+            Open
+          </Link>
         </span>
       </div>
 
