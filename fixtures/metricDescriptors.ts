@@ -56,7 +56,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   /* ============================ BUSINESS ================================================== */
   {
     id: 'published_vs_planned',
-    label: 'Published vs planned',
+    label: 'Posts published',
     family: 'business',
     definition:
       'Of the slots the calendar planned, the share that actually published. Slots that slipped, ' +
@@ -107,7 +107,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'engagement_vs_baseline',
-    label: 'Engagement vs your baseline',
+    label: 'Engagement vs the account’s median',
     family: 'business',
     definition:
       'Median engagement rate on agent-published posts against your own pre-existing median for ' +
@@ -134,7 +134,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'cost_per_post',
-    label: 'Cost per post',
+    label: 'Cost per published post',
     family: 'business',
     /** Two addends, deliberately. Model spend and platform spend are separate fields on every
      *  step, because X is pay-per-use and a URL-bearing post costs a multiple of a plain one —
@@ -162,7 +162,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   /* ============================ AGENT QUALITY ============================================= */
   {
     id: 'edit_rate',
-    label: 'Edit rate',
+    label: 'Approved with edits',
     family: 'agent_quality',
     definition:
       'Share of approved posts where a person changed the text before approving. Counted from ' +
@@ -188,7 +188,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'edit_magnitude',
-    label: 'Edit magnitude',
+    label: 'How much gets edited',
     family: 'agent_quality',
     definition:
       'Median normalised token distance between the last agent version and the shipped version. ' +
@@ -205,7 +205,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'time_to_decision',
-    label: 'Time to decision',
+    label: 'Time to decide',
     family: 'agent_quality',
     /** Distinct from queue age, and conflating them is the trap: this is how long the item was
      *  open in front of a person, inclusive of editing. Queue age is how long it waited. */
@@ -226,7 +226,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'rubber_stamp_rate',
-    label: 'Approvals under 15 seconds',
+    label: 'Decided under 15 seconds',
     family: 'agent_quality',
     /**
      * Split out from time-to-decision rather than folded into it. A-17 writes the two together,
@@ -250,7 +250,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'queue_age_p95',
-    label: 'Queue age p95',
+    label: 'Longest wait in the queue',
     family: 'agent_quality',
     definition:
       'The 95th percentile of time from an item entering review to a decision on it. Measured ' +
@@ -272,7 +272,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'guardrail_block_rate',
-    label: 'Guardrail block rate',
+    label: 'Blocked before review',
     family: 'agent_quality',
     /** Per layer and per rule. The denominator is *evaluations*, which is why passes are recorded
      *  and not only the interesting results (R7) — without them a rule that has silently stopped
@@ -303,7 +303,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
      * perfect precision; a system escalating nothing scores none at all.
      */
     id: 'escalation_rate',
-    label: 'Escalation rate',
+    label: 'Raised with a person',
     family: 'agent_quality',
     definition: 'Share of drafts that raised an escalation of any tier.',
     unit: '%',
@@ -318,7 +318,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'escalation_precision',
-    label: 'Escalation precision',
+    label: 'Escalations that were warranted',
     family: 'agent_quality',
     /**
      * The metric that only exists because there is a one-click way to label an escalation
@@ -341,7 +341,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'injection_detections',
-    label: 'Injection detections',
+    label: 'Sources quarantined',
     family: 'agent_quality',
     definition: 'Sources quarantined for carrying instructions aimed at the agent.',
     unit: '',
@@ -358,7 +358,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'auto_approve_rate',
-    label: 'Auto-approve rate',
+    label: 'Published without review',
     family: 'agent_quality',
     definition: 'Share of posts published without per-item human review.',
     unit: '%',
