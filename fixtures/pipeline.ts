@@ -156,7 +156,7 @@ const V_RISERS = versionId('DV-0146-1');
  * weights were applied at all — and showing the arithmetic is the antidote to that.
  * ==============================================================================================*/
 
-const WEIGHTS: ScoreWeights = {
+export const WEIGHTS: ScoreWeights = {
   brand_voice: 0.3,
   claim_support: 0.25,
   pillar_fit: 0.2,
@@ -173,7 +173,7 @@ const WEIGHTS: ScoreWeights = {
  * what guarantees they never disagree in the first place, and it costs nothing because the whole
  * fixture set is built once.
  */
-function composite(c: ScoreComponents): number {
+export function composite(c: ScoreComponents): number {
   const raw =
     c.brand_voice * WEIGHTS.brand_voice +
     c.claim_support * WEIGHTS.claim_support +
@@ -196,7 +196,7 @@ function composite(c: ScoreComponents): number {
  * convenience, not an abstraction: the returned object is a plain `RunStep`, fully typed, and
  * nothing at runtime knows this function existed.
  */
-function step(
+export function step(
   partial: Pick<RunStep, 'id' | 'run_id' | 'seq' | 'type' | 'label' | 'started_at'> &
     Partial<RunStep>,
 ): RunStep {
@@ -859,7 +859,7 @@ export const scheduledPosts: Post[] = [
 /** Monday 06:00, three days before the anchor. The planning run's origin. */
 const PLAN_START = -3 * DAY - 4 * HOUR;
 
-const BATCH_START = minutes(-28 * HOUR);
+export const BATCH_START = minutes(-28 * HOUR);
 
 /** Start offsets for the three failure narratives, in minutes before the anchor. Declared here
  *  rather than beside their step arrays because the runs array below needs them first. */

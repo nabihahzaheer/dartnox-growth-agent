@@ -53,6 +53,14 @@ import {
   scheduledPosts,
 } from './pipeline.ts';
 import {
+  batchApprovals,
+  batchDrafts,
+  batchEvents,
+  batchRuns,
+  batchSlots,
+  batchSteps,
+} from './batch.ts';
+import {
   historyApprovals,
   historyDrafts,
   historyEvents,
@@ -87,9 +95,9 @@ export const fixtures: FixtureSet = {
    * or aggregates — but keeping the two groups adjacent makes the set readable, and readable
    * fixtures are the ones that get corrected when they are wrong.
    */
-  calendarSlots: [...calendarSlots, ...historySlots],
-  drafts: [...drafts, ...historyDrafts],
-  approvals: [...approvals, ...historyApprovals],
+  calendarSlots: [...calendarSlots, ...batchSlots, ...historySlots],
+  drafts: [...drafts, ...batchDrafts, ...historyDrafts],
+  approvals: [...approvals, ...batchApprovals, ...historyApprovals],
   /**
    * The two scheduled posts first, then everything that already published.
    *
@@ -100,9 +108,9 @@ export const fixtures: FixtureSet = {
   posts: [...scheduledPosts, ...historyPosts],
   metricSnapshots: historySnapshots,
   guardrailRules,
-  guardrailEvents: [...guardrailEvents, ...historyEvents],
-  runs: [...runs, ...historyRuns],
-  runSteps: [...runSteps, ...historySteps],
+  guardrailEvents: [...guardrailEvents, ...batchEvents, ...historyEvents],
+  runs: [...runs, ...batchRuns, ...historyRuns],
+  runSteps: [...runSteps, ...batchSteps, ...historySteps],
   reflectionRules,
   settings,
   metricDescriptors,

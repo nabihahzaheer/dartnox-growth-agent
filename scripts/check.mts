@@ -463,6 +463,42 @@ for (const e of fixtures.guardrailEvents) {
   }
 }
 
+/**
+ * THE HARD GATE, ASSERTED RATHER THAN TRUSTED.
+ *
+ * A draft blocked at a guardrail cannot be approved — the board removes the control from the item,
+ * because L3 tests rules the client set at onboarding rather than a judgement about quality. That
+ * lives in the interrupt's `options` so the interface renders what the gate offers instead of
+ * deciding for itself which button to disable, and so two screens cannot disagree about it.
+ *
+ * `approve_with_edits` must survive, or a blocked draft would have no route forward at all.
+ */
+for (const d of fixtures.drafts.filter((x) => x.state === 'blocked_guardrail')) {
+  const gate = fixtures.runSteps.find(
+    (s) => s.run_id === d.run_id && s.interrupt !== null,
+  )?.interrupt;
+  check(`${d.id} · a blocked draft still stops at a human gate`, gate !== undefined);
+  if (gate) {
+    check(`${d.id} · a blocked draft's gate does not offer approve`, !gate.options.includes('approve'));
+    check(
+      `${d.id} · a blocked draft can still be edited forward`,
+      gate.options.includes('approve_with_edits'),
+    );
+  }
+  check(`${d.id} · a blocked draft says why`, d.blocked_reason !== null);
+}
+
+/** Conversely: an unblocked draft waiting on a person must offer the control, or the queue would
+ *  show items nobody can clear. */
+for (const d of fixtures.drafts.filter((x) => x.state === 'awaiting_approval')) {
+  const gate = fixtures.runSteps.find(
+    (s) => s.run_id === d.run_id && s.interrupt !== null,
+  )?.interrupt;
+  if (gate) {
+    check(`${d.id} · an unblocked gate offers approve`, gate.options.includes('approve'));
+  }
+}
+
 /** A parked run must say when it will be retried, or parking is indistinguishable from death. */
 for (const r of fixtures.runs) {
   if (r.state === 'parked_transient') {
