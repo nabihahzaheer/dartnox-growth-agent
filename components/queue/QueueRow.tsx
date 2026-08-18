@@ -146,7 +146,7 @@ export function QueueRow({
               was publishing {formatRelative(item.post.scheduled_at)}
             </span>
             <Link
-              href={`/draft/${item.draft.id}`}
+              href={`/v1/draft/${item.draft.id}`}
               className="t-label"
               style={{ color: 'var(--accent-text)' }}
             >
@@ -214,7 +214,7 @@ export function QueueRow({
           </span>
           {/* The queue carries enough to decide; the detail view is for when it is not enough. */}
           <Link
-            href={`/draft/${draft.id}`}
+            href={`/v1/draft/${draft.id}`}
             className="t-label"
             style={{ color: 'var(--accent-text)' }}
           >

@@ -4,5 +4,7 @@ import { redirect } from "next/navigation";
  *  screen the brief weights above the others. `/` sends you there rather than being a landing page
  *  that has to be clicked past. */
 export default function Home() {
-  redirect("/console");
+  // Temporary. The rebuilt console takes this route; until it exists, `/` serves v1 so the
+  // deployment keeps working exactly as it did on `main`.
+  redirect("/v1/console");
 }

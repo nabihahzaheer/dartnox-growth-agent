@@ -250,7 +250,7 @@ function SlotCell({ entry }: { entry: WeekEntry }) {
 
   return (
     <Link
-      href={`/draft/${entry.draft.id}`}
+      href={`/v1/draft/${entry.draft.id}`}
       className={`${CELL} hover:[border-color:var(--border-strong)]`}
       style={frame}
     >

@@ -148,7 +148,7 @@ export function NotFound({
 /** A back-link, used by the two screens you can arrive at directly with a bad id. */
 export function BackToQueue() {
   return (
-    <Link href="/queue" className="t-body" style={{ color: 'var(--accent-text)' }}>
+    <Link href="/v1/queue" className="t-body" style={{ color: 'var(--accent-text)' }}>
       Back to the queue
     </Link>
   );

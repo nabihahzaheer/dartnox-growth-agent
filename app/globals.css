@@ -28,7 +28,16 @@
  * a queue, and the assessment document's own header bar is already this near-black.
  */
 
-:root {
+/**
+ * SCOPED 18 AUG. This palette is now declared twice: on `:root`, where it still governs the whole
+ * document, and on `[data-ui="v1"]`, the wrapper `app/v1/layout.tsx` puts around the old interface.
+ *
+ * Today both resolve to the same values and nothing renders differently. The second selector exists
+ * so that when the rebuilt interface claims `:root` for a light palette, v1 keeps its own without a
+ * single component changing — every one of them already reads these through `var()`.
+ */
+:root,
+[data-ui='v1'] {
   /* Lifted directly. #0E1013 is the PDF's dark bar. */
   --bg: #0e1013;
   --surface: #16181d;
@@ -115,6 +124,13 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+/* v1 paints its own ground rather than inheriting the body's. Today that is the same colour; once
+   the rebuilt interface takes `:root`, this is what stops v1 rendering dark text on a light page. */
+[data-ui='v1'] {
+  background: var(--bg);
+  color: var(--text);
 }
 
 /* Courier runs small and light at UI sizes, so anything set in it gets a nudge in weight and

@@ -54,10 +54,10 @@ import { Countdown } from '@/components/Countdown';
 import { formatTime, weekdayShort, weekLabel } from '@/lib/time';
 
 const SCREENS = [
-  { href: '/console', label: 'Console' },
-  { href: '/queue', label: 'Queue' },
-  { href: '/metrics', label: 'Metrics' },
-  { href: '/settings', label: 'Settings' },
+  { href: '/v1/console', label: 'Console' },
+  { href: '/v1/queue', label: 'Queue' },
+  { href: '/v1/metrics', label: 'Metrics' },
+  { href: '/v1/settings', label: 'Settings' },
 ] as const;
 
 /**
@@ -484,7 +484,7 @@ function SlotRow({
   if (activate === null) {
     return (
       <Link
-        href={`/draft/${draftId}`}
+        href={`/v1/draft/${draftId}`}
         title={movedTitle}
         className="mb-0.5 block w-full rounded px-2 py-1 text-left"
       >

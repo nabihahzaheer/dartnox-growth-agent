@@ -1165,7 +1165,7 @@ function VersionHistory({ data }: { data: SettingsScreen }) {
       </ul>
 
       <p className="t-label mt-2">
-        <Link href="/metrics" style={{ color: 'var(--accent-text)' }}>
+        <Link href="/v1/metrics" style={{ color: 'var(--accent-text)' }}>
           Edit rate by version →
         </Link>
       </p>

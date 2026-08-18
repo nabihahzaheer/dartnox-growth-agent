@@ -105,7 +105,7 @@ export default function DraftPage({ params }: { params: Promise<{ id: string }> 
           style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
         >
           <div className="mx-auto flex w-full max-w-3xl items-baseline gap-3">
-            <Link href="/queue" className="t-body" style={{ color: 'var(--accent-text)' }}>
+            <Link href="/v1/queue" className="t-body" style={{ color: 'var(--accent-text)' }}>
               ← Queue
             </Link>
             {/* The screen name, and this route's only `h1`. The bar previously carried the back
@@ -532,7 +532,7 @@ function Detail({
       <Section title={`Reasoning trace · ${steps.length} steps`}>
         {run && (
           <p className="t-meta tabular mb-2">
-            <Link href="/console" className="font-mono" style={{ color: 'var(--accent-text)' }}>
+            <Link href="/v1/console" className="font-mono" style={{ color: 'var(--accent-text)' }}>
               {run.id}
             </Link>{' '}
             · {formatRelative(run.started_at)}
