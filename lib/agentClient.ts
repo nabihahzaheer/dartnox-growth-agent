@@ -79,6 +79,7 @@ import type {
   RunId,
   RunStep,
   RunStepId,
+  StepInterrupt,
   RunVariant,
   Settings,
 } from '@/lib/types';
@@ -257,6 +258,12 @@ export async function getSettingsScreen(): Promise<SettingsScreen> {
       evidence,
     };
   });
+}
+
+/** The rule set, for anything rendering a check's name, layer or mechanism. Config latency: it is
+ *  thirteen rows that change only when an operator edits them. */
+export async function getGuardrailRules(): Promise<GuardrailRule[]> {
+  return read(LATENCY_MS.config, () => world.guardrailRules);
 }
 
 export async function getMetricDescriptors(): Promise<MetricDescriptor[]> {
@@ -502,6 +509,84 @@ export function initialWeekIndex(): number {
   return defaultWeekIndex(world);
 }
 
+/**
+ * ONE CHILD OF A BATCH, WITH EVERYTHING ITS ROW NEEDS ALREADY JOINED.
+ *
+ * `gate` is the field worth naming. It is the interrupt the run stopped at, and it carries which
+ * decisions that gate permits. A blocked draft's gate omits `approve`, so the interface renders the
+ * controls the gate offers rather than deciding for itself which button to disable — two screens
+ * cannot then disagree about a rule the architecture states once.
+ */
+export type BatchChild = {
+  run: Run;
+  slot: CalendarSlot | null;
+  draft: Draft | null;
+  gate: StepInterrupt | null;
+  events: GuardrailEvent[];
+};
+
+export type Batch = {
+  parent: Run;
+  children: BatchChild[];
+  /** Children that have produced a draft, however that draft ended. */
+  drafted: number;
+  total: number;
+  /** True while any child is still executing. The console's liveness is this, not a timer. */
+  running: boolean;
+  budget: BudgetPosture;
+};
+
+/**
+ * THE WEDNESDAY BATCH.
+ *
+ * The unit the rebuilt console is organised around. The architecture drafts the whole of next week
+ * in one triggered job that fans out to one independent run per slot, so the operator's morning is
+ * a batch and not a run — and a view that shows one run at a time makes eight parallel children
+ * look like a queue of unrelated events.
+ *
+ * Children are ordered by their slot's publish time rather than by run id, because that is the
+ * order the operator will publish them in and the only order that means anything to them.
+ *
+ * Standalone runs are deliberately absent. A quarantined or parked run has no parent in this
+ * fixture set and belongs to the queue's run arm, which already renders it; folding them in here
+ * would put two different kinds of thing under one progress bar.
+ */
+export async function getBatch(): Promise<Batch> {
+  return read(LATENCY_MS.list, () => {
+    const parent = [...world.runs]
+      .filter((r) => r.type === 'draft' && r.trigger === 'schedule.weekly_draft' && !r.parent_run_id)
+      .sort((a, b) => b.started_at - a.started_at)[0];
+
+    if (!parent) fail({ kind: 'not_found' });
+
+    const children: BatchChild[] = world.runs
+      .filter((r) => r.parent_run_id === parent.id)
+      .map((run) => {
+        const draft = world.drafts.find((d) => d.id === run.target_draft_id) ?? null;
+        const slot = draft ? (world.calendarSlots.find((s) => s.id === draft.slot_id) ?? null) : null;
+        const gate =
+          world.runSteps.find((s) => s.run_id === run.id && s.interrupt !== null)?.interrupt ?? null;
+        return {
+          run,
+          slot,
+          draft,
+          gate,
+          events: world.guardrailEvents.filter((e) => e.run_id === run.id),
+        };
+      })
+      .sort((a, b) => (a.slot?.publish_at ?? 0) - (b.slot?.publish_at ?? 0));
+
+    return {
+      parent,
+      children,
+      drafted: children.filter((c) => c.draft !== null && c.draft.state !== 'drafting').length,
+      total: children.length,
+      running: children.some((c) => c.run.state === 'running' || c.run.state === 'queued'),
+      budget: budgetPosture(world),
+    };
+  });
+}
+
 export async function getRunSummaries(): Promise<RunSummary[]> {
   return read(LATENCY_MS.list, () =>
     world.runs
@@ -564,8 +649,21 @@ export async function getQueue(): Promise<QueueItem[]> {
   return read(LATENCY_MS.list, () => {
     const threshold = world.settings.score_threshold;
 
+    /**
+     * `blocked_guardrail` belongs here and was missing.
+     *
+     * The board routes a blocked draft to the operator with the rule and the offending sentence
+     * marked, and the operator decides whether to rewrite it or drop the slot. Filtering on
+     * `awaiting_approval` alone meant the one state the architecture is most emphatic about never
+     * reached the queue at all — the run sat in `awaiting_human` with nothing on any screen
+     * offering the human anything to do.
+     *
+     * What it may not do is offer approve, and that is not enforced here. It is carried on the
+     * run's interrupt as `options`, so the decision belongs to the gate rather than to whichever
+     * component happens to render the row.
+     */
     const draftItems: QueueItem[] = world.drafts
-      .filter((d) => d.state === 'awaiting_approval')
+      .filter((d) => d.state === 'awaiting_approval' || d.state === 'blocked_guardrail')
       .map((draft) => ({
         kind: 'draft' as const,
         draft,
