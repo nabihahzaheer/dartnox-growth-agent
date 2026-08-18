@@ -1,7 +1,23 @@
 @import "tailwindcss";
 
 /**
- * VISUAL LANGUAGE (D-039, revised twice on 17 Aug)
+ * TWO INTERFACES SHARE THIS FILE.
+ *
+ * `[data-ui='v1']` scopes everything belonging to the interface submitted on 17 August. `:root`
+ * carries the rebuilt one. They share token names deliberately, so custom-property inheritance does
+ * the switching and no component had to change. Read the block comments in order:
+ *
+ *   1. v1's palette and the note below on where it came from
+ *   2. the rebuilt palette, and why it is light
+ *   3. the faces, scoped the same way
+ *   4. v1's component rules — unchanged
+ *   5. the rebuilt shell, at the foot of the file and kept in one piece
+ *
+ * ------------------------------------------------------------------------------------------------
+ * V1'S VISUAL LANGUAGE (D-039, revised twice on 17 Aug)
+ *
+ * Kept verbatim because it explains a decision that was later reversed, and the reversal is only
+ * legible next to the reasoning it replaced.
  *
  * The palette and type below are lifted from the assignment PDF rather than invented. Those values
  * were reverse-engineered from that document's content stream when `build_prd.py` was written to
@@ -26,17 +42,24 @@
  *
  * Dark by default. An operator console is a surface someone sits in front of for an hour clearing
  * a queue, and the assessment document's own header bar is already this near-black.
+ *
+ * REVERSED 18 AUG. That last paragraph is the mistake this rebuild exists to correct, and it is two
+ * mistakes stacked. The premise is wrong: the operator is a marketing lead who opens this a few
+ * times a week to clear eight posts, not someone sitting in it for an hour. And the justification
+ * is circular — the assessment document is a document, and its header bar being near-black is a
+ * fact about that PDF rather than about anyone using this product.
  */
 
 /**
- * SCOPED 18 AUG. This palette is now declared twice: on `:root`, where it still governs the whole
- * document, and on `[data-ui="v1"]`, the wrapper `app/v1/layout.tsx` puts around the old interface.
+ * SCOPED 18 AUG, then split 18 AUG. `:root` now carries the rebuilt interface's light palette (see
+ * the block below this one). Everything here is v1's dark palette, scoped to the wrapper that
+ * `app/v1/layout.tsx` puts around the old interface.
  *
- * Today both resolve to the same values and nothing renders differently. The second selector exists
- * so that when the rebuilt interface claims `:root` for a light palette, v1 keeps its own without a
- * single component changing — every one of them already reads these through `var()`.
+ * The two palettes share token names on purpose. Custom properties inherit, so an element inside
+ * `[data-ui='v1']` resolves `--text-muted` from this block and an element outside it resolves the
+ * light value — including through the Tailwind utilities `@theme inline` generates, which v1 uses
+ * for `text-muted` and `text-faint`. That is why v1 needed no component changes at all.
  */
-:root,
 [data-ui='v1'] {
   /* Lifted directly. #0E1013 is the PDF's dark bar. */
   --bg: #0e1013;
@@ -88,6 +111,58 @@
   --state-neutral-bg: #1e2127;
 }
 
+/**
+ * THE REBUILT INTERFACE'S PALETTE — light, and light by decision rather than by taste.
+ *
+ * v1's palette was reverse-engineered from the assessment PDF's dark header bar, which is a
+ * document artefact and not a fact about the person using this. The operator is a marketing lead
+ * who opens the console a few times a week to clear a queue of eight posts. Every mainstream tool
+ * in that category ships light-first — Buffer, Planable, Later, Sprout, Publer — and Hootsuite's
+ * dark chrome draws complaints about being hard on the eyes.
+ *
+ * Ground is a cool grey-green off-white measured a shade off Planable's own #F5F6F7, chosen the
+ * same way and for the same reason: the chrome recedes so the rendered post is the most designed
+ * thing on the screen.
+ *
+ * The accent is a desaturated blueprint blue. It is deliberately not v1's #2E5CFF, and it is dark
+ * enough to carry white text at AA. Semantic colour is a separate three-value set — go, attend,
+ * stop — because an accent that also means "good" cannot be restyled without changing what the
+ * interface says. Platform colours (LinkedIn, X) are reserved for identifying a platform and are
+ * never borrowed for state, which is Sprout Social's rule in their public design system.
+ */
+:root {
+  --bg: #f7f8f9;
+  --surface: #ffffff;
+  --surface-sunk: #f1f3f5;
+  --border: #e4e7ea;
+  --border-strong: #cdd3d8;
+
+  --text: #151a1e;
+  --text-muted: #4c555c;
+  --text-faint: #78838b;
+
+  --accent: #2c5aa8;
+  --accent-ink: #ffffff;
+  --accent-text: #22467f;
+  --accent-soft: #eaf0f9;
+
+  /* Semantic, and separate from the accent. */
+  --go: #2c7a55;
+  --go-soft: #e5f2eb;
+  --attend: #8a5a08;
+  --attend-soft: #fbf0dc;
+  --stop: #9a3324;
+  --stop-soft: #fae9e6;
+
+  /* Platform identity only. Never used to mean a state. */
+  --ch-linkedin: #0a66c2;
+  --ch-x: #151a1e;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 2px rgb(21 26 30 / 4%), 0 3px 12px rgb(21 26 30 / 5%);
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -102,14 +177,21 @@
   --font-mono: var(--font-mono);
 }
 
-:root {
-  /**
-   * The document uses Helvetica and Courier. Both are system fonts, so this loads nothing — which
-   * also removed two Google Font requests the earlier version made. Arial substitutes for
-   * Helvetica where it is absent and is metrically compatible, so the layout does not move.
-   */
+/**
+ * v1's faces. The assessment document uses Helvetica and Courier, and v1 adopted both. Courier is
+ * the single strongest reason v1 reads as engineering tooling: it carries 60 applications there,
+ * including an 11px uppercase label role. The rebuilt interface keeps a monospace face for the
+ * places where a monospace means something — identifiers, token counts, hashes, tool names — and
+ * uses a real UI mono rather than Courier.
+ */
+[data-ui='v1'] {
   --font-sans: Helvetica, "Helvetica Neue", Arial, system-ui, sans-serif;
   --font-mono: "Courier New", Courier, ui-monospace, monospace;
+}
+
+:root {
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 html,
@@ -121,16 +203,19 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
-/* v1 paints its own ground rather than inheriting the body's. Today that is the same colour; once
-   the rebuilt interface takes `:root`, this is what stops v1 rendering dark text on a light page. */
+/* v1 paints its own ground and restores its own metrics, rather than inheriting the body's. This
+   is what stops v1 rendering its dark interface on the rebuilt light page. */
 [data-ui='v1'] {
   background: var(--bg);
   color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 /* Courier runs small and light at UI sizes, so anything set in it gets a nudge in weight and
@@ -360,5 +445,196 @@ body {
   *::before,
   *::after {
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ================================================================================================
+ * THE REBUILT INTERFACE
+ *
+ * Everything below this line belongs to the shell at `app/(main)`. It is kept together rather than
+ * interleaved with v1's rules so that the two can be told apart by eye, and so v1's block can be
+ * deleted in one piece if this ever replaces it outright.
+ * ==============================================================================================*/
+
+.shell {
+  display: grid;
+  grid-template-columns: 212px 1fr;
+  min-height: 100dvh;
+}
+
+.shell-side {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  padding: 16px 12px;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100dvh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 6px 16px;
+}
+.shell-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex: none;
+}
+.shell-client {
+  font-weight: 650;
+  font-size: 14px;
+}
+
+.shell-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 20px;
+}
+.shell-nav a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.shell-nav a:hover {
+  background: var(--surface-sunk);
+  color: var(--text);
+}
+.shell-nav a.is-here {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.shell-glyph {
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+  opacity: 0.75;
+  flex: none;
+}
+.shell-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--attend);
+  color: #fff;
+  border-radius: 99px;
+  padding: 1px 7px;
+}
+
+.shell-group {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0 9px 8px;
+  margin: 0;
+}
+.shell-chan {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 9px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.shell-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex: none;
+}
+
+.shell-foot {
+  margin: auto 0 0;
+  padding: 12px 9px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.shell-foot a {
+  color: var(--text-faint);
+  text-decoration: none;
+}
+.shell-foot a:hover {
+  color: var(--accent-text);
+  text-decoration: underline;
+}
+
+.shell-main {
+  padding: 24px 26px 80px;
+  max-width: 1020px;
+}
+
+/* ---- page furniture ---- */
+.page-head {
+  margin-bottom: 22px;
+}
+.page-title {
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  margin: 0;
+}
+.page-sub {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin: 6px 0 0;
+  max-width: 62ch;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.mono {
+  font-family: var(--font-mono);
+}
+.swatches {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.sw {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgb(21 26 30 / 8%);
+}
+
+/* Focus is visible on the rebuilt interface too. v1 sets its own further up. */
+.shell :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (max-width: 860px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  .shell-side {
+    display: none;
   }
 }
