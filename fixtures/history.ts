@@ -634,6 +634,11 @@ PLAN.forEach((entry, index) => {
   if (outcome === 'quarantined') {
     historyEvents.push({
       id: `GE-${n}-INJ` as GuardrailEventId,
+      // classifier + fail, so it explains itself. Characterises the shape only: the span is
+      // withheld because the operator may be the instruction's target.
+      rationale:
+        'The page carries an imperative addressed to an automated reader rather than to a ' +
+        'person. Above threshold. What it asks for is not repeated here.',
       run_id: runId,
       run_step_id: `RS-${n}-03` as RunStepId,
       draft_id: null,
@@ -754,6 +759,9 @@ PLAN.forEach((entry, index) => {
   for (const rule of PASS_RULES) {
     historyEvents.push({
       id: `GE-${n}-${pillarLabel[entry.pillar]}-${rule}` as GuardrailEventId,
+      // PASS_RULES are lookup and embedding checks. A matched list and a measured distance have
+      // nothing to explain, and prose here would imply reasoning that never happened.
+      rationale: null,
       run_id: runId,
       run_step_id: `RS-${n}-06` as RunStepId,
       draft_id: draftId,
@@ -792,6 +800,9 @@ PLAN.forEach((entry, index) => {
     const warranted = index !== 1; // and one judged escalation turned out not to be warranted
     historyEvents.push({
       id: `GE-${n}-ESC` as GuardrailEventId,
+      // claim_entailment runs on inference, and this one warned, so it carries a rationale.
+      rationale:
+        'A quantitative claim in this draft is not supported by the sources it cites.',
       run_id: runId,
       run_step_id: `RS-${n}-06` as RunStepId,
       draft_id: draftId,

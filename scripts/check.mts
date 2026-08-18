@@ -425,6 +425,44 @@ for (const e of fixtures.guardrailEvents) {
   check(`${e.id} · escalation tier and trigger agree`, consistent);
 }
 
+/**
+ * A rationale is model-authored, so it may exist only where a model decided. `lookup` matched a
+ * list and `embedding` measured a distance; neither has anything to explain, and prose attached to
+ * one would imply reasoning that never happened. An event with no rule behind it — a tool failure,
+ * a budget stop — has no mechanism at all and therefore no rationale.
+ *
+ * This is the assertion that turns the field's contract from a comment into a fact.
+ */
+const MODEL_MECHANISMS = new Set(['classifier', 'inference']);
+for (const e of fixtures.guardrailEvents) {
+  const rule = e.rule_id ? fixtures.guardrailRules.find((r) => r.id === e.rule_id) : undefined;
+  const mayExplain = rule !== undefined && MODEL_MECHANISMS.has(rule.mechanism);
+  check(
+    `${e.id} · rationale present only where a model decided` +
+      (rule ? ` (${rule.kind}/${rule.mechanism})` : ' (no rule)'),
+    mayExplain || e.rationale === null,
+  );
+  if (mayExplain && e.result !== 'pass') {
+    check(`${e.id} · a non-passing model verdict explains itself`, e.rationale !== null);
+  }
+}
+
+/**
+ * Withholding has to mean the text is absent, not merely unrendered. A withheld event carries no
+ * span and says why, so there is nothing for an interface to leak by accident.
+ *
+ * The limit of this check, stated because it matters: it cannot prove a rationale does not
+ * paraphrase the instruction it describes. Nothing in the fixture set stores the injected text —
+ * deliberately — so there is nothing to compare against. That constraint lives in the prompt and in
+ * the comment on the fixture, and this asserts only the part that is mechanically true.
+ */
+for (const e of fixtures.guardrailEvents) {
+  if (e.span_withheld) {
+    check(`${e.id} · a withheld span stores no text`, e.offending_span === null);
+    check(`${e.id} · a withheld span says why`, (e.withheld_reason ?? '').length > 0);
+  }
+}
+
 /** A parked run must say when it will be retried, or parking is indistinguishable from death. */
 for (const r of fixtures.runs) {
   if (r.state === 'parked_transient') {

@@ -57,6 +57,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: RULE_INJECTION,
     layer: 'L1',
     kind: 'prompt_injection',
+    mechanism: 'classifier',
     config: { classifier: 'guard-class-sm', threshold: 0.6, action_on_hit: 'quarantine' },
     severity: 'block',
     /**
@@ -82,6 +83,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: id('GR-L1-DOMAIN'),
     layer: 'L1',
     kind: 'domain_allowlist',
+    mechanism: 'lookup',
     config: { mode: 'strict' },
     severity: 'block',
     is_fixed: false,
@@ -101,6 +103,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: id('GR-L2-LENGTH'),
     layer: 'L2',
     kind: 'length_limit',
+    mechanism: 'lookup',
     config: { linkedin_max: 2800, x_max: 280 },
     severity: 'block',
     is_fixed: false,
@@ -116,6 +119,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: id('GR-L2-LINKS'),
     layer: 'L2',
     kind: 'outbound_link_allowlist',
+    mechanism: 'lookup',
     config: { mode: 'strict' },
     severity: 'block',
     is_fixed: false,
@@ -135,6 +139,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: RULE_BANNED_CLAIM,
     layer: 'L3',
     kind: 'banned_claim',
+    mechanism: 'lookup',
     /** Deterministic: an exact list, matched as strings. No model, because a model would be
      *  slower, dearer and less predictable than `includes`. */
     config: { match: 'exact_phrase', case_sensitive: false },
@@ -154,6 +159,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: RULE_REGULATED,
     layer: 'L3',
     kind: 'regulated_claim',
+    mechanism: 'classifier',
     config: { classifier: 'claim-class', threshold: 0.5, tier: 'stakeholder' },
     severity: 'block',
     /** Fixed for the same reason as injection: a published regulated claim is not recoverable by
@@ -171,6 +177,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: RULE_ENTAILMENT,
     layer: 'L3',
     kind: 'claim_entailment',
+    mechanism: 'inference',
     config: { scope: 'quantitative_world_claims', model_tier: 'capable' },
     /** Warn, not block. An unsupported claim is a quality problem with a human answer; the human
      *  can add the source or cut the sentence. Blocking would route perfectly good posts into a
@@ -189,6 +196,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: RULE_SIMILARITY,
     layer: 'L3',
     kind: 'similarity',
+    mechanism: 'embedding',
     /** N9, and it is conjunctive: against published posts in the last 30 days on the same channel
      *  AND against the rest of the current batch. The intra-batch half only became checkable when
      *  the check moved out of the score and into the guardrail layer (trace T11). */
@@ -207,6 +215,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: RULE_PII,
     layer: 'L3',
     kind: 'pii',
+    mechanism: 'classifier',
     config: { detect: 'names,addresses,unit_numbers', action: 'block' },
     severity: 'block',
     is_fixed: false,
@@ -222,6 +231,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: RULE_COMPETITOR,
     layer: 'L3',
     kind: 'competitor_mention',
+    mechanism: 'classifier',
     config: { classifier: 'competitor-class', threshold: 0.5 },
     severity: 'warn',
     is_fixed: false,
@@ -249,6 +259,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: RULE_HASH_MATCH,
     layer: 'L4',
     kind: 'content_hash_match',
+    mechanism: 'lookup',
     config: { algorithm: 'sha256' },
     severity: 'block',
     /** See the header note: the third fixed rule, on its merits. */
@@ -265,6 +276,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: id('GR-L4-CHANNEL'),
     layer: 'L4',
     kind: 'channel_enabled',
+    mechanism: 'lookup',
     config: { require_connected: true },
     severity: 'block',
     is_fixed: false,
@@ -280,6 +292,7 @@ export const guardrailRules: GuardrailRule[] = [
     id: id('GR-L4-WINDOW'),
     layer: 'L4',
     kind: 'posting_window',
+    mechanism: 'lookup',
     /** The 2h grace is B3's: later than that escalates instead of publishing, because a nine
      *  o'clock post going out at nine in the evening is worse than none. */
     config: { grace_minutes: 120, on_late: 'escalate' },

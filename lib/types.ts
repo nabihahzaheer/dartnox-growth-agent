@@ -723,10 +723,33 @@ export type GuardrailKind =
   | 'rate_limit'
   | 'reconciliation';
 
+/**
+ * WHAT ACTUALLY DECIDES A CHECK. On the board this is spelled out per rule — "banned phrases →
+ * lookup, exact list, no model needed", "near-duplicates → embedding maths", "regulated claims,
+ * personal data → classifier", "unsupported claims → Opus, real inference" — and it was missing
+ * from the type, which meant the distinction existed on the diagram and nowhere in the code.
+ *
+ * It earns its place three times over. It is the honest answer to "how much of this is a model
+ * guessing"; it is what the settings screen renders next to each rule; and it is what makes
+ * `GuardrailEvent.rationale` nullable on a rule rather than by convention — only the two model
+ * mechanisms can produce one, because only they have anything to explain.
+ */
+export type GuardrailMechanism =
+  /** Exact list or arithmetic. Certain, and cheaper than a model call. */
+  | 'lookup'
+  /** Vector distance against the published corpus. Deterministic given the same corpus. */
+  | 'embedding'
+  /** A small model returning a label. Cheap, and wrong in bounded ways. */
+  | 'classifier'
+  /** A capable model deciding whether one span is supported by another. The hardest call in the
+   *  system and the only place a check reasons rather than matches. */
+  | 'inference';
+
 export type GuardrailRule = {
   id: GuardrailRuleId;
   layer: GuardrailLayer;
   kind: GuardrailKind;
+  mechanism: GuardrailMechanism;
   config: ConfigObject;
   /** B1: block or warn. */
   severity: 'block' | 'warn';
@@ -867,8 +890,31 @@ export type GuardrailEvent = {
   domain_flagged: boolean;
   replies: Reply[];
   decision_deadline: MinutesFromAnchor | null;
-  /** The one-line reason at the top of the handoff payload. */
+  /** The one-line reason at the top of the handoff payload. Templated from the record. */
   detail: string;
+  /**
+   * THE ONE MODEL-AUTHORED STRING IN THE RECORD, and the reason this field exists at all.
+   *
+   * Everything else a reviewer reads about a verdict is a value: the score and the threshold are
+   * numbers, the weakest dimension is an argmin over the components, the offending span is offsets
+   * into a version. Those compose into a sentence in the interface and cannot drift, because
+   * nothing wrote them.
+   *
+   * The explanation cannot be composed that way. "Neither cited source states a 40% figure" is a
+   * claim about two documents, and no template has access to it. It is returned by the same call
+   * that produced the verdict — the entailment check already has both the span and the sources in
+   * context — rather than by a second pass whose only job is to write prose about a decision that
+   * was already made. A summarising step would be a model explaining a verdict it did not reach,
+   * which is how a rationale ends up plausible and wrong.
+   *
+   * Null exactly when `GuardrailRule.mechanism` is `lookup` or `embedding`. A banned phrase matched
+   * a list; there is nothing to explain and inventing prose for it would imply reasoning that never
+   * happened. `scripts/check.mts` asserts that correspondence rather than trusting it.
+   *
+   * Bounded in the prompt, and bounded here, because an unbounded field renders unpredictably and
+   * this one sits inside a card the reviewer is meant to read in thirty seconds.
+   */
+  rationale: string | null;
 };
 
 /* ============================================================================================

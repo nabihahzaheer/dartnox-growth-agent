@@ -468,6 +468,12 @@ export function escalate(
      *  operator is already here. */
     decision_deadline: tier === 'stakeholder' ? ((ctx.now + 72 * 60) as MinutesFromAnchor) : null,
     detail,
+    /**
+     * Null, and it could not be otherwise. A rationale explains a verdict a model reached; this
+     * record was produced by a person deciding to escalate, and it carries no `rule_id` for a
+     * mechanism to be read from. The operator's own words are `detail`.
+     */
+    rationale: null,
   };
 
   return {

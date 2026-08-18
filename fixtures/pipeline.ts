@@ -2442,6 +2442,9 @@ function passEvent(
   ruleIdent: GuardrailEvent['rule_id'],
   evaluatedAt: MinutesFromAnchor,
   detail: string,
+  /** Non-null only where a model produced the verdict. A passing lookup has nothing to explain,
+   *  and `scripts/check.mts` asserts that against the rule's `mechanism`. */
+  rationale: string | null = null,
 ): GuardrailEvent {
   return {
     id: eventId(id),
@@ -2469,6 +2472,7 @@ function passEvent(
     replies: [],
     decision_deadline: null,
     detail,
+    rationale,
   };
 }
 
@@ -2563,6 +2567,15 @@ export const guardrailEvents: GuardrailEvent[] = [
     detail:
       'The draft states a 40% reduction. The source it cited describes incentive structure and ' +
       'makes no such claim. Add a source that supports the figure, or cut it.',
+    /**
+     * `claim_entailment` runs on `inference`, so this is the one guardrail in the healthy path that
+     * has something to explain. Written by the same call that returned `warn`, which already had
+     * the span and both summaries in context.
+     */
+    rationale:
+      'Neither cited source states a 40% figure. The NYSERDA page sets out how the incentives ' +
+      'stack and gives no reduction percentage; the Accelerator page covers eligibility only. ' +
+      'The claim is not entailed by the material this draft cites.',
   },
   passEvent(
     'GE-0143-01',
@@ -2623,6 +2636,7 @@ export const guardrailEvents: GuardrailEvent[] = [
     detail:
       'fetch_source returned 503 three times. Run parked; the hourly sweep will resume it from ' +
       'the checkpoint. No draft was produced.',
+    rationale: null,
   },
 
   /**
@@ -2691,6 +2705,17 @@ export const guardrailEvents: GuardrailEvent[] = [
     detail:
       'A fetched source carried instructions aimed at the agent rather than at a reader. ' +
       'Quarantined before drafting; no draft was produced.',
+    /**
+     * `prompt_injection` runs on `classifier`, so it has a rationale — and this one is written under
+     * a constraint the others are not. The span is withheld because the operator may be the
+     * instruction's target, and a rationale that quoted or paraphrased the instruction closely
+     * would route around that withholding and deliver the payload anyway. It characterises the
+     * shape of what was found and stops there.
+     */
+    rationale:
+      'The page carries an imperative addressed to an automated reader rather than to a person, ' +
+      'placed in markup a human visitor would not see. Scored 0.94 against a threshold of 0.30. ' +
+      'What it asks for is not repeated here.',
   },
   {
     /**
@@ -2748,6 +2773,7 @@ export const guardrailEvents: GuardrailEvent[] = [
     detail:
       'Three negative replies in one poll window on a post under 48 hours old, against a threshold ' +
       'of 3. The "What it actually costs" pillar is paused; the other three are unaffected.',
+    rationale: null,
   },
   passEvent(
     'GE-0149-01',
@@ -2786,5 +2812,6 @@ export const guardrailEvents: GuardrailEvent[] = [
       'The publish call timed out and the channel read back two candidates that cannot be told ' +
       'apart. We do not know whether this published. Parked rather than retried — replaying could ' +
       'post a second copy under the client’s name.',
+    rationale: null,
   },
 ];
