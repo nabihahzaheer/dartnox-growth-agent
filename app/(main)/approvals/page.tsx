@@ -20,7 +20,7 @@ import Link from 'next/link';
 import { getQueue, subscribeToWorld } from '@/lib/agentClient';
 import type { ConsoleError, QueueItem } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
-import { EmptyState, LoadError, LoadingState } from '@/components/ScreenState';
+import { EmptyState, LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 
 const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
 
@@ -63,13 +63,22 @@ export default function ApprovalsPage() {
     <>
       <header className="page-head">
         <h1 className="page-title">My approvals</h1>
+        {/**
+         * "in the order it started waiting" was false, and falsifiable on screen: `getQueue` sorts
+         * by priority band first — invalidated posts, then flagged items and runs, then everything
+         * else — and only orders by waiting time *within* a band. A draft that had waited 27 hours
+         * rendered seventh, below three runs that started three hours earlier. Operator-facing copy
+         * disagreeing with the data it describes is the exact defect the compose-from-values rule
+         * exists to prevent, and this was a sentence typed next to a sort it did not describe.
+         */}
         <p className="page-sub">
-          Everything waiting on a person, in the order it started waiting: drafts to decide,
-          sources the agent stopped on, and posts a settings change sent back.
+          Everything waiting on a person: posts sent back by a settings change first, then flagged
+          items and stopped runs, then the rest — oldest first within each group.
         </p>
       </header>
 
-      {error && <LoadError error={error} onRetry={() => void load()} />}
+      {error && !items && <LoadError error={error} onRetry={() => void load()} />}
+      {error && items && <StaleWarning error={error} onRetry={() => void load()} />}
 
       {!error && !items && <LoadingState lines={3} label="Loading the queue" />}
 

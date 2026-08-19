@@ -40,6 +40,7 @@ import { fixtures, LIVE_RUN_EMITTED_THROUGH_SEQ } from '@/fixtures';
 import { NOW } from '@/lib/time';
 import { buildWeek, defaultWeekIndex, describeRun, type Week } from '@/lib/week';
 import { budgetPosture, type BudgetPosture } from '@/lib/budget';
+import type { KeyedMetricDescriptor } from '@/lib/metrics';
 import {
   addBannedClaim,
   approve,
@@ -297,8 +298,11 @@ export async function getGuardrailRules(): Promise<GuardrailRule[]> {
   return read(LATENCY_MS.config, () => world.guardrailRules);
 }
 
-export async function getMetricDescriptors(): Promise<MetricDescriptor[]> {
-  return read(LATENCY_MS.config, () => world.metricDescriptors);
+export async function getMetricDescriptors(): Promise<KeyedMetricDescriptor[]> {
+  /** The cast restates what `fixtures/metricDescriptors.ts` already guarantees by annotation — see
+   *  `KeyedMetricDescriptor`. It is the one place the widened `string` on `MetricDescriptor` is
+   *  narrowed back, so the dashboard can index `METRICS` without the fixture import D-002 forbids. */
+  return read(LATENCY_MS.config, () => world.metricDescriptors as KeyedMetricDescriptor[]);
 }
 
 export async function getRuns(): Promise<Run[]> {
@@ -329,11 +333,29 @@ export async function getDraft(id: DraftId): Promise<Draft> {
  * the second as they arrive.
  */
 export async function getRunSteps(id: RunId, throughSeq?: number): Promise<RunStep[]> {
-  return read(LATENCY_MS.trace, () =>
-    world.runSteps
-      .filter((s) => s.run_id === id && (throughSeq === undefined || s.seq <= throughSeq))
-      .sort((a, b) => a.seq - b.seq),
-  );
+  return read(LATENCY_MS.trace, () => {
+    /**
+     * A RUNNING RUN HAS NOT EMITTED ITS LATER STEPS, AND THE SEAM ENFORCES THAT RATHER THAN TRUSTING
+     * THE CALLER.
+     *
+     * The console asked for a running child's steps with no `throughSeq` and rendered all ten,
+     * including "Waiting for a decision" — so a card with a pulsing "drafting" pill displayed the
+     * run's own terminal step, claiming to be mid-flight and finished at the same time. That is the
+     * defect D-041 recorded once already (a green "Complete" banner under a "Quarantined" badge):
+     * two parts of one screen rendering one run and disagreeing.
+     *
+     * The fix belongs here and not at the call site. How far a run has got is a fact about the run,
+     * which is the same argument `RunAttachment` already makes about `fromSeq` — and a default that
+     * can only be got wrong by remembering to pass an argument will eventually be got wrong.
+     */
+    const run = world.runs.find((r) => r.id === id);
+    const emitted =
+      run?.state === 'running' ? Math.min(throughSeq ?? Infinity, LIVE_RUN_EMITTED_THROUGH_SEQ) : throughSeq;
+
+    return world.runSteps
+      .filter((s) => s.run_id === id && (emitted === undefined || s.seq <= emitted))
+      .sort((a, b) => a.seq - b.seq);
+  });
 }
 
 /**

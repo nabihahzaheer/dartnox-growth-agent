@@ -39,16 +39,25 @@ import {
   ROLLING_4W,
   PERIOD,
   blockRateByLayer,
+  type KeyedMetricDescriptor,
   type Window,
 } from '@/lib/metrics';
-import { getBudget, getWorld, subscribeToWorld } from '@/lib/agentClient';
-import { metricDescriptors } from '@/fixtures/metricDescriptors';
+/**
+ * `getMetricDescriptors()`, not `import { metricDescriptors } from '@/fixtures/…'`.
+ *
+ * That import was the only direct fixture import anywhere in `app/` or `components/`, and it
+ * contradicted D-002 verbatim — "No React component imports a fixture file directly… fixtures are
+ * imported by that module and nowhere else" — which is the central architectural claim of this
+ * whole build and the one the walkthrough states in as many words. The seam function existed the
+ * entire time and had zero callers. One grep by a reviewer finds this, and it costs the argument.
+ */
+import { getBudget, getMetricDescriptors, getWorld, subscribeToWorld } from '@/lib/agentClient';
 import { BudgetLine, BudgetNotice } from '@/components/BudgetNotice';
 import { formatDate } from '@/lib/time';
 import type { BudgetPosture } from '@/lib/budget';
 import type { ConsoleError, FixtureSet, GuardrailEvent, MetricResult } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
-import { LoadError, LoadingState } from '@/components/ScreenState';
+import { LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 
 const ALARM_IDS = new Set(['guardrail_block_rate', 'rubber_stamp_rate', 'queue_age_p95']);
 
@@ -81,7 +90,7 @@ function verdict(value: number, min: number | null, max: number | null): 'go' | 
   return within ? 'go' : 'attend';
 }
 
-type Row = (typeof metricDescriptors)[number];
+type Row = KeyedMetricDescriptor;
 
 function Tile({ d, result }: { d: Row; result: MetricResult<number> }) {
   const band = bandLabel(d.unit, d.healthy_range.min, d.healthy_range.max);
@@ -121,7 +130,11 @@ function Tile({ d, result }: { d: Row; result: MetricResult<number> }) {
     <div className="tile">
       <div className="tl2">{d.label}</div>
       <div className="tb">{formatValue(d.unit, result.value)}</div>
+      {/* The verdict is a word as well as a colour. A healthy tile and an out-of-band tile rendered
+          identical text and differed only in green vs amber, on the one screen whose job is
+          reporting — invisible to a colour-blind reader and absent from the accessible name. */}
       <div className={`tv ${v === 'go' ? 'go' : v === 'attend' ? 'at' : 'nd'}`}>
+        {v && <b>{v === 'go' ? 'In band' : 'Outside band'} · </b>}
         {band ?? `n = ${result.sample_n}`}
         {band && <span className="mono tv-n"> · n={result.sample_n}</span>}
       </div>
@@ -131,14 +144,16 @@ function Tile({ d, result }: { d: Row; result: MetricResult<number> }) {
 
 export default function ResultsPage() {
   const [world, setWorld] = useState<FixtureSet | null>(null);
+  const [descriptors, setDescriptors] = useState<KeyedMetricDescriptor[] | null>(null);
   const [budget, setBudget] = useState<BudgetPosture | null>(null);
   const [error, setError] = useState<ConsoleError | null>(null);
   const [openLayer, setOpenLayer] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [w, b] = await Promise.all([getWorld(), getBudget()]);
+      const [w, d, b] = await Promise.all([getWorld(), getMetricDescriptors(), getBudget()]);
       setWorld(w);
+      setDescriptors(d);
       setBudget(b);
       setError(null);
     } catch (e) {
@@ -161,34 +176,45 @@ export default function ResultsPage() {
         <h1 className="page-title">Results</h1>
       </header>
 
-      {error && <LoadError error={error} onRetry={() => void load()} />}
+      {error && !world && <LoadError error={error} onRetry={() => void load()} />}
+      {error && world && <StaleWarning error={error} onRetry={() => void load()} />}
 
-      {!error && !world && <LoadingState lines={4} label="Computing the metrics" />}
+      {!world && !error && <LoadingState lines={4} label="Computing the metrics" />}
 
-      {!error && world && budget && <Loaded world={world} budget={budget} openLayer={openLayer} setOpenLayer={setOpenLayer} />}
+      {world && descriptors && budget && (
+        <Loaded
+          world={world}
+          descriptors={descriptors}
+          budget={budget}
+          openLayer={openLayer}
+          setOpenLayer={setOpenLayer}
+        />
+      )}
     </>
   );
 }
 
 function Loaded({
   world,
+  descriptors,
   budget,
   openLayer,
   setOpenLayer,
 }: {
   world: FixtureSet;
+  descriptors: KeyedMetricDescriptor[];
   budget: BudgetPosture;
   openLayer: string | null;
   setOpenLayer: (l: string | null) => void;
 }) {
   const results = new Map<string, MetricResult<number>>();
-  for (const d of metricDescriptors) {
+  for (const d of descriptors) {
     results.set(d.id, METRICS[d.compute_key](world, windowFor(d.window_default)));
   }
 
-  const alarms = metricDescriptors.filter((d) => ALARM_IDS.has(d.id));
-  const business = metricDescriptors.filter((d) => d.family === 'business');
-  const quality = metricDescriptors.filter((d) => d.family === 'agent_quality' && !ALARM_IDS.has(d.id));
+  const alarms = descriptors.filter((d) => ALARM_IDS.has(d.id));
+  const business = descriptors.filter((d) => d.family === 'business');
+  const quality = descriptors.filter((d) => d.family === 'agent_quality' && !ALARM_IDS.has(d.id));
 
   const layers = blockRateByLayer(world, PERIOD);
   const maxRate = Math.max(1, ...layers.map((l) => l.rate));
@@ -209,32 +235,31 @@ function Loaded({
         tile carries its own window because a weekly denominator of eight is too thin to gate on.
       </p>
 
-      <p className="sec">
+      <h2 className="sec">
         Alarms <span className="sec-n">the three the architecture names</span>
-      </p>
+      </h2>
       <div className="grid3">
         {alarms.map((d) => (
           <Tile key={d.id} d={d} result={results.get(d.id)!} />
         ))}
       </div>
 
-      <p className="sec">For the business</p>
+      <h2 className="sec">For the business</h2>
       <div className="grid3">
         {business.map((d) => (
           <Tile key={d.id} d={d} result={results.get(d.id)!} />
         ))}
       </div>
 
-      <p className="sec">On quality</p>
+      <h2 className="sec">On quality</h2>
       <div className="grid3">
         {quality.map((d) => (
           <Tile key={d.id} d={d} result={results.get(d.id)!} />
         ))}
       </div>
 
-      <p className="sec">
-        Blocked before review, by layer <span className="sec-n">click a bar — the required drill-down</span>
-      </p>
+      <h2 className="sec">Blocked before review, by layer <span className="sec-n">click a bar — the required drill-down</span>
+      </h2>
       <div className="panel" style={{ padding: '17px 18px' }}>
         {layers.length === 0 ? (
           <p className="state-sub" style={{ margin: 0 }}>
@@ -247,6 +272,7 @@ function Loaded({
                 key={l.layer}
                 type="button"
                 className={`crow${openLayer === l.layer ? ' crow-on' : ''}`}
+                aria-expanded={openLayer === l.layer}
                 onClick={() => setOpenLayer(openLayer === l.layer ? null : l.layer)}
               >
                 <span className="cname mono">{l.layer}</span>
@@ -263,10 +289,10 @@ function Loaded({
 
         {openLayer && (
           <div className="drill">
-            <h5>
+            <h3 className="drill-h">
               {openLayer} · blocked or warned in the last{' '}
               {PERIOD.fromDaysAgo} days
-            </h5>
+            </h3>
             {drillEvents.length === 0 ? (
               <p className="dritem" style={{ border: 0 }}>
                 Nothing blocked at this layer in the period.
@@ -298,9 +324,8 @@ function Loaded({
        * three states, which made the gate's whole asymmetric branch invisible on the one screen
        * whose job is reporting on the system.
        */}
-      <p className="sec">
-        Budget <span className="sec-n">the admission gate</span>
-      </p>
+      <h2 className="sec">Budget <span className="sec-n">the admission gate</span>
+      </h2>
       <div className="panel" style={{ padding: '15px 18px' }}>
         <BudgetLine budget={budget} />
         <p className="t-meta" style={{ margin: '9px 0 0' }}>

@@ -44,7 +44,20 @@ export function Sidebar() {
     let cancelled = false;
     const refresh = () => {
       void getQueue().then((items) => {
-        if (!cancelled) setWaiting(items.length);
+        /**
+         * Not `items.length`.
+         *
+         * The queue holds runs that are recovering on their own — `parked_transient` renders the
+         * copy "Retrying automatically", and the hourly sweep releases it without anybody touching
+         * it. Counting those made the badge read 9 while the console said 5 and the week said 4, and
+         * four of the nine were rows with no control on them at all. The sidebar's own docblock calls
+         * this "the one figure an operator needs before deciding whether to open the app", which it
+         * cannot be if it counts work nobody has to do.
+         */
+        const needsAPerson = items.filter(
+          (i) => i.kind !== 'run' || i.run.state === 'quarantined' || i.run.state === 'parked_blocked',
+        );
+        if (!cancelled) setWaiting(needsAPerson.length);
       });
     };
     const unsubscribe = subscribeToWorld(refresh);

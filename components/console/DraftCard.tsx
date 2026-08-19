@@ -143,8 +143,15 @@ export function DraftCard({
       </header>
 
       <div className="card-body">
+        {/* Read from the version. This was hardcoded to "Agent draft", which is true only while
+            every waiting draft is single-version and agent-authored — it becomes a false statement
+            the moment a human-edited version is awaiting approval, which `approve_with_edits`
+            produces. The detail page already branched on authorship. */}
         <p className="prov">
-          <i aria-hidden /> Agent draft · nobody has read it yet
+          <i aria-hidden />
+          {version?.author === 'human'
+            ? 'Edited by you · not yet approved'
+            : 'Agent draft · nobody has read it yet'}
         </p>
         <p className="post">{version?.text}</p>
         <Verdict draft={draft} events={child.events} rules={rules} threshold={threshold} />

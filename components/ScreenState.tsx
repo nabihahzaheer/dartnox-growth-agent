@@ -67,6 +67,30 @@ export function LoadError({
 }
 
 /**
+ * A refresh that failed while the screen already has data.
+ *
+ * Every screen subscribes to `subscribeToWorld` and reloads on any write, and every screen gated its
+ * whole render on `error`. So a background refresh that failed replaced a working screen — batch
+ * panel, cards, live region and all — with a retry panel. Reachable with the shipped demo control:
+ * arm "Break the next read", approve a draft, and the write lands while the reload that follows it
+ * destroys the page reporting the result.
+ *
+ * The detail page already argued this distinction for *writes* ("a read failing has nothing to show
+ * and earns the whole screen; a write failing has the whole screen still valid behind it"). It is
+ * the same argument for a *re*-read: the first load has nothing to show, a later one does.
+ */
+export function StaleWarning({ error, onRetry }: { error: ConsoleError; onRetry: () => void }) {
+  return (
+    <div className="stale-warn" role="alert">
+      <span>{errorCopy(error)} Showing the last known state.</span>
+      <button type="button" className="btn btn-sm" onClick={onRetry}>
+        Refresh
+      </button>
+    </div>
+  );
+}
+
+/**
  * Nothing here, and nothing is wrong.
  *
  * Deliberately the same neutral panel as the loading state rather than the error one. An empty queue

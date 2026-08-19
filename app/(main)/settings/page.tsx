@@ -60,7 +60,7 @@ import type {
   Settings,
 } from '@/lib/types';
 import { asConsoleError, errorCopy } from '@/lib/errorCopy';
-import { LoadError, LoadingState } from '@/components/ScreenState';
+import { LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 import { budgetStateAt, type BudgetPosture } from '@/lib/budget';
 import { BudgetLine, BudgetNotice } from '@/components/BudgetNotice';
 import { formatDate } from '@/lib/time';
@@ -170,7 +170,7 @@ export default function SettingsPage() {
 
   const say = useCallback((text: string, bad = false) => setNote({ text, bad }), []);
 
-  if (error) {
+  if (error && !data) {
     return (
       <>
         <PageHead />
@@ -191,7 +191,12 @@ export default function SettingsPage() {
   return (
     <>
       <PageHead />
-      {note && <p className={`note${note.bad ? ' note-stop' : ''}`}>{note.text}</p>}
+      {/* The only feedback for every settings write, including a locked control's refusal — and a
+          locked switch correctly does not change `aria-checked`, so without this a screen-reader
+          user clicking one got complete silence. */}
+      <div aria-live="polite">
+        {note && <p className={`note${note.bad ? ' note-stop' : ''}`}>{note.text}</p>}
+      </div>
 
       <VoiceSection
         settings={data.settings}
@@ -430,6 +435,7 @@ function ThresholdSection({
             max={range.max}
             step={0.01}
             value={value}
+            aria-label="Review threshold"
             onChange={(e) => setValue(Number(e.target.value))}
           />
           <span className="t-metric" style={{ width: 60 }}>

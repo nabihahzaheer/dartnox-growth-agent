@@ -20,7 +20,9 @@
 import { useState } from 'react';
 import type { GuardrailEvent, GuardrailRule, RunStep } from '@/lib/types';
 
-type Tone = 'ok' | 'warn' | 'bad' | 'run';
+/** `'run'` was a fourth member `toneFor` could never return, with no `.tl-run` rule behind it —
+ *  it would have rendered unstyled had the path ever been live. */
+type Tone = 'ok' | 'warn' | 'bad';
 
 function toneFor(step: RunStep, events: GuardrailEvent[]): Tone {
   if (step.error) return 'bad';
@@ -30,7 +32,11 @@ function toneFor(step: RunStep, events: GuardrailEvent[]): Tone {
   return 'ok';
 }
 
-const GLYPH: Record<Tone, string> = { ok: '✓', warn: '!', bad: '✕', run: '' };
+const GLYPH: Record<Tone, string> = { ok: '✓', warn: '!', bad: '✕' };
+
+/** The node is `aria-hidden` and its glyph is decorative, so without this a screen-reader user
+ *  reading a reasoning trace gets labels and durations and no indication of which step failed. */
+const TONE_LABEL: Record<Tone, string> = { ok: 'passed', warn: 'warning', bad: 'failed' };
 
 /** The technical view. Every row is a value the record already holds — nothing here is composed
  *  prose, which is why it can be rendered flat without a template deciding what to say. */
@@ -107,6 +113,7 @@ function Row({
             ▶
           </span>
           <span className="tl-name">{step.label}</span>
+          <span className="sr-only">{TONE_LABEL[tone]}</span>
           <span className="tl-meta">
             {rule && <span className="mono tl-lay">{rule.layer}</span>}
             <span className="tl-dur">{(step.latency_ms / 1000).toFixed(1)}s</span>

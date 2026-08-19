@@ -24,7 +24,7 @@ import { getWeek, initialWeekIndex, subscribeToWorld } from '@/lib/agentClient';
 import type { Week } from '@/lib/week';
 import type { ConsoleError } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
-import { LoadError, LoadingState } from '@/components/ScreenState';
+import { LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 import { formatDateTime, formatRelative, formatTime } from '@/lib/time';
 /**
  * The label map only, not the `Badge` component — `Badge` renders through v1's Tailwind classes and
@@ -87,11 +87,12 @@ export default function WeekPage() {
         <h1 className="page-title">The week</h1>
       </header>
 
-      {error && <LoadError error={error} onRetry={() => void load(index)} />}
+      {error && !week && <LoadError error={error} onRetry={() => void load(index)} />}
+      {error && week && <StaleWarning error={error} onRetry={() => void load(index)} />}
 
-      {!error && !week && <LoadingState lines={3} label="Loading the week" />}
+      {!week && !error && <LoadingState lines={3} label="Loading the week" />}
 
-      {!error && week && (
+      {week && (
         <>
           <div className="rh">
             <div className="l1">
@@ -104,18 +105,28 @@ export default function WeekPage() {
                   type="button"
                   className="btn btn-sm"
                   disabled={!week.hasPrevious}
-                  onClick={() => setIndex(week.index - 1)}
+                  aria-label="Previous week"
+                  onClick={() => setIndex(index - 1)}
                 >
                   ‹
                 </button>
-                <button type="button" className="btn btn-sm" onClick={() => setIndex(initialWeekIndex())}>
+                {/**
+                 * Goes to week 0, which is what "This week" means.
+                 *
+                 * It called `initialWeekIndex()`, which is the week that has work waiting — week 1
+                 * in the shipped fixtures. So a button labelled "This week" landed on a page whose
+                 * own heading read "Next week", both visible at once. The landing week and the
+                 * current week are different questions and only one of them is called "this week".
+                 */}
+                <button type="button" className="btn btn-sm" onClick={() => setIndex(0)}>
                   This week
                 </button>
                 <button
                   type="button"
                   className="btn btn-sm"
                   disabled={!week.hasNext}
-                  onClick={() => setIndex(week.index + 1)}
+                  aria-label="Next week"
+                  onClick={() => setIndex(index + 1)}
                 >
                   ›
                 </button>
@@ -166,7 +177,10 @@ export default function WeekPage() {
 
           {week.otherRuns.length > 0 && (
             <section>
-              <h3 className="sec">This week&rsquo;s other runs</h3>
+              {/* Named from the week being viewed. It read "This week's other runs" above whatever
+                  week you had stepped to, so browsing to July showed July's runs under a heading
+                  claiming they were this week's. */}
+              <h3 className="sec">Other runs · {week.label}</h3>
               <ul className="settled">
                 {week.otherRuns.map((r) => (
                   <li key={r.run.id}>

@@ -5,7 +5,10 @@
  * touches five records, not one. Leaving that to be discovered while building screens guarantees
  * two screens disagree about what an approval did.
  *
- * PURE. No React, no timers, no I/O, no imports beyond types and the hash helper. Each function
+ * PURE. No React, no timers, no I/O. It imports types, and two calendar helpers from `lib/time.ts`
+ * (`isWorkingDay`, `localDay`) so the runway rule and the week grid resolve a weekday through one
+ * notion of what day it is — see the note above `workingDaysUntil`. The hash helper is defined
+ * below, not imported. Each function
  * takes the current world and returns the records it changed; `agentClient.ts` applies them. That
  * is what makes them testable by a plain Node script, which is what turns "the transitions are a
  * state machine you can test without rendering" from a claim in a decision log into a fact.
@@ -502,7 +505,8 @@ export function escalate(
  * cast. D-002's claim is that these signatures are the API contract handed to a backend engineer;
  * a contract whose payload is `unknown` is a suggestion.
  *
- * The union costs one member per settable control. There are five, and the brief names four.
+ * The union costs one member per settable control. There are six — `budget_cap` was added when the
+ * budget gate got a surface — and the brief names four of them.
  * ==============================================================================================*/
 
 export type SettingUpdate =

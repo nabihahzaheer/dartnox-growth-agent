@@ -441,6 +441,12 @@ body {
   .step-enter {
     animation: none;
   }
+  /* The two infinite ones. `transition-duration` below does not touch `animation`, so the live pulse
+     and the skeleton shimmer kept running for a reader who asked for less motion. */
+  .pulse,
+  .skeleton {
+    animation: none;
+  }
   *,
   *::before,
   *::after {
@@ -656,18 +662,6 @@ body {
 .mono {
   font-family: var(--font-mono);
 }
-.swatches {
-  display: flex;
-  gap: 8px;
-  margin-top: 14px;
-}
-.sw {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgb(21 26 30 / 8%);
-}
-
 /* Focus is visible on the rebuilt interface too. v1 sets its own further up. */
 .shell :focus-visible {
   outline: 2px solid var(--accent);
@@ -675,12 +669,69 @@ body {
   border-radius: 3px;
 }
 
+/* Visually hidden, still announced. Used where a verdict is carried by colour and a glyph that is
+   itself decorative — a screen reader otherwise gets the label and none of the outcome. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/**
+ * NARROW SCREENS.
+ *
+ * `.shell-side { display: none }` used to be the whole of this block, and nothing replaced it —
+ * there is no hamburger, no drawer, and the only cross-route links anywhere in the rebuild are the
+ * approvals breadcrumb and a card's "Open in full". A phone landing on Settings had no way to reach
+ * any other screen.
+ *
+ * The rail becomes a horizontal strip above the content rather than a drawer: five destinations fit
+ * across a phone, and a disclosure to open a menu would be more machinery than the whole navigation
+ * contains. The channel list, the demo control and the v1 link stay hidden — they are reference, not
+ * navigation.
+ */
 @media (max-width: 860px) {
   .shell {
     grid-template-columns: 1fr;
   }
   .shell-side {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 10px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .shell-brand {
+    padding: 0;
+    flex: none;
+  }
+  .shell-client,
+  .shell-group,
+  .shell-chan,
+  .shell-foot,
+  .demo-box {
     display: none;
+  }
+  .shell-nav {
+    flex-direction: row;
+    margin: 0;
+    gap: 4px;
+  }
+  .shell-nav a {
+    white-space: nowrap;
+  }
+  .shell-main {
+    padding: 18px 16px 60px;
   }
 }
 
@@ -824,6 +875,13 @@ body {
    the code actually uses, so it stays lowercase and monospace rather than being title-cased into
    something ungreppable. */
 .state-kind { margin: 5px 0 0; font-size: 11.5px; color: var(--text-faint); }
+
+/* A refresh that failed while the screen still has usable data — a strip, not a replacement. */
+.stale-warn { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--attend-soft); color: #6b4507; border-radius: var(--radius-sm);
+  padding: 9px 13px; margin-bottom: 14px; font-size: 12.5px; }
+.stale-warn .btn { margin-left: auto; }
+.drill-h { margin: 0 0 9px; font-size: 12.5px; font-weight: 650; color: var(--text-muted); }
 .skeleton { background: var(--surface-sunk); border-radius: 5px; height: 13px; margin: 0 auto 9px;
   width: 60%; animation: shimmer 1.4s ease-in-out infinite; }
 .skeleton.short { width: 38%; }
@@ -876,6 +934,12 @@ body {
   display: grid; place-items: center; }
 .step-foldrow .trace-link { margin-left: auto; }
 
+/* ---- the live run: in-flight step, ending, halt ---- */
+.live-working { display: flex; align-items: center; gap: 8px; margin: 2px 0 0;
+  font-size: 12.5px; font-weight: 550; color: var(--accent-text); }
+.live-ended { margin: 6px 0 0; font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.live-halt { margin-top: 12px; }
+
 /* ---- the agent's narrator line, above the batch panel ---- */
 .agent-line { display: flex; align-items: flex-start; gap: 11px; margin: 4px 0 18px; }
 .agent-avatar { width: 26px; height: 26px; border-radius: 7px; flex: none; margin-top: 1px;
@@ -886,7 +950,15 @@ body {
 /* ---- buttons: small variant ---- */
 .btn-sm { font-size: 12.5px; padding: 5px 11px; }
 
-/* ---- the week ---- */
+/* ---- the week ----
+   `.rh` / `.l1` were referenced by week/page.tsx and defined nowhere, so Tailwind's preflight left
+   the week's own <h2> at body size and weight — its title was indistinguishable from body text —
+   and `marginLeft: auto` on the stepper was inert because the parent was not a flex container, so
+   the controls sat left-aligned under the heading instead of opposite it. */
+.rh { margin-bottom: 12px; }
+.l1 { display: flex; align-items: center; gap: 11px; }
+.l1 h2 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.015em; }
+
 .wk-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 9px; margin-top: 4px; }
 .wk-day { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
   padding: 10px; min-height: 130px; display: flex; flex-direction: column; gap: 6px; }

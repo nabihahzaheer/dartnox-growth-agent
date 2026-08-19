@@ -8,16 +8,23 @@
  * showed one run at a time, which made eight parallel children look like a queue of unrelated
  * events and gave the operator no way to see a week's worth of work as a week's worth of work.
  *
- * Three regions, in the order the operator needs them:
+ * Four regions, in the order the operator needs them:
  *
  *   the batch itself — state as data, not prose, with a progress bar that is a count and not a mood
  *   what still needs a decision — the posts, largest thing on the page
- *   what is still drafting — genuinely live, because a child really is mid-flight in the fixtures
+ *   what is still drafting — genuinely live, streamed, see `LiveRun`
+ *   what has already been decided — a one-line list, because it is context and not work
  *
- * The last region is the honest half of "alive". Nothing replays here. A finished run is a record
- * and is rendered as one; the only thing that streams is the child that has not finished, which is
- * exactly the situation `getActiveRun` was built for. Replaying a completed run as though it were
- * happening was the incoherence that made the earlier design unreadable.
+ * The third region is the honest half of "alive". A finished run is a record and is rendered as
+ * one; the only thing that streams is the child that has not finished. Replaying a completed run as
+ * though it were happening was the incoherence that made the earlier design unreadable.
+ *
+ * CORRECTED 19 AUG. That paragraph was true as a description of intent and false as a description of
+ * this file: nothing streamed. Every child's steps were fetched in one `Promise.all` and rendered as
+ * a static list, so the "Still drafting" card showed all ten of a running child's steps — including
+ * its own terminal "Waiting for a decision" — under a pulsing live pill. The header also said three
+ * regions while rendering four, and credited `getActiveRun`, which the rebuild never calls. The
+ * streaming is now real (`LiveRun`) and the seam refuses to hand back unemitted steps (`getRunSteps`).
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -31,9 +38,9 @@ import {
 } from '@/lib/agentClient';
 import type { ConsoleError, GuardrailRule, RunStep, Settings } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
-import { EmptyState, LoadError, LoadingState } from '@/components/ScreenState';
+import { EmptyState, LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 import { DraftCard } from '@/components/console/DraftCard';
-import { StepTimeline } from '@/components/console/StepTimeline';
+import { LiveRun } from '@/components/console/LiveRun';
 import { BudgetNotice } from '@/components/BudgetNotice';
 
 type Loaded = {
@@ -118,7 +125,7 @@ export default function ConsolePage() {
     );
   }
 
-  if (error) {
+  if (error && !state) {
     return (
       <>
         <PageHead />
@@ -154,6 +161,8 @@ export default function ConsolePage() {
 
       {/** Above the batch, not inside it: at `stopped` the gate is the reason the batch looks the
        *   way it does, so it has to be readable before the progress bar rather than after it. */}
+      {error && <StaleWarning error={error} onRetry={() => void load()} />}
+
       <BudgetNotice budget={batch.budget} />
 
       <section className="batch panel">
@@ -178,17 +187,19 @@ export default function ConsolePage() {
             settings <b>{settings.current_version_id}</b>
           </span>
           {/**
-           * The spend chip that used to sit here is gone, deliberately. `lib/budget.ts` states the
-           * rule in its own type comment — `under` renders nothing anywhere, because a console
-           * carrying a permanent budget strip spends its best pixels on a number that is fine
-           * almost always. `BudgetNotice` above speaks up at the alert and stop thresholds and is
-           * silent otherwise; Results and Settings carry the standing figure.
+           * The spend chip that used to sit here is gone, deliberately: a console carrying a
+           * permanent budget strip spends its best pixels on a number that is fine almost always.
+           * `BudgetNotice` above speaks up at the alert and stop thresholds and is silent otherwise.
+           *
+           * Not "renders nothing anywhere", which is what this said and what `lib/budget.ts` still
+           * says of `under` — `BudgetLine` renders an "under cap" row on both Results and Settings,
+           * on purpose. The rule is about *this* screen.
            */}
         </p>
 
         <div className="batch-prog">
           <span className="prog">
-            <i style={{ width: `${(batch.drafted / batch.total) * 100}%` }} />
+            <i style={{ width: `${batch.total === 0 ? 0 : (batch.drafted / batch.total) * 100}%` }} />
           </span>
           <span className="prog-num">
             {batch.drafted} / {batch.total} drafted
@@ -216,10 +227,19 @@ export default function ConsolePage() {
         </section>
       )}
 
-      {waiting.length === 0 && (
+      {/* Only when nothing is in flight either. It rendered "the next batch runs Wednesday" while a
+          child was visibly mid-flight in the section below and the batch pill read "running" — the
+          page telling the operator it was idle and showing it working, at once. */}
+      {waiting.length === 0 && drafting.length === 0 && (
         <EmptyState
           title="Nothing waiting on you."
           detail="The next drafting batch runs Wednesday at 06:00."
+        />
+      )}
+      {waiting.length === 0 && drafting.length > 0 && (
+        <EmptyState
+          title="Nothing waiting on you yet."
+          detail="The agent is still drafting — anything that needs a decision will appear here."
         />
       )}
 
@@ -245,10 +265,16 @@ export default function ConsolePage() {
                   </span>
                 </header>
                 <div className="card-body">
-                  <StepTimeline
-                    steps={steps.get(c.run.id) ?? []}
+                  {/**
+                   * The one genuinely live region, and now actually live. It used to render the
+                   * same static `StepTimeline` as every settled card — see `LiveRun`'s docblock for
+                   * what that made the screen claim.
+                   */}
+                  <LiveRun
+                    runId={c.run.id}
                     events={c.events}
                     rules={rules}
+                    onEnded={() => void load()}
                   />
                 </div>
               </article>

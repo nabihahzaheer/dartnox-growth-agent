@@ -20,6 +20,7 @@ import { getDraftDetail, getGuardrailRules, submitReview } from '@/lib/agentClie
 import type { DraftDetail } from '@/lib/agentClient';
 import type { ConsoleError, DraftId, GuardrailRule, InterruptOption } from '@/lib/types';
 import { asConsoleError, errorCopy } from '@/lib/errorCopy';
+import { formatDateTime } from '@/lib/time';
 import { EmptyState, LoadError, LoadingState } from '@/components/ScreenState';
 import { StepTimeline } from '@/components/console/StepTimeline';
 import { Verdict } from '@/components/console/Verdict';
@@ -138,6 +139,9 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
   async function decide(option: InterruptOption) {
     if (!version) return;
     setBusy(option);
+    /** Cleared at the top of every attempt. It was only ever set, so one failed decision left the
+     *  red line on screen through every later success and reload. `DraftCard` already did this. */
+    setWriteError(null);
     try {
       const idempotencyKey = `review:${draft.id}:${version.id}:${option}`;
       const secondsOpen = elapsedSeconds(openedAt.current);
@@ -193,7 +197,12 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
         <p className="page-sub">
           {CHANNEL_LABEL[draft.channel]}
           {pillar && <> · {pillar.name}</>}
-          {slot && <> · publishes at slot {new Date().toLocaleDateString()}</>}
+          {/* Was `new Date().toLocaleDateString()` — today's date, on every draft, labelled as the
+              slot's publish time. Both a wrong number and a D-030 hydration hazard: the server and
+              the browser read the clock at different instants. `formatDateTime` resolves the slot's
+              own offset against the build-fixed anchor, so it is the right value and both renders
+              agree. */}
+          {slot && <> · publishes {formatDateTime(slot.publish_at)}</>}
         </p>
       </header>
 

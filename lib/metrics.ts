@@ -31,6 +31,7 @@ import type {
   Draft,
   FixtureSet,
   GuardrailEvent,
+  MetricDescriptor,
   MetricResult,
   MetricSnapshot,
   Post,
@@ -388,6 +389,22 @@ export const METRICS = {
 } satisfies Record<string, MetricFn>;
 
 export type ComputeKey = keyof typeof METRICS;
+
+/**
+ * A descriptor whose `compute_key` is known to name a real function.
+ *
+ * `MetricDescriptor.compute_key` is typed `string` in `lib/types.ts` on purpose — that file cannot
+ * import this one without a cycle — and `fixtures/metricDescriptors.ts` narrows it by annotating the
+ * array. That narrowing is what D-042 promised, and it used to reach the dashboard only because the
+ * dashboard imported the fixture directly, which is the thing D-002 forbids.
+ *
+ * Routing the read through `agentClient` fixed the D-002 violation and would have silently dropped
+ * the guarantee with it — `METRICS[d.compute_key]` becomes an untyped index the moment the key
+ * widens back to `string`. Carrying the narrowed type on the seam's return keeps both properties at
+ * once: the component never touches a fixture, and a descriptor naming a function that does not
+ * exist is still a compile error rather than a blank tile.
+ */
+export type KeyedMetricDescriptor = MetricDescriptor & { compute_key: ComputeKey };
 
 /* ================================================================================================
  * THE DRILL-DOWN

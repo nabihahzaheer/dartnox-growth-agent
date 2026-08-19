@@ -18,7 +18,7 @@
  * ---------------------------------------------------------------------------------------------
  * WHY THE CAP IS AN OPERATOR CONTROL RATHER THAN A BANNER
  *
- * Spend against the fixtures is $121.25 of a $400 cap — 30%. A banner reporting that is a number
+ * Spend against the fixtures is $121.59 of a $400 cap — 30.4%. A banner reporting that is a number
  * nobody acts on, and no fixture edit can make the cap-reached branch reachable without either
  * inventing a month of spend or adding a demo switch that fakes it.
  *
@@ -36,8 +36,13 @@
 import type { FixtureSet, MinutesFromAnchor } from './types.ts';
 
 /**
- * `under` is the quiet case and renders nothing anywhere. A console that carries a permanent
+ * `under` is the quiet case and renders no *banner* anywhere: a console that carries a permanent
  * budget strip has spent its most valuable pixels on a number that is fine 99% of the time.
+ *
+ * Narrowed 19 Aug from "renders nothing anywhere", which was overstated and then quoted as
+ * authority by the console. Results and Settings both render a standing `BudgetLine` in every
+ * state, including `under` — a dashboard is exactly where a fine-but-real number belongs, and the
+ * cap control cannot be operated without showing what it is currently set against.
  */
 export type BudgetState = 'under' | 'alert' | 'stopped';
 
