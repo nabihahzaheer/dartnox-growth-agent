@@ -9,19 +9,25 @@ invented** — not a Dartnox client, and this is not a Dartnox product.
 
 > **No backend, no API routes, no keys, no network calls.** All state is client-side.
 
-**Where to start:** open `/console` and let the run stream. The left rail is next week's schedule —
-pick a slot marked **Needs you** and the console replays that run and stops at its approval gate, with
-approve / edit / reject there. Then open `/queue` and switch it to **Week** for the calendar.
+**Where to start:** open **`/`**, the console. It shows Wednesday's drafting batch — eight posts, one
+run each. One child is still mid-flight and streams its steps as they arrive; the rest are waiting on
+you, each rendered as the post first with the decision under it. One of them is **blocked** and
+offers no Approve at all — the gate withholds it, and the interface renders whatever the gate offers
+rather than deciding for itself which button to grey out. Send one back, pick a reason, then reopen
+the live run and expand **Writing the draft**: the reason you chose is listed as an input that run
+consumed. Then try **`/week`** for the calendar and
+**`/settings`**, where dragging the monthly cap under current spend puts the system into its own
+budget stop.
 
 ## Quick start
 
 ```bash
 npm install
-npm run dev          # http://localhost:3000 → redirects to /console
+npm run dev          # http://localhost:3000 → the console
 ```
 
 ```bash
-npm run verify       # check + tsc + eslint + build — 1,756 assertions
+npm run verify       # check + build + tsc + eslint — 2,035 assertions
 ```
 
 Node ≥ 22. On a fresh clone `tsc --noEmit` alone fails with `Cannot find name 'LayoutProps'` — Next 16
@@ -33,11 +39,13 @@ typecheck fails on generated types that do not exist yet.
 
 | Route | What it does |
 |---|---|
-| `/console` | Live activity feed. Steps arrive when they start and settle when they finish; expanding a step shows its model, tokens and cost; guardrails branch the run. A run halted at its gate carries the decision inline. |
-| `/queue` | Everything waiting on a person — drafts, runs that never produced one, and posts sent back by a settings change. **Week** toggles the same work to a Monday–Sunday calendar. |
-| `/draft/[id]` | One item opened fully: post, why it was flagged, the score and its weakest dimension, versions, full reasoning trace. |
-| `/metrics` | The PRD's KPIs, computed live, one drill-down. |
-| `/settings` | Tone, thresholds, approval rules, escalation triggers, guardrail rules, monthly spend cap. |
+| `/` | **Console** — Wednesday's drafting batch. The posts waiting on you, largest thing on the page, with the decision under each. The one child still running streams its steps: a step appears when it *starts* and settles after its own duration, so the agent is visibly mid-work rather than producing finished rows. Expanding a step shows its model, tokens and cost. |
+| `/approvals` | Everything waiting on a person — drafts, runs that never produced one because their source was quarantined, and posts a settings change sent back. |
+| `/approvals/[id]` | One item opened fully: the post, why it needs you, the score and its weakest dimension, every version with what changed, then the whole reasoning trace. |
+| `/week` | Three weeks of slots on a Monday–Sunday grid, with the client owner's plan-approval gate and any slot that slipped showing where it moved from. |
+| `/results` | The PRD's fourteen metrics, computed live from the records on every render, leading with the three alarms. One drill-down: block rate by guardrail layer. |
+| `/settings` | Voice and banned phrases, the review threshold, the monthly budget cap, approval rules, escalation triggers, the guardrail list, and the locked auto-approve toggle. |
+| `/v1/*` | The interface submitted on 17 August, kept for comparison. See **Two interfaces** below. |
 
 ## Architecture
 
@@ -45,7 +53,7 @@ typecheck fails on generated types that do not exist yet.
 app/          routes, one directory per screen
 components/   shared UI
 lib/
-  types.ts        the data contract — 112 exported types
+  types.ts        the data contract — 113 exported types
   agentClient.ts  the simulated API — the only module that knows this is fake
   world.ts        state transitions as pure functions
   metrics.ts      every dashboard number, computed
@@ -77,22 +85,23 @@ permitted consumer — the file tree should say so before you open anything.
 | Failed calls genuinely fail | Guardrail explanations |
 | Runs branch on their own guardrail results | |
 | Every metric computed from records on each render | |
-| A submitted brief is the one the next step reads | |
+| The rejection reason you pick is what the next run consumes | |
 
 So when a rejection "changes what the agent does next": the redraft text is pre-written, but the list
 of inputs that run consumed is assembled at emit time from current state. What's real is **which
-inputs the run consumed**, not the prose.
+inputs the run consumed**, not the prose. Send a draft back marked *off pillar* and the next drafting
+step lists `Avoiding: Off pillar`; pick a different reason and it says that instead.
 
-**Timing.** Every step carries two numbers: `latency_ms` (honest — a drafting call really takes ~20s,
-shown as the step's duration) and `playback_ms` (how long that step is shown working). The showcase
-run's real duration is 44s and it plays in 24s — **about 1.8×**. Played at true speed it's
-unwatchable; a uniform 300ms tick is the faked streaming the brief rejects.
+**Timing.** Every step carries two numbers: `latency_ms` (honest — a drafting call really takes ~17s,
+shown as the step's duration) and `playback_ms` (how long that step is shown working). The live run's
+real duration is 35s and it plays in 21s — **about 1.7×**. Played at true speed it's unwatchable; a
+uniform 300ms tick is the faked streaming the brief rejects.
 
 A step arrives when it **starts**, not when it finishes, and settles after its own duration. While
 it's in flight the console withholds the duration, tokens and cost, because those facts don't exist
 yet.
 
-**Fixtures.** ~500 records across 13 types — three weeks of settled history plus a three-week forward
+**Fixtures.** ~590 records across 12 collections — three weeks of settled history plus a three-week forward
 pipeline. Hand-written where a reviewer actually reads (current drafts with full traces, the long
 post bodies, the human edit pairs); generated deterministically from compact tables elsewhere, with a
 seeded PRNG, never `Math.random()`.
@@ -110,13 +119,20 @@ deploys; one redeploy refreshes it.
 
 - **Reload resets to fixture state.** No persistence, by decision — a `localStorage` layer would
   imitate durability without demonstrating anything.
-- **"break something" on the console is a demo control, not a product feature.** Production
-  equivalents are a staging environment, CI fault injection and a replay tool. `RunVariant` in the
-  types is the same: a demo affordance with no production counterpart.
-- **Settings is deliberately the thinnest screen.** The brief names four controls; its closing line
-  says choose an alive console over a fifth polished screen. Cadence, posting windows, both
-  allowlists, entities, terminology, auto-pull, negative-engagement threshold, rejection-reason set
-  and weekend contact are modelled and not rendered.
+- **"Break the next read" in the sidebar is a demo control, not a product feature.** Production
+  equivalents are a staging environment, CI fault injection and a replay tool. It arms one transport
+  failure, spends itself on the next call, and through it every screen's error state is reachable —
+  which is the only reason those states are reviewable rather than merely written. `RunVariant` in
+  the types is the same: a demo affordance with no production counterpart. v1 carries four further
+  switches that arm whole failure *runs*; they live at `/v1/console` and not here, because this
+  interface has no run-starting control to arm them against.
+- **Settings is deliberately narrow.** The brief names four controls — tone, thresholds, approval
+  rules, escalation triggers — and its closing line says choose an alive console over a fifth
+  polished screen. Those four ship, plus the guardrail list, the monthly budget cap and the locked
+  auto-approve toggle. Cadence, posting windows, both allowlists, entities, terminology, auto-pull,
+  the negative-engagement threshold and the weekend contact are modelled and not rendered. The
+  rejection-reason set *is* rendered — in the reject dialog rather than as a settings row, because
+  that is where an operator actually meets it.
 - **Three of five learned writing rules show no backing edits.** They were learned from decisions
   outside the three weeks of history retained. Empty is a statement, not missing data — the one
   *suggested* rule carries all three and expands to show them.
@@ -139,11 +155,31 @@ deploys; one redeploy refreshes it.
   — it demonstrates the seam, it is not a migration path.
 - **Cold start is invisible here.** Brightsill is nine weeks in, and one client can't both lack
   history and hold the record four screens need. That path lives in the PRD and on the diagram.
-- **Desktop-first.** An operator console is a dense surface someone sits in front of for an hour. The
-  week view stacks to one day per row below 900px; nothing else is designed for a narrow viewport, by
-  decision.
+- **Desktop-first.** An operator console is a dense surface. Below 860px the sidebar becomes a
+  horizontal strip so every screen stays reachable, and the week grid drops to two columns below
+  900px — but these layouts are designed for a desktop viewport and a phone is a fallback, not a
+  target.
 
 </details>
+
+## Two interfaces
+
+`main` holds the version submitted on 17 August. This branch rebuilds the interface on the same
+backend — same `agentClient` seam, same fixtures, same transitions — and the original is preserved at
+**`/v1/*`** so the two can be opened side by side.
+
+**Why it was rebuilt.** The submitted interface asked for an approve/reject decision **without the
+post text on screen**, which was the worst finding of reviewing it. Around that sat a dark,
+monospace-heavy surface with a two-pixel type scale, reverse-engineered from the assessment PDF's own
+header bar — a fact about a PDF rather than about a marketing lead clearing eight posts a week. And
+engineer vocabulary (`fetch_source`, `L1`/`L2`/`L3`, HTTP status codes) had reached the *fixtures*,
+not just the components, so it could not be fixed in the UI alone.
+
+**One caveat about `/v1`.** It is not byte-identical to what was submitted. The language pass rewrote
+~74 step labels and 13 metric names inside the **shared** fixtures, so v1 renders the new
+plain-language labels too. Its layout, density, palette and interaction are untouched. Forking 2,800
+lines of fixtures to freeze it exactly was judged worse than the drift — but it does mean v1 reads
+slightly differently from the screenshots in the walkthrough PDF.
 
 ## With more time
 
