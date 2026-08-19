@@ -94,12 +94,21 @@ function verdict(value: number, min: number | null, max: number | null): 'go' | 
   return within ? 'go' : 'attend';
 }
 
-function Tile({ d, result }: { d: KeyedMetricDescriptor; result: MetricResult<number> }) {
+function Tile({
+  d,
+  result,
+  lead = false,
+}: {
+  d: KeyedMetricDescriptor;
+  result: MetricResult<number>;
+  lead?: boolean;
+}) {
   const band = bandLabel(d.unit, d.healthy_range.min, d.healthy_range.max);
+  const cls = `tile${lead ? ' tile-lead' : ''}`;
 
   if (result.kind === 'no_data') {
     return (
-      <div className="tile">
+      <div className={cls} title={d.definition}>
         <div className="tl2">{d.label}</div>
         <div className="tb tb-muted">—</div>
         <div className="tv nd">{d.empty_state.copy}</div>
@@ -108,7 +117,7 @@ function Tile({ d, result }: { d: KeyedMetricDescriptor; result: MetricResult<nu
   }
   if (result.kind === 'not_applicable') {
     return (
-      <div className="tile">
+      <div className={cls} title={d.definition}>
         <div className="tl2">{d.label}</div>
         <div className="tb tb-muted">n/a</div>
         <div className="tv nd">{result.reason}</div>
@@ -117,7 +126,7 @@ function Tile({ d, result }: { d: KeyedMetricDescriptor; result: MetricResult<nu
   }
   if (result.kind === 'establishing_baseline') {
     return (
-      <div className="tile">
+      <div className={cls} title={d.definition}>
         <div className="tl2">{d.label}</div>
         <div className="tb tb-muted">establishing</div>
         <div className="tv nd">
@@ -129,7 +138,7 @@ function Tile({ d, result }: { d: KeyedMetricDescriptor; result: MetricResult<nu
 
   const v = verdict(result.value, d.healthy_range.min, d.healthy_range.max);
   return (
-    <div className="tile" title={d.definition}>
+    <div className={cls} title={d.definition}>
       <div className="tl2">{d.label}</div>
       <div className="tb">{formatValue(d.unit, result.value)}</div>
       {/* The verdict is a word and a shape as well as a colour — a healthy tile and an out-of-band
@@ -160,11 +169,19 @@ function MetricGroup({
   detail,
   rows,
   results,
+  lead,
+  footnote,
 }: {
   title: string;
   detail?: string;
   rows: KeyedMetricDescriptor[];
   results: Map<string, MetricResult<number>>;
+  /** The one figure in this group worth tinting. Insightful marks a single cell in each row and
+   *  leaves the rest plain; colour on every cell stops carrying information. */
+  lead?: string;
+  /** The group's number said in words. Insightful pairs its ROI row with one plain sentence
+   *  underneath, which is what stops a wall of figures being unreadable. */
+  footnote?: string;
 }) {
   if (rows.length === 0) return null;
   return (
@@ -175,9 +192,10 @@ function MetricGroup({
       </div>
       <div className="mgroup-grid">
         {rows.map((d) => (
-          <Tile key={d.id} d={d} result={results.get(d.id)!} />
+          <Tile key={d.id} d={d} result={results.get(d.id)!} lead={d.id === lead} />
         ))}
       </div>
+      {footnote && <p className="mgroup-foot">{footnote}</p>}
     </section>
   );
 }
@@ -279,10 +297,24 @@ function Loaded({
           detail="The three signals that the system has failed quietly."
           rows={alarms}
           results={results}
+          lead="rubber_stamp_rate"
+          footnote="Rubber-stamping is the one an operator can fix today: it counts decisions taken in under fifteen seconds, which is faster than the post can be read."
         />
       </div>
-      <MetricGroup title="For the business" rows={business} results={results} />
-      <MetricGroup title="On quality" rows={quality} results={results} />
+      <MetricGroup
+        title="For the business"
+        rows={business}
+        results={results}
+        lead="published_vs_planned"
+        footnote="Published against planned is the contract with the client: eight posts a week, and every slot that slipped or was dropped counts against it."
+      />
+      <MetricGroup
+        title="On quality"
+        rows={quality}
+        results={results}
+        lead="edit_rate"
+        footnote="Edit rate is how often a person had to rewrite the agent. It is the closest thing here to a score for the drafting itself."
+      />
 
       {/**
        * THE DRILL-DOWN THE ARCHITECTURE ACTUALLY NOMINATES, WHICH WAS NOT ON THIS SCREEN.

@@ -51,6 +51,14 @@ function weekRangeLabel(week: Week): string {
   return `${formatDate(first.start)} – ${formatDate(last.start)}`;
 }
 
+/** The draft's opening line, for the calendar cell. Empty for a slot with no draft yet. */
+function preview(entry: Week['entries'][number]): string {
+  const v = entry.draft?.versions.find((x) => x.id === entry.draft?.current_version_id);
+  if (!v) return '';
+  const flat = v.text.replace(/\s+/g, ' ').trim();
+  return flat.length > 90 ? `${flat.slice(0, 88).trimEnd()}…` : flat;
+}
+
 export default function WeekPage() {
   /**
    * A lazy initializer, not an effect. `initialWeekIndex()` is a synchronous, side-effect-free read
@@ -182,6 +190,10 @@ export default function WeekPage() {
                         </span>
                       </span>
                       <span className="wk-angle">{entry.angle}</span>
+                      {/* Metricool's calendar cells show the post itself, not only its title — an
+                          opening line is what tells you whether the slot is what you meant. Two
+                          lines, clamped, and only where a draft exists. */}
+                      {preview(entry) && <span className="wk-prev">{preview(entry)}</span>}
                       {entry.moved_from !== null && (
                         <span className="wk-moved">moved from {formatDateTime(entry.moved_from)}</span>
                       )}

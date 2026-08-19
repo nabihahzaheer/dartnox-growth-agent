@@ -1182,9 +1182,7 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .tgl-lock { width: 11px; height: 11px; }
 .tgl-on .tgl-knob { transform: translateX(14px); }
 
-.rule-row { display: flex; align-items: center; gap: 12px; padding: 10px 0;
-  border-bottom: 1px solid var(--border); }
-.rule-row:last-child { border-bottom: none; }
+.rule-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; }
 .rule-body { flex: 1; min-width: 0; }
 .rule-title { margin: 0; font-size: var(--fs-body); font-weight: 550; color: var(--text); }
 .rule-sub { margin: var(--sp-1) 0 0; font-size: var(--fs-sub); color: var(--text-faint); }
@@ -1304,17 +1302,20 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .lv-row { display: flex; align-items: flex-start; gap: 10px; padding: 4px 0; font-size: 13px; }
 .lv-node { width: 18px; height: 18px; border-radius: 50%; flex: none; display: grid;
   place-items: center; font-size: 9px; font-weight: 700; margin-top: 1px; }
-.lv-ok { background: var(--go-soft); color: var(--go); }
-.lv-now { background: var(--accent-soft); color: var(--accent); }
-.lv-end { background: var(--attend-soft); color: var(--attend); }
+.lv-ok { background: transparent; color: var(--text-faint); border: 1.5px solid var(--border-strong); }
+.lv-now { background: var(--surface); color: var(--accent); border: 1.5px solid var(--accent); }
+.lv-end { background: var(--go-soft); color: var(--go); }
 .lv-label { color: var(--text-muted); }
 .lv-strong { color: var(--text); font-weight: 600; margin: 0; }
 .lv-body { flex: 1; min-width: 0; }
 .lv-dur { margin-left: auto; font-size: 11.5px; color: var(--text-faint);
   font-variant-numeric: tabular-nums; flex: none; }
 .lv-live-dur { color: var(--accent-text); font-weight: 600; }
-.lv-open { background: var(--accent-soft); border-radius: var(--radius-sm); padding: 7px 9px;
-  margin: 3px -9px; }
+/* Gumloop's agent activity lines are deliberately quiet: small, muted, a tiny leading glyph, no
+   box and no coloured ring. The open step keeps a faint ground so you can see where you are, but
+   it no longer shouts in accent-soft. */
+.lv-open { background: var(--surface-sunk); border-radius: var(--radius-sm); padding: var(--sp-2);
+  margin: 2px calc(var(--sp-2) * -1); }
 
 /* The sub-lines a running step reveals one at a time. Monospace because every one of them is a
    value read off the record — a count, a model name, a tool name — not a sentence. */
@@ -1396,19 +1397,34 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 @media (max-width: 900px) { .mgroup-grid { grid-template-columns: 1fr; }
   .mgroup-grid > * { border-right: 0; } }
 
-.tile { background: var(--surface); border: 0; border-radius: 0; padding: 15px 18px 16px;
-  box-shadow: none; display: flex; flex-direction: column; gap: 4px; }
-.tl2 { font-size: var(--fs-sub); color: var(--text-muted); font-weight: 500; margin: 0; }
+/**
+ * Stat anatomy taken from Insightful's ROI summary and Gumloop's stat row: the NUMBER leads, and
+ * the label sits under it in small letterspaced caps. Both put the figure first and the name
+ * second, which is the order you read a dashboard in — you scan the values and only read the label
+ * of the one that stopped you. Mine had a 13px label above the number, so every tile asked to be
+ * read as a sentence before it would give up its value.
+ */
+.tile { background: var(--surface); border: 0; border-radius: 0; padding: var(--sp-4) var(--sp-5);
+  box-shadow: none; display: flex; flex-direction: column; gap: 2px; }
+.tl2 { font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-faint); margin: 0; order: 2; }
 .tb { font-size: 30px; font-weight: 660; letter-spacing: -.03em; line-height: 1.05;
   font-variant-numeric: tabular-nums; }
-.tb-muted { font-size: 19px; font-weight: 620; color: var(--text-faint); letter-spacing: -.01em; }
-.tfoot { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 2px; }
+.tb-muted { font-size: 19px; font-weight: 620; color: var(--text-faint); letter-spacing: -.01em;
+  order: 1; }
+.tfoot { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  margin-top: var(--sp-2); order: 3; }
 .vpill { font-size: var(--fs-meta); font-weight: 640; padding: 1px 8px; border-radius: 99px; }
 .v-go { background: var(--go-soft); color: var(--go); }
 .v-at { background: var(--attend-soft); color: var(--attend); }
 .tband { font-size: var(--fs-meta); color: var(--text-faint); }
 .tn { font-size: var(--fs-meta); color: var(--text-faint); }
-.tv.nd { font-size: 12px; color: var(--text-faint); font-weight: 400; }
+.tv.nd { font-size: var(--fs-meta); color: var(--text-faint); font-weight: 400; order: 3;
+  margin-top: var(--sp-1); }
+/* Insightful tints exactly one cell in a row to mark the headline figure and leaves the rest
+   plain. Colour that appears on every cell stops meaning anything. */
+.tile-lead { background: var(--go-soft); }
+.tile-lead .tb { color: var(--go); }
 
 /* ---- settings: things you see but rarely change ---- */
 .adv { margin-top: 14px; }
@@ -1438,9 +1454,14 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
  * a control column pinned right. Every row on the screen is that, whether the control is a switch,
  * a slider or a field.
  * ==============================================================================================*/
-.set-row { display: flex; align-items: flex-start; gap: var(--sp-5); padding: var(--sp-3) 0;
-  border-bottom: 1px solid var(--border); }
-.set-row:last-child { border-bottom: 0; }
+/**
+ * Material's settings pattern is explicit that divider lines group RELATED settings and are not
+ * drawn between individual items. Every row here carried a bottom border, which turns a group of
+ * four related switches into four separate things and makes the screen read as a long ruled list.
+ * The card edge is the grouping; rows inside it are separated by space.
+ */
+.set-row { display: flex; align-items: flex-start; gap: var(--sp-5); padding: var(--sp-3) 0; }
+.set-row + .set-row { padding-top: var(--sp-3); }
 .set-label { flex: 1; min-width: 0; }
 .set-name { margin: 0; font-size: var(--fs-body); font-weight: 550; color: var(--text); }
 .set-help { margin: var(--sp-1) 0 0; font-size: var(--fs-sub); color: var(--text-muted);
@@ -1465,8 +1486,8 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .mgroup { margin-bottom: var(--sp-4); }
 .mgroup-head { padding: var(--sp-4) var(--sp-5) var(--sp-3); }
 .tile { padding: var(--sp-4) var(--sp-5) var(--sp-5); gap: var(--sp-1); }
-.tb { font-size: 30px; font-weight: 660; letter-spacing: -.03em; line-height: 1.05;
-  font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tb { font-size: 30px; font-weight: 640; letter-spacing: -.03em; line-height: 1.05;
+  font-variant-numeric: tabular-nums; order: 1; }
 .tfoot { margin-top: var(--sp-2); }
 /* The first group needs air under the page head, and the drill-downs need it under the groups. */
 .metrics-top { margin-top: var(--sp-5); }
@@ -1528,3 +1549,17 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .qrow-full .post { max-width: 88ch; }
 .lv-tok { font-size: var(--fs-meta); font-weight: 400; color: var(--text-faint);
   margin-left: var(--sp-2); font-variant-numeric: tabular-nums; }
+
+/* ---- calendar cell preview (Metricool) ---- */
+.wk-prev { font-size: var(--fs-meta); color: var(--text-muted); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; }
+/* Metricool tints the whole of today's column, top to bottom, rather than shading one cell — it is
+   the fastest way to find where you are in a seven-column grid. */
+.wk-today { background: var(--accent-soft); }
+.wk-today .wk-daylabel { border-bottom-color: var(--border-strong); }
+
+/* ---- metric group footnote (Insightful) ---- */
+.mgroup-foot { margin: 0; padding: var(--sp-3) var(--sp-5) var(--sp-4); font-size: var(--fs-sub);
+  color: var(--text-muted); line-height: 1.55; border-top: 1px solid var(--border);
+  max-width: 88ch; }
