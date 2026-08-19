@@ -59,6 +59,8 @@ import type {
   GuardrailRule,
   Settings,
 } from '@/lib/types';
+import { asConsoleError, errorCopy } from '@/lib/errorCopy';
+import { LoadError, LoadingState } from '@/components/ScreenState';
 import { budgetStateAt, type BudgetPosture } from '@/lib/budget';
 import { BudgetLine, BudgetNotice } from '@/components/BudgetNotice';
 import { formatDate } from '@/lib/time';
@@ -90,16 +92,21 @@ const PREREQ_LABEL: Record<string, string> = {
 
 const LAYERS: GuardrailLayer[] = ['L1', 'L2', 'L3', 'L4'];
 
-function isConsoleError(e: unknown): e is ConsoleError {
-  return typeof e === 'object' && e !== null && 'kind' in e;
-}
-
-/** Every write here either succeeds or comes back `forbidden` with a reason — see the header note
- *  on why fixed rows still make the call rather than being disabled. Anything else is treated as
- *  the generic transport failure every other screen already renders. */
+/**
+ * Every write here either succeeds or comes back `forbidden` carrying its own reason — see the
+ * header note on why fixed rows still make the call rather than being disabled.
+ *
+ * `forbidden` is the one kind whose sentence lives on the error rather than in the shared map,
+ * because the reason is per-control: "a missed injection is not recoverable" and "off for v1,
+ * unlocking needs all six prerequisites" are both `forbidden` and are not interchangeable. Every
+ * other kind falls through to `errorCopy`, so a rate-limited or timed-out settings write now says
+ * what it actually was instead of one house sentence.
+ */
 function reasonFrom(e: unknown, fallback: string): string {
-  if (isConsoleError(e) && e.kind === 'forbidden') return e.reason;
-  return fallback;
+  const error = asConsoleError(e);
+  if (error.kind === 'forbidden') return error.reason;
+  if (error.kind === 'not_found') return fallback;
+  return errorCopy(error);
 }
 
 /** A switch built as a button. Nothing else in this app uses a native checkbox, and `role="switch"`
@@ -132,7 +139,7 @@ function Toggle({
 
 export default function SettingsPage() {
   const [data, setData] = useState<SettingsScreen | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ConsoleError | null>(null);
   const [note, setNote] = useState<{ text: string; bad: boolean } | null>(null);
 
   const load = useCallback(async () => {
@@ -140,8 +147,8 @@ export default function SettingsPage() {
       const d = await getSettingsScreen();
       setData(d);
       setError(null);
-    } catch {
-      setError('Could not reach the agent. Nothing has been lost — try again.');
+    } catch (e) {
+      setError(asConsoleError(e));
     }
   }, []);
 
@@ -167,12 +174,7 @@ export default function SettingsPage() {
     return (
       <>
         <PageHead />
-        <div className="panel state-panel">
-          <p className="state-title">{error}</p>
-          <button type="button" className="btn" onClick={() => void load()}>
-            Try again
-          </button>
-        </div>
+        <LoadError error={error} onRetry={() => void load()} />
       </>
     );
   }
@@ -181,10 +183,7 @@ export default function SettingsPage() {
     return (
       <>
         <PageHead />
-        <div className="panel state-panel">
-          <p className="skeleton" />
-          <p className="skeleton short" />
-        </div>
+        <LoadingState lines={4} label="Loading settings" />
       </>
     );
   }

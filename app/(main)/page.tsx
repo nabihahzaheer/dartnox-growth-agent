@@ -29,7 +29,9 @@ import {
   subscribeToWorld,
   type Batch,
 } from '@/lib/agentClient';
-import type { GuardrailRule, RunStep, Settings } from '@/lib/types';
+import type { ConsoleError, GuardrailRule, RunStep, Settings } from '@/lib/types';
+import { asConsoleError } from '@/lib/errorCopy';
+import { EmptyState, LoadError, LoadingState } from '@/components/ScreenState';
 import { DraftCard } from '@/components/console/DraftCard';
 import { StepTimeline } from '@/components/console/StepTimeline';
 import { BudgetNotice } from '@/components/BudgetNotice';
@@ -47,7 +49,7 @@ const NEEDS_DECISION = new Set(['awaiting_approval', 'blocked_guardrail']);
 
 export default function ConsolePage() {
   const [state, setState] = useState<Loaded | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ConsoleError | null>(null);
 
   /**
    * Nothing here sets state before the first `await`. That is deliberate rather than incidental:
@@ -72,8 +74,8 @@ export default function ConsolePage() {
       );
       setState({ batch, settings, rules, steps });
       setError(null);
-    } catch {
-      setError('Could not reach the agent. Nothing has been lost — try again.');
+    } catch (e) {
+      setError(asConsoleError(e));
     }
   }, []);
 
@@ -94,16 +96,33 @@ export default function ConsolePage() {
     };
   }, [load]);
 
+  /**
+   * `not_found` is an empty state, not a failure (D-031), and this screen used to render it as one.
+   *
+   * `getBatch()` throws it when no parent drafting run exists — a client onboarded on a Thursday has
+   * no Wednesday batch behind them yet, which is a legitimate state of the world and not a fault.
+   * Painting it red with a retry button told the operator something had broken and invited them to
+   * retry a call that would keep answering the same way. `app/(main)/approvals/[id]` already made
+   * this distinction; the console did not, so two screens disagreed about what a missing record
+   * means.
+   */
+  if (error && error.kind === 'not_found') {
+    return (
+      <>
+        <PageHead />
+        <EmptyState
+          title="No drafting batch yet."
+          detail="The agent drafts the coming week every Wednesday at 06:00. Nothing has run for this client so far."
+        />
+      </>
+    );
+  }
+
   if (error) {
     return (
       <>
         <PageHead />
-        <div className="panel state-panel">
-          <p className="state-title">{error}</p>
-          <button type="button" className="btn" onClick={() => void load()}>
-            Try again
-          </button>
-        </div>
+        <LoadError error={error} onRetry={() => void load()} />
       </>
     );
   }
@@ -112,10 +131,7 @@ export default function ConsolePage() {
     return (
       <>
         <PageHead />
-        <div className="panel state-panel">
-          <p className="skeleton skeleton-line" />
-          <p className="skeleton skeleton-line short" />
-        </div>
+        <LoadingState lines={3} label="Loading the batch" />
       </>
     );
   }
@@ -201,10 +217,10 @@ export default function ConsolePage() {
       )}
 
       {waiting.length === 0 && (
-        <div className="panel state-panel">
-          <p className="state-title">Nothing waiting on you.</p>
-          <p className="state-sub">The next drafting batch runs Wednesday at 06:00.</p>
-        </div>
+        <EmptyState
+          title="Nothing waiting on you."
+          detail="The next drafting batch runs Wednesday at 06:00."
+        />
       )}
 
       {drafting.length > 0 && (

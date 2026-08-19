@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getQueue, subscribeToWorld } from '@/lib/agentClient';
+import { BreakNextRead } from './BreakNextRead';
 
 type Dest = { href: string; label: string; glyph: string };
 
@@ -89,6 +90,11 @@ export function Sidebar() {
         <span className="shell-dot" style={{ background: 'var(--ch-x)' }} aria-hidden />
         brightsill_nyc
       </p>
+
+      {/** Below the channels and above the v1 link, which is where the two things that are about the
+       *   prototype rather than about the client belong. Labelled as a demo control on itself — a
+       *   reviewer must never have to guess whether a switch is a product feature (D-020). */}
+      <BreakNextRead />
 
       <p className="shell-foot">
         <Link href="/v1/console">Version submitted 17 Aug →</Link>

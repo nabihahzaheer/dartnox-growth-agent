@@ -18,7 +18,9 @@ import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getDraftDetail, getGuardrailRules, submitReview } from '@/lib/agentClient';
 import type { DraftDetail } from '@/lib/agentClient';
-import type { DraftId, GuardrailRule, InterruptOption } from '@/lib/types';
+import type { ConsoleError, DraftId, GuardrailRule, InterruptOption } from '@/lib/types';
+import { asConsoleError, errorCopy } from '@/lib/errorCopy';
+import { EmptyState, LoadError, LoadingState } from '@/components/ScreenState';
 import { StepTimeline } from '@/components/console/StepTimeline';
 import { Verdict } from '@/components/console/Verdict';
 
@@ -53,8 +55,16 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
 
   const [detail, setDetail] = useState<DraftDetail | null>(null);
   const [rules, setRules] = useState<GuardrailRule[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  /**
+   * One `ConsoleError` rather than a string plus a separate `notFound` boolean.
+   *
+   * The pair was two representations of one fact, and they could disagree — nothing stopped both
+   * being set. The kind already carries the distinction, and `not_found` is branched on below
+   * exactly as before.
+   */
+  const [error, setError] = useState<ConsoleError | null>(null);
+  /** Kept apart from `error` on purpose — see the catch in `decide`. */
+  const [writeError, setWriteError] = useState<ConsoleError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   /** A ref, not state — the value is read once inside `decide()` and never rendered, so setting it
    *  through state would cost a render for nothing and trip the same impure-during-render rule
@@ -67,13 +77,8 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
       setDetail(d);
       setRules(r);
       setError(null);
-      setNotFound(false);
     } catch (e) {
-      if (e && typeof e === 'object' && 'kind' in e && e.kind === 'not_found') {
-        setNotFound(true);
-      } else {
-        setError('Could not reach the agent. Nothing has been lost — try again.');
-      }
+      setError(asConsoleError(e));
     }
   }, [draftId]);
 
@@ -86,36 +91,25 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
     openedAt.current = Date.now();
   }, [draftId]);
 
-  if (notFound) {
+  if (error && error.kind === 'not_found') {
     return (
-      <div className="panel state-panel">
-        <p className="state-title">This draft isn&rsquo;t here any more.</p>
-        <p className="state-sub">It may have been withdrawn, or the slot may have been dropped.</p>
+      <EmptyState
+        title="This draft isn’t here any more."
+        detail="It may have been withdrawn, or the slot may have been dropped."
+      >
         <Link href="/approvals" className="btn" style={{ display: 'inline-block', marginTop: 13 }}>
           Back to approvals
         </Link>
-      </div>
+      </EmptyState>
     );
   }
 
   if (error) {
-    return (
-      <div className="panel state-panel">
-        <p className="state-title">{error}</p>
-        <button type="button" className="btn" onClick={() => void load()}>
-          Try again
-        </button>
-      </div>
-    );
+    return <LoadError error={error} onRetry={() => void load()} />;
   }
 
   if (!detail || !rules) {
-    return (
-      <div className="panel state-panel">
-        <p className="skeleton" />
-        <p className="skeleton short" />
-      </div>
-    );
+    return <LoadingState lines={3} label="Loading the draft" />;
   }
 
   const { draft, run, steps, events, slot, pillar } = detail;
@@ -168,8 +162,20 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
         return;
       }
       await load();
-    } catch {
-      setError('That did not go through. Nothing was decided.');
+    } catch (e) {
+      /**
+       * A FAILED WRITE MUST NOT DESTROY THE SCREEN, WHICH IS WHAT IT USED TO DO.
+       *
+       * This wrote into the same `error` state the loader uses, and that state gates the whole
+       * render — so a rejected approve replaced the post, the verdict, the version history and the
+       * trace with a single retry panel. The operator lost the thing they were deciding about at
+       * exactly the moment they needed to look at it again.
+       *
+       * A read failing has nothing to show, so it earns the whole screen. A write failing has the
+       * entire screen still valid behind it, so it earns a line. `DraftCard` already drew this
+       * distinction with its own inline `.card-err`; this page did not.
+       */
+      setWriteError(asConsoleError(e));
     } finally {
       setBusy(null);
     }
@@ -200,6 +206,12 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
           <p className="post">{version?.text}</p>
           <Verdict draft={draft} events={events} rules={rules} threshold={detail.threshold} />
         </div>
+
+        {writeError && (
+          <p className="card-err" role="alert">
+            {errorCopy(writeError)} <span className="mono">({writeError.kind})</span>
+          </p>
+        )}
 
         {offers.length > 0 && (
           <footer className="card-act">

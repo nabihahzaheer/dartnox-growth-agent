@@ -46,7 +46,9 @@ import { metricDescriptors } from '@/fixtures/metricDescriptors';
 import { BudgetLine, BudgetNotice } from '@/components/BudgetNotice';
 import { formatDate } from '@/lib/time';
 import type { BudgetPosture } from '@/lib/budget';
-import type { FixtureSet, GuardrailEvent, MetricResult } from '@/lib/types';
+import type { ConsoleError, FixtureSet, GuardrailEvent, MetricResult } from '@/lib/types';
+import { asConsoleError } from '@/lib/errorCopy';
+import { LoadError, LoadingState } from '@/components/ScreenState';
 
 const ALARM_IDS = new Set(['guardrail_block_rate', 'rubber_stamp_rate', 'queue_age_p95']);
 
@@ -130,7 +132,7 @@ function Tile({ d, result }: { d: Row; result: MetricResult<number> }) {
 export default function ResultsPage() {
   const [world, setWorld] = useState<FixtureSet | null>(null);
   const [budget, setBudget] = useState<BudgetPosture | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ConsoleError | null>(null);
   const [openLayer, setOpenLayer] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -139,8 +141,8 @@ export default function ResultsPage() {
       setWorld(w);
       setBudget(b);
       setError(null);
-    } catch {
-      setError('Could not reach the agent. Nothing has been lost — try again.');
+    } catch (e) {
+      setError(asConsoleError(e));
     }
   }, []);
 
@@ -159,21 +161,9 @@ export default function ResultsPage() {
         <h1 className="page-title">Results</h1>
       </header>
 
-      {error && (
-        <div className="panel state-panel">
-          <p className="state-title">{error}</p>
-          <button type="button" className="btn" onClick={() => void load()}>
-            Try again
-          </button>
-        </div>
-      )}
+      {error && <LoadError error={error} onRetry={() => void load()} />}
 
-      {!error && !world && (
-        <div className="panel state-panel">
-          <p className="skeleton" />
-          <p className="skeleton short" />
-        </div>
-      )}
+      {!error && !world && <LoadingState lines={4} label="Computing the metrics" />}
 
       {!error && world && budget && <Loaded world={world} budget={budget} openLayer={openLayer} setOpenLayer={setOpenLayer} />}
     </>

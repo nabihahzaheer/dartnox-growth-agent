@@ -18,7 +18,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getQueue, subscribeToWorld } from '@/lib/agentClient';
-import type { QueueItem } from '@/lib/types';
+import type { ConsoleError, QueueItem } from '@/lib/types';
+import { asConsoleError } from '@/lib/errorCopy';
+import { EmptyState, LoadError, LoadingState } from '@/components/ScreenState';
 
 const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
 
@@ -36,15 +38,15 @@ const PARK_LABEL: Record<string, string> = {
 
 export default function ApprovalsPage() {
   const [items, setItems] = useState<QueueItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ConsoleError | null>(null);
 
   const load = useCallback(async () => {
     try {
       const queue = await getQueue();
       setItems(queue);
       setError(null);
-    } catch {
-      setError('Could not reach the agent. Nothing has been lost — try again.');
+    } catch (e) {
+      setError(asConsoleError(e));
     }
   }, []);
 
@@ -67,27 +69,15 @@ export default function ApprovalsPage() {
         </p>
       </header>
 
-      {error && (
-        <div className="panel state-panel">
-          <p className="state-title">{error}</p>
-          <button type="button" className="btn" onClick={() => void load()}>
-            Try again
-          </button>
-        </div>
-      )}
+      {error && <LoadError error={error} onRetry={() => void load()} />}
 
-      {!error && !items && (
-        <div className="panel state-panel">
-          <p className="skeleton" />
-          <p className="skeleton short" />
-        </div>
-      )}
+      {!error && !items && <LoadingState lines={3} label="Loading the queue" />}
 
       {!error && items && items.length === 0 && (
-        <div className="panel state-panel">
-          <p className="state-title">Nothing waiting.</p>
-          <p className="state-sub">The next drafting batch runs Wednesday at 06:00.</p>
-        </div>
+        <EmptyState
+          title="Nothing waiting."
+          detail="The next drafting batch runs Wednesday at 06:00."
+        />
       )}
 
       {!error && items && items.length > 0 && (

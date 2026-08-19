@@ -1339,6 +1339,26 @@ if (capPatch.settings) {
     `state is ${stopped.state}`);
 }
 
+/* ==============================================================================================
+ * NOT ASSERTED HERE, AND THE REASON IS STRUCTURAL — added 19 Aug during the state audit
+ *
+ * The failure switch (`setFailure`/`isFailureActive`) and its one-shot behaviour are what make the
+ * six rebuilt error states reachable, so they are exactly the kind of thing this file should cover.
+ * It cannot. This script runs under Node's type stripping, which does not read `tsconfig.json`, so
+ * the `@/*` alias does not resolve — and `lib/agentClient.ts` imports `@/fixtures`. Importing it
+ * here fails with ERR_MODULE_NOT_FOUND before a single assertion runs.
+ *
+ * That is why every module this file tests — `world`, `budget`, `week`, `metrics` — is one of the
+ * pure ones with relative imports, and why the seam itself has never been covered. Rewriting
+ * `agentClient.ts`'s imports to relative paths purely to make it testable here would change the
+ * module every screen depends on for a test-harness reason, which is the wrong trade at this size.
+ *
+ * The switch is therefore verified in the browser instead, and the commit that added it records the
+ * observed behaviour: armed, one read fails as `unavailable`, the control disarms, the retry
+ * succeeds. Written down because an untested behaviour that *looks* like it should be in the
+ * checker is worth a sentence saying why it is not.
+ * ============================================================================================*/
+
 console.log(`\n${checks - failures}/${checks} checks passed.`);
 
 if (failures > 0) {

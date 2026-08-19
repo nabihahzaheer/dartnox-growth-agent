@@ -22,6 +22,9 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getWeek, initialWeekIndex, subscribeToWorld } from '@/lib/agentClient';
 import type { Week } from '@/lib/week';
+import type { ConsoleError } from '@/lib/types';
+import { asConsoleError } from '@/lib/errorCopy';
+import { LoadError, LoadingState } from '@/components/ScreenState';
 import { formatDateTime, formatRelative, formatTime } from '@/lib/time';
 /**
  * The label map only, not the `Badge` component — `Badge` renders through v1's Tailwind classes and
@@ -57,15 +60,15 @@ export default function WeekPage() {
    */
   const [index, setIndex] = useState<number>(() => initialWeekIndex());
   const [week, setWeek] = useState<Week | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ConsoleError | null>(null);
 
   const load = useCallback(async (i: number) => {
     try {
       const w = await getWeek(i);
       setWeek(w);
       setError(null);
-    } catch {
-      setError('Could not reach the agent. Nothing has been lost — try again.');
+    } catch (e) {
+      setError(asConsoleError(e));
     }
   }, []);
 
@@ -84,21 +87,9 @@ export default function WeekPage() {
         <h1 className="page-title">The week</h1>
       </header>
 
-      {error && (
-        <div className="panel state-panel">
-          <p className="state-title">{error}</p>
-          <button type="button" className="btn" onClick={() => void load(index)}>
-            Try again
-          </button>
-        </div>
-      )}
+      {error && <LoadError error={error} onRetry={() => void load(index)} />}
 
-      {!error && !week && (
-        <div className="panel state-panel">
-          <p className="skeleton" />
-          <p className="skeleton short" />
-        </div>
-      )}
+      {!error && !week && <LoadingState lines={3} label="Loading the week" />}
 
       {!error && week && (
         <>

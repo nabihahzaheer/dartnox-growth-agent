@@ -35,33 +35,21 @@
 import Link from 'next/link';
 import type { ConsoleError } from '@/lib/types';
 
-/** The six failure kinds, and their copy. `not_found` is not a failure — see the header. */
-export type FailureKind = Exclude<ConsoleError['kind'], 'not_found'>;
-
 /**
- * One sentence per kind, and the differences between them are the whole justification for having
- * seven kinds rather than one. Two are worth reading closely:
+ * MOVED, 19 AUG — the map and its helper now live in `lib/errorCopy.ts` and are re-exported here so
+ * every v1 call site is unchanged.
  *
- *   `unavailable` says the failure is transient and invites a retry.
- *   `timeout` refuses to say that, because a timed-out *write* may have landed. The console tells
- *   the operator it does not know rather than retrying and risking a double approval (A-06).
+ * The rebuild needs the same six sentences, and it had grown its own single-sentence version of them
+ * on all six screens — the exact defect this file's header was written about, committed again one
+ * interface over. Sharing the map fixes that, but importing this module from the rebuild would point
+ * the living interface at the frozen one, so the data moved down to `lib/` instead and both sides
+ * import it from there.
+ *
+ * Nothing about v1's behaviour changes: same strings, same totality check, same `not_found`
+ * exclusion, same panel below. The reasoning for all three is in `lib/errorCopy.ts` now.
  */
-export const ERROR_COPY: Record<FailureKind, string> = {
-  version_conflict: 'This changed while you had it open. Reload before deciding.',
-  guardrail_block: 'A guardrail blocked that.',
-  forbidden: 'That control is fixed and cannot be changed.',
-  rate_limited: 'Too many requests. Try again shortly.',
-  unavailable: 'Could not reach the agent runtime. This is usually transient.',
-  timeout: 'Timed out, so we do not know whether it landed. Reload before retrying.',
-};
-
-/**
- * Per-screen wording for the one kind whose sentence is genuinely about the screen rather than
- * about the failure. Everything else is identical wherever it appears, which is why it is central.
- */
-export function errorCopy(error: ConsoleError, notFoundCopy = 'That no longer exists.'): string {
-  return error.kind === 'not_found' ? notFoundCopy : ERROR_COPY[error.kind];
-}
+export { ERROR_COPY, errorCopy, type FailureKind } from '@/lib/errorCopy';
+import { errorCopy } from '@/lib/errorCopy';
 
 /**
  * The failure panel.

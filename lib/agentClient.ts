@@ -148,9 +148,37 @@ const VARIANT_SWITCHES = [
 
 const activeFailures = new Set<FailureSwitch>();
 
+/**
+ * Subscribers to the switch set, for the same reason `subscribeToWorld` exists one layer up.
+ *
+ * `next_read_fails` is one-shot: `read()` spends it, so the set changes without anyone calling
+ * `setFailure`. A control that only re-read on click would then sit there claiming "armed" after the
+ * switch had already fired — the control saying one thing while the client held another, which is
+ * exactly the drift v1's `FailureDrawer` recorded as a ten-minute bug and fixed only for the
+ * click-driven half.
+ *
+ * Nine lines, no dependency, and it keeps the control a *view* of the client's state rather than a
+ * second copy of it. Deliberately separate from `subscribeToWorld`: arming a switch changes no
+ * record, and firing the world's listeners would make every mounted screen refetch for a change that
+ * touched no data.
+ */
+const failureListeners = new Set<() => void>();
+
+export function subscribeToFailures(onChange: () => void): () => void {
+  failureListeners.add(onChange);
+  return () => {
+    failureListeners.delete(onChange);
+  };
+}
+
+function announceFailures(): void {
+  for (const listener of failureListeners) listener();
+}
+
 export function setFailure(which: FailureSwitch, on: boolean): void {
   if (on) activeFailures.add(which);
   else activeFailures.delete(which);
+  announceFailures();
 }
 
 export function isFailureActive(which: FailureSwitch): boolean {
@@ -168,7 +196,10 @@ function fail(error: ConsoleError): never {
 async function read<T>(latency: number, produce: () => T): Promise<T> {
   await sleep(latency);
   if (activeFailures.has('next_read_fails')) {
-    activeFailures.delete('next_read_fails'); // one-shot: the drawer arms it, the next call spends it
+    activeFailures.delete('next_read_fails'); // one-shot: the control arms it, the next call spends it
+    /** Announced before throwing, so the control that armed it stops claiming it is still armed.
+     *  Without this the switch spends itself silently and the button lies until it is clicked. */
+    announceFailures();
     fail({ kind: 'unavailable' });
   }
   return produce();
