@@ -26,7 +26,7 @@
  * it. That is true in production at this contracted volume, not a fixture artifact.
  */
 
-import type {
+import type { MinutesFromAnchor,
   Approval,
   Draft,
   FixtureSet,
@@ -359,7 +359,7 @@ export const injectionDetections: MetricFn = (w, win) => {
  *  render as red. That distinction is the reason `not_applicable` exists as a result kind. */
 export const autoApproveRate: MetricFn = (w) =>
   w.settings.phase === 'v1_all_human'
-    ? { kind: 'not_applicable', reason: 'Off by design in v1 — every post is reviewed by a person.' }
+    ? { kind: 'not_applicable', reason: 'Off by design — every post is reviewed by a person.' }
     : { kind: 'no_data' };
 
 /* ================================================================================================
@@ -454,10 +454,47 @@ export function editRateBySettingsVersion(w: FixtureSet): EditRateCohort[] {
     .filter((cohort) => cohort.decisions > 0);
 }
 
-/** The drafts behind one bar, so clicking it lands on the items rather than on a smaller number. */
+/**
+ * The drafts behind one edit-rate bar — the SAME population the bar counted.
+ *
+ * There used to be a `draftsInCohort` here returning every draft with any version stamped with a
+ * settings version, including rejected and undecided ones, while `editRateBySettingsVersion` counts
+ * decided, non-rejected, non-superseded approvals. The screen put one under the other, so "1 of 6
+ * rewritten" could sit above eight rows with two marked rewritten and the panel contradicted
+ * itself. One filter, expressed once, used by both — `check.mts` asserts they agree.
+ */
+/** v1's drill-down, which lists every draft written under a settings version rather than every
+ *  draft DECIDED under it. Kept because `/v1/metrics` is the preserved 17 Aug submission and still
+ *  calls it; the rebuilt screen uses `cohortDrafts` below, which agrees with the bar above it. */
 export function draftsInCohort(w: FixtureSet, settingsVersionId: string): Draft[] {
   return w.drafts.filter((d) =>
     d.versions.some((v) => v.settings_version_id === settingsVersionId),
   );
+}
+
+export function cohortDrafts(
+  w: FixtureSet,
+  settingsVersionId: string,
+): { draft: Draft; edited: boolean; decidedAt: MinutesFromAnchor }[] {
+  return decidedInCohort(w, settingsVersionId).map(({ draft, decidedAt }) => ({
+    draft,
+    edited: draft.versions.some((v) => v.author === 'human'),
+    decidedAt,
+  }));
+}
+
+function decidedInCohort(
+  w: FixtureSet,
+  settingsVersionId: string,
+): { draft: Draft; decidedAt: MinutesFromAnchor }[] {
+  const out: { draft: Draft; decidedAt: MinutesFromAnchor }[] = [];
+  for (const a of w.approvals) {
+    if (a.decided_at === null || a.decision === 'reject' || a.superseded_by !== null) continue;
+    const draft = w.drafts.find((d) => d.versions.some((v) => v.id === a.draft_version_id));
+    const stamped = draft?.versions.find((v) => v.id === a.draft_version_id);
+    if (!draft || stamped?.settings_version_id !== settingsVersionId) continue;
+    out.push({ draft, decidedAt: a.decided_at });
+  }
+  return out;
 }
 

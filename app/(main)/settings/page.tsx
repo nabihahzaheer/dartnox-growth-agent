@@ -370,7 +370,15 @@ function VoiceSection({
           <label className="t-label" htmlFor="register">
             Tone
           </label>
-          <div className="field-row">
+          {/* A form, so Enter saves. Both text fields on this screen could only be committed by
+              moving to the mouse and clicking the button beside them. */}
+          <form
+            className="field-row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveRegister();
+            }}
+          >
             <input
               id="register"
               className="txt txt-flex"
@@ -378,14 +386,14 @@ function VoiceSection({
               onChange={(e) => setRegister(e.target.value)}
             />
             <button
-              type="button"
+              type="submit"
               className="btn"
+              aria-busy={savingRegister}
               disabled={savingRegister || register.trim() === settings.tone.register}
-              onClick={() => void saveRegister()}
             >
-              {savingRegister ? '…' : 'Save'}
+              Save
             </button>
-          </div>
+          </form>
           <Timing settings={settings} path="tone.register" />
         </div>
 
@@ -409,7 +417,13 @@ function VoiceSection({
           <label className="t-label" htmlFor="phrase">
             Add a banned phrase
           </label>
-          <div className="field-row">
+          <form
+            className="field-row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void ban();
+            }}
+          >
             <input
               id="phrase"
               className="txt txt-flex"
@@ -418,14 +432,14 @@ function VoiceSection({
               onChange={(e) => setPhrase(e.target.value)}
             />
             <button
-              type="button"
+              type="submit"
               className="btn"
+              aria-busy={banning}
               disabled={banning || !trimmed || alreadyBanned}
-              onClick={() => void ban()}
             >
-              {banning ? '…' : 'Add phrase'}
+              Add phrase
             </button>
-          </div>
+          </form>
           <Timing settings={settings} path="tone.banned_phrases" />
           {trimmed && (
             <p className="preview-line">
@@ -508,10 +522,11 @@ function ThresholdSection({
             <button
               type="button"
               className="btn btn-sm"
+              aria-busy={saving}
               disabled={saving || value === settings.score_threshold}
               onClick={() => void save()}
             >
-              {saving ? '…' : 'Save'}
+              Save
             </button>
           </div>
         </div>
@@ -661,7 +676,7 @@ function BudgetSection({
             disabled={saving || !valid || value === settings.budget.cap}
             onClick={() => void save()}
           >
-            {saving ? '…' : 'Save'}
+            Save
           </button>
         </div>
 

@@ -39,7 +39,7 @@ import {
   ROLLING_4W,
   PERIOD,
   blockRateByLayer,
-  draftsInCohort,
+  cohortDrafts,
   editRateBySettingsVersion,
   type KeyedMetricDescriptor,
   type Window,
@@ -58,6 +58,7 @@ import { BudgetLine, BudgetNotice } from '@/components/BudgetNotice';
 import { CHANNEL_LABEL } from '@/components/ChannelMark';
 import { formatDate } from '@/lib/time';
 import type { BudgetPosture } from '@/lib/budget';
+import Link from 'next/link';
 import type { ConsoleError, FixtureSet, GuardrailEvent, MetricResult } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
 import { useWorldRead } from '@/lib/useWorldRead';
@@ -92,8 +93,11 @@ function windowFor(kind: 'rolling_4w' | 'period'): Window {
 function formatValue(unit: string, value: number): string {
   if (unit === '%') return `${Math.round(value)}%`;
   if (unit === 'USD') return `$${value.toFixed(2)}`;
-  if (unit === 'x baseline') return `${value.toFixed(2)}×`;
-  if (unit === 'seconds') return value < 60 ? `${Math.round(value)}s` : `${(value / 60).toFixed(1)}m`;
+  /* `1.00×` is false precision on a ratio whose band is "1 or more", and a bare `m` after a
+     number reads as metres or millions before it reads as minutes. */
+  if (unit === 'x baseline') return `${Number(value.toFixed(2))}×`;
+  if (unit === 'seconds')
+    return value < 60 ? `${Math.round(value)}s` : `${Number((value / 60).toFixed(1))} min`;
   if (unit === 'hours') return `${value.toFixed(1)}h`;
   return `${value}`;
 }
@@ -137,56 +141,50 @@ function verdict(value: number, min: number | null, max: number | null): 'go' | 
  * written here, for the metrics whose label does not explain itself.
  */
 function Tile({ d, result }: { d: KeyedMetricDescriptor; result: MetricResult<number> }) {
-  const label = <p className="tile-label">{d.label}</p>;
-  const note = firstSentence(d.definition);
+  /**
+   * FOUR SLOTS, ALWAYS, IN EVERY BRANCH.
+   *
+   * The three non-numeric branches used to return their own markup with no target line, so a tile
+   * reading "n/a" put its caption a whole line higher than the tile beside it and the row's text
+   * stopped lining up. One shape, with the slots reserved whether or not they have anything in
+   * them, is the only thing that keeps a grid of tiles on a grid.
+   */
+  const v =
+    result.kind === 'ok' ? verdict(result.value, d.healthy_range.min, d.healthy_range.max) : null;
 
-  if (result.kind === 'no_data') {
-    return (
-      <div className="tile">
-        {label}
-        <p className="tile-value tile-value-off">—</p>
-        <p className="tile-note">{d.empty_state.copy}</p>
-      </div>
-    );
-  }
-  if (result.kind === 'not_applicable') {
-    return (
-      <div className="tile">
-        {label}
-        <p className="tile-value tile-value-off">n/a</p>
-        <p className="tile-note">{result.reason}</p>
-      </div>
-    );
-  }
-  if (result.kind === 'establishing_baseline') {
-    return (
-      <div className="tile">
-        {label}
-        <p className="tile-value tile-value-off">
-          {result.weeks_elapsed} of {result.weeks_required} weeks
-        </p>
-        <p className="tile-note">{d.empty_state.copy}</p>
-      </div>
-    );
-  }
+  const value =
+    result.kind === 'ok'
+      ? formatValue(d.unit, result.value)
+      : result.kind === 'not_applicable'
+        ? 'n/a'
+        : result.kind === 'establishing_baseline'
+          ? `${result.weeks_elapsed} of ${result.weeks_required} weeks`
+          : '—';
 
-  const v = verdict(result.value, d.healthy_range.min, d.healthy_range.max);
-  const target = targetLabel(d.unit, d.healthy_range.min, d.healthy_range.max);
+  const note =
+    result.kind === 'ok'
+      ? firstSentence(d.definition)
+      : result.kind === 'not_applicable'
+        ? result.reason
+        : d.empty_state.copy;
 
   return (
     <div className="tile">
-      {label}
-      <p className={`tile-value${v === 'attend' ? ' tile-value-attend' : ''}`}>
-        {formatValue(d.unit, result.value)}
+      <p className="tile-label">{d.label}</p>
+      <p
+        className={`tile-value${v === 'attend' ? ' tile-value-attend' : ''}${
+          result.kind === 'ok' ? '' : ' tile-value-off'
+        }`}
+      >
+        {value}
       </p>
-      {/* Nothing where there is no target. The fallback used to print the sample size, which is
-          the `n=` problem wearing a different hat: a denominator with no question attached. */}
-      {(target || v === 'attend') && (
-        <p className="tile-target">
-          {v === 'attend' && <span className="tile-flag">Needs a look</span>}
-          {target}
-        </p>
-      )}
+      {/* Empty where there is no target, rather than absent, so the notes underneath sit on one
+          line across a row. The fallback used to print the sample size, which is the `n=` problem
+          wearing a different hat: a denominator with no question attached. */}
+      <p className="tile-target">
+        {v === 'attend' && <span className="tile-flag">Needs a look</span>}
+        {result.kind === 'ok' ? targetLabel(d.unit, d.healthy_range.min, d.healthy_range.max) : null}
+      </p>
       <p className="tile-note">{note}</p>
     </div>
   );
@@ -275,8 +273,8 @@ export default function ResultsPage() {
       <header className="page-head">
         <h1 className="page-title">Metrics</h1>
         <p className="page-sub">
-          Live figures for Brightsill. Quality over the last four weeks, business over the current
-          month.
+          Live figures for Brightsill. Quality metrics cover the last four weeks; business metrics
+          cover the last {PERIOD.fromDaysAgo} days.
         </p>
       </header>
 
@@ -320,9 +318,27 @@ function Loaded({
   const quality = descriptors.filter((d) => d.family === 'agent_quality' && !ALARM_IDS.has(d.id));
 
   const cohorts = editRateBySettingsVersion(world);
-  const maxEdit = Math.max(1, ...cohorts.map((c) => c.rate));
-  const layers = blockRateByLayer(world, PERIOD);
-  const maxRate = Math.max(1, ...layers.map((l) => l.rate));
+  const versionNumber = (id: string) =>
+    world.settings.versions.findIndex((v) => v.version_id === id) + 1;
+  const measured = blockRateByLayer(world, PERIOD);
+  /**
+   * ALL FOUR STAGES, INCLUDING ONES NOTHING RAN AT.
+   *
+   * `blockRateByLayer` drops layers with no evaluations, which is right for a computation and
+   * wrong for a chart: a stage that is silently missing looks the same as a stage that was never
+   * checked. Four rows always; the ones with nothing behind them say so.
+   */
+  const layers = (Object.keys(LAYER_NAME) as string[]).map(
+    (layer) => measured.find((m) => m.layer === layer) ?? { layer, rate: 0, evaluations: 0 },
+  );
+  /**
+   * BARS RUN TO 100%, NOT TO THE LONGEST ROW.
+   *
+   * Both were `(rate / max) * 100`, so the biggest row always painted a full bar whatever it said:
+   * "12% of 26 checks" could fill the track end to end, and the two charts could not be compared
+   * with each other because each had its own invisible maximum. These are already percentages, so
+   * the bar is the percentage.
+   */
 
   const drillEvents: GuardrailEvent[] = openLayer
     ? world.guardrailEvents
@@ -349,8 +365,18 @@ function Loaded({
         rows={alarms}
         results={results}
       />
-      <MetricPanel title="Business results" rows={business} results={results} />
-      <MetricPanel title="Agent quality" rows={quality} results={results} />
+      <MetricPanel
+        title="Business results"
+        detail="What the client is paying for: posts out, time back, engagement, cost."
+        rows={business}
+        results={results}
+      />
+      <MetricPanel
+        title="Agent quality"
+        detail="How much of the agent's output survives review without a person rewriting it."
+        rows={quality}
+        results={results}
+      />
 
       {/**
        * THE DRILL-DOWN THE ARCHITECTURE ACTUALLY NOMINATES.
@@ -374,7 +400,7 @@ function Loaded({
             <p className="mpanel-empty">No decisions recorded under any settings version yet.</p>
           ) : (
             <div className="chart">
-              {cohorts.map((c, i) => (
+              {cohorts.map((c) => (
                 <button
                   key={c.settingsVersionId}
                   type="button"
@@ -385,11 +411,14 @@ function Loaded({
                   }
                 >
                   <span className="cname">
-                    <span className="cname-t">Version {i + 1}</span>
+                    {/* Numbered from the settings history, not from this array. Cohorts with no
+                        decisions are filtered out upstream, so the third row could be `SET-V4`
+                        while the screen called it "Version 3". */}
+                    <span className="cname-t">Version {versionNumber(c.settingsVersionId)}</span>
                     <span className="cname-s">{firstSentence(c.changeSummary)}</span>
                   </span>
                   <span className="ctrack" aria-hidden>
-                    <i style={{ width: `${(c.rate / maxEdit) * 100}%` }} />
+                    <i style={{ width: `${c.rate}%` }} />
                   </span>
                   <span className="cval">
                     <span className="cval-n">{c.rate.toFixed(0)}%</span>
@@ -407,21 +436,35 @@ function Loaded({
               <h3 className="drill-h">
                 {cohorts.find((c) => c.settingsVersionId === openCohort)?.changeSummary}
               </h3>
-              {draftsInCohort(world, openCohort).length === 0 ? (
-                <p className="mpanel-empty">No drafts were written under this version.</p>
+              {/**
+               * THE SAME POPULATION THE BAR COUNTED, AND POSTS YOU CAN IDENTIFY.
+               *
+               * `draftsInCohort` returns every draft with any version stamped with this settings
+               * version — including rejected and undecided ones — while the bar above counts
+               * decided, non-rejected, non-superseded approvals. So "1 of 6 rewritten" could sit
+               * above eight rows with two marked Edited, and the panel contradicted itself. The
+               * list is filtered to the bar's own population.
+               *
+               * Each row also says WHICH post, with a link, the way the queue does. A row you
+               * cannot identify is a row you cannot act on.
+               */}
+              {cohortDrafts(world, openCohort).length === 0 ? (
+                <p className="mpanel-empty">No decided drafts under this version.</p>
               ) : (
-                draftsInCohort(world, openCohort).map((d) => {
-                  const edited = d.versions.some((v) => v.author === 'human');
-                  return (
-                    <div key={d.id} className="dritem">
-                      <span className="dq">
-                        <b>{edited ? 'Edited' : 'Approved as written'}</b> ·{' '}
-                        {CHANNEL_LABEL[d.channel]} · {d.versions.length} version
-                        {d.versions.length === 1 ? '' : 's'}
-                      </span>
-                    </div>
-                  );
-                })
+                cohortDrafts(world, openCohort).map(({ draft, edited, decidedAt }) => (
+                  <div key={draft.id} className="dritem">
+                    <span className="dt2">{decidedAt === null ? '' : formatDate(decidedAt)}</span>
+                    <span className="dq">
+                      <b>{edited ? 'Rewritten' : 'Approved as written'}</b> ·{' '}
+                      {CHANNEL_LABEL[draft.channel]} ·{' '}
+                      <Link href={`/approvals/${draft.id}`}>
+                        {firstSentence(
+                          draft.versions.find((v) => v.id === draft.current_version_id)?.text ?? '',
+                        )}
+                      </Link>
+                    </span>
+                  </div>
+                ))
               )}
             </div>
           )}
@@ -431,11 +474,11 @@ function Loaded({
       {/* `L1`–`L4` are the architecture's names for the four points a check can run at. They are
           correct and they are internal; the screen says where the check runs instead. */}
       <Panel
-        title="Where checks catch problems"
-        detail="Share of checks that warned or blocked, at each point the agent is checked."
+        title="Where problems get caught"
+        detail={`Share of checks that warned or blocked, at each stage, over the last ${PERIOD.fromDaysAgo} days.`}
       >
         <div className="mpanel-body">
-          {layers.length === 0 ? (
+          {measured.length === 0 ? (
             <p className="mpanel-empty">No checks have run in this period.</p>
           ) : (
             <div className="chart">
@@ -445,6 +488,7 @@ function Loaded({
                   type="button"
                   className={`crow${openLayer === l.layer ? ' crow-on' : ''}`}
                   aria-expanded={openLayer === l.layer}
+                  disabled={l.evaluations === 0}
                   onClick={() => setOpenLayer(openLayer === l.layer ? null : l.layer)}
                 >
                   <span className="cname">
@@ -452,11 +496,15 @@ function Loaded({
                     <span className="cname-s">{LAYER_DETAIL[l.layer] ?? ''}</span>
                   </span>
                   <span className="ctrack" aria-hidden>
-                    <i style={{ width: `${(l.rate / maxRate) * 100}%` }} />
+                    <i style={{ width: `${l.rate}%` }} />
                   </span>
                   <span className="cval">
-                    <span className="cval-n">{l.rate.toFixed(0)}%</span>
-                    <span className="cval-s">of {l.evaluations} checks</span>
+                    <span className="cval-n">
+                      {l.evaluations === 0 ? '—' : `${l.rate.toFixed(0)}%`}
+                    </span>
+                    <span className="cval-s">
+                      {l.evaluations === 0 ? 'no checks yet' : `of ${l.evaluations} checks`}
+                    </span>
                   </span>
                 </button>
               ))}
@@ -493,19 +541,15 @@ function Loaded({
 
       <Panel
         title="Monthly spend"
-        detail={`Alerts at ${budget.alert_pct}% of the cap and pauses new planning and drafting at ${budget.stop_pct}%.`}
+        detail={`The agent alerts at ${budget.alert_pct}% of the cap and pauses new planning and drafting at ${budget.stop_pct}%.`}
       >
         <div className="mpanel-body">
           <BudgetLine budget={budget} />
-          <p className="mpanel-empty" style={{ marginTop: 'var(--sp-3)' }}>
-            Counted since {formatDate(budget.period_start)}.
-          </p>
+          <p className="panel-caption">Counted since {formatDate(budget.period_start)}.</p>
+          <BudgetNotice budget={budget} />
         </div>
       </Panel>
 
-      <div style={{ marginTop: 12 }}>
-        <BudgetNotice budget={budget} />
-      </div>
     </>
   );
 }

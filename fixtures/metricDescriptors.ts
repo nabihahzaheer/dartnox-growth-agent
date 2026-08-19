@@ -190,9 +190,11 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
     id: 'edit_magnitude',
     label: 'How much gets edited',
     family: 'agent_quality',
+    /* "Normalised token distance" is the implementation, and the operator reading this screen is
+       a marketing lead. The first sentence is what the number means; the mechanism follows it. */
     definition:
-      'Median normalised token distance between the last agent version and the shipped version. ' +
-      'Measures how much was changed, not how often.',
+      'How much of a post gets rewritten when someone edits it, not how often. Computed as the ' +
+      'median normalised token distance between the last agent version and the shipped one.',
     unit: '%',
     healthy_range: { min: null, max: 20 },
     action_when_outside:
@@ -226,7 +228,10 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
   },
   {
     id: 'rubber_stamp_rate',
-    label: 'Decided under 15 seconds',
+    /* Was "Decided under 15 seconds", which made the caption underneath — "Share of approvals
+       decided in under fifteen seconds." — the label again as a sentence. The label names the
+       behaviour; the caption says how it is measured. */
+    label: 'Rubber-stamped',
     family: 'agent_quality',
     /**
      * Split out from time-to-decision rather than folded into it. A-17 writes the two together,
@@ -277,7 +282,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
     /** Per layer and per rule. The denominator is *evaluations*, which is why passes are recorded
      *  and not only the interesting results (R7) — without them a rule that has silently stopped
      *  being evaluated looks identical to a rule that is passing everything. */
-    definition: 'Share of evaluations that warned or blocked, broken down by layer and by rule.',
+    definition: 'Share of checks that warned or blocked before a person saw the draft.',
     unit: '%',
     /**
      * The band is relative, not absolute: within 50% of the trailing four-week rate. There is no
@@ -373,7 +378,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
      */
     empty_state: {
       status: 'not_applicable',
-      copy: 'Off by design in v1 — every post is reviewed by a person.',
+      copy: 'Off by design — every post is reviewed by a person.',
     },
     window_default: 'period',
     compute_key: 'autoApproveRate',

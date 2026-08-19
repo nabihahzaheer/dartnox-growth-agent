@@ -1508,6 +1508,39 @@ if (landing_run) {
     again.drafts === undefined && again.approvals === undefined);
 }
 
+/* ==============================================================================================
+ * THE EDIT-RATE DRILL-DOWN AGREES WITH ITS OWN BAR
+ * ============================================================================================*/
+
+section('Edit rate cohorts');
+
+{
+  const { editRateBySettingsVersion, cohortDrafts } = await import('../lib/metrics.ts');
+  const cohorts = editRateBySettingsVersion(fixtures);
+  check('there are cohorts to compare', cohorts.length > 0, `${cohorts.length} cohorts`);
+
+  /**
+   * The bar says "{edited} of {decisions} rewritten" and the list underneath is what you get when
+   * you open it. They were computed from two different populations — the bar from decided,
+   * non-rejected, non-superseded approvals, the list from every draft with a version stamped with
+   * that settings version — so a bar reading "1 of 6" could sit above eight rows with two marked
+   * rewritten. Nothing in the type system connects them; this does.
+   */
+  for (const c of cohorts) {
+    const rows = cohortDrafts(fixtures, c.settingsVersionId);
+    check(
+      `${c.settingsVersionId} — the drill lists exactly the decisions the bar counted`,
+      rows.length === c.decisions,
+      `${rows.length} rows vs ${c.decisions} decisions`,
+    );
+    check(
+      `${c.settingsVersionId} — the drill marks exactly as many rewritten as the bar claims`,
+      rows.filter((r) => r.edited).length === c.edited,
+      `${rows.filter((r) => r.edited).length} rewritten vs ${c.edited}`,
+    );
+  }
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed.`);
 
 if (failures > 0) {

@@ -113,7 +113,7 @@ export function BudgetLine({ budget }: { budget: BudgetPosture }) {
           style={{ width: `${Math.min(100, budget.pct)}%` }}
         />
       </span>
-      <span className="bud-pct mono">{Math.round(budget.pct)}%</span>
+      <span className="bud-pct">{Math.round(budget.pct)}%</span>
     </div>
   );
 }
