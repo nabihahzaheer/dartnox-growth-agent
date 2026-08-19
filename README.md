@@ -94,13 +94,17 @@ step lists `Avoiding: Off pillar`; pick a different reason and it says that inst
 
 **Timing.** Every step carries two numbers: `latency_ms` (honest — the drafting call really takes
 18.6s, and that is the duration shown on the step) and `playback_ms` (how long that step is shown
-working). A drafting child's real duration is **38.8s** and it plays in **38.6s** — so the playback
-does not compress, it **redistributes**. Played literally, one step is half the run: eighteen
-seconds of a single line reading "Writing the draft". The playback gives that step 1.4s of the
-budget and spends the rest on the steps you can learn something from — searching, reading, screening
-and retrieving sources. A uniform 300ms tick is the faked streaming the brief rejects; so is a
-progress bar with nothing behind it. Both numbers are on every step and `PLAYBACK_SCALE`
-(`lib/agentClient.ts`) is the single multiplier between them.
+working). A drafting child's real duration is **38.8s** and it plays over **3m36s**, or 3m02s from
+where the console attaches mid-run. So the playback does not compress — it **slows down**, by about
+**5.6×**. Four children stream at once inside fixed-height windows; at true speed that is four cards
+blurring through eleven steps each in under forty seconds, which is motion without legibility.
+
+The slowdown is not uniform. Each step's share of the budget tracks roughly the **square root** of
+its own latency, so the 18.6s drafting call does not swallow half the run and a 0.14s tool result
+does not flash past — and every step's live clock advances at a rate you can read. A uniform 300ms
+tick is the faked streaming the brief rejects; so is a progress bar with nothing behind it. Both
+numbers sit on every step, and `PLAYBACK_SCALE` (`lib/agentClient.ts`) is the single multiplier
+between `playback_ms` and the wall clock.
 
 A step arrives when it **starts**, not when it finishes, and settles after its own duration. While
 it's in flight the console withholds the duration, tokens and cost, because those facts don't exist
@@ -113,9 +117,18 @@ seeded PRNG, never `Math.random()`.
 
 **Dates.** Every timestamp is a signed offset in minutes from one build-time anchor, never an
 absolute date, so the set expresses relationships rather than timestamps kept consistent by hand. The
-anchor is the most recent Thursday and **the weekday is load-bearing** — planning runs Monday, the
-drafting batch Wednesday, review runway counts working days. The dataset ages in whole weeks between
-deploys; one redeploy refreshes it.
+anchor is **this week's Thursday** and **the weekday is load-bearing** — planning runs Monday, the
+drafting batch Wednesday, review runway counts working days.
+
+This week's Thursday rather than the most recent one, which is a change and a deliberate one. The
+dataset is built around the anchor: the batch ran "yesterday" and drafts the posts for "next week".
+Anchoring backwards meant that late in a week the fixture's "next week" was the week the real
+calendar was already in, so the console announced it was drafting next week's posts while the
+calendar showed those same posts inside the week it had labelled current. Anchoring to the current
+week's Thursday puts the fixture's now inside the real current week and makes "next week" mean the
+same thing on both screens. The anchor may then sit up to three days ahead of the build; drift
+against the real clock is at most three days either way, where the old rule ran up to seven days
+behind. One redeploy re-centres it.
 
 ## Deliberate, not broken
 

@@ -36,23 +36,36 @@ const THURSDAY = 4;
 const ANCHOR_UTC_HOUR = 14;
 
 /**
- * The most recent Thursday at 14:00 UTC, at or before `now`, as an ISO instant.
+ * THIS WEEK'S THURSDAY at 14:00 UTC — not the most recent one. Weeks run Monday to Sunday.
  *
- * "At or before" matters: on a Thursday morning the answer is the previous Thursday, not one a few
- * hours in the future. An anchor ahead of the build would put "now" after the whole dataset and
- * invert every relative timestamp on screen.
+ * CHANGED 19 AUG, AND THE REASON IS WORTH RECORDING BECAUSE THE OLD RULE LOOKED MORE CAUTIOUS.
+ * It used to return the most recent Thursday at or before the build, so the anchor was never in the
+ * future. That sounds safer and produced a visible contradiction. The dataset is built around the
+ * anchor: the Wednesday batch ran "yesterday" and drafts the posts for "next week". Six days after
+ * a Thursday build, "next week" in the fixture's frame is the week the real calendar is currently
+ * in — so the console said it was drafting next week's posts while the calendar showed those same
+ * posts inside the week it had labelled "Current week". Both screens were right about their own
+ * frame and the pair of them was nonsense.
+ *
+ * Anchoring to this week's Thursday puts the fixture's "now" inside the real current week, which is
+ * what makes "next week" mean the same thing on both screens. The cost is that the anchor can sit
+ * up to three days ahead of the build. That is not the failure the old comment warned about — that
+ * one was about the anchor overtaking the *dataset*, which cannot happen, because every fixture
+ * timestamp is an offset from the anchor and half of them are negative. What it actually costs is
+ * drift against the real clock, and it makes that drift smaller: at most three days in either
+ * direction, where the old rule ran up to seven days behind and was at its worst on a Wednesday.
+ *
+ * `scripts/check.mts` asserts the weekday and the three-day bound.
  */
 export function computeAnchorIso(now: Date): string {
   const candidate = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), ANCHOR_UTC_HOUR),
   );
 
-  // Step back to Thursday. `+ 7) % 7` handles every weekday and gives 0 on a Thursday.
-  let daysBack = (candidate.getUTCDay() - THURSDAY + 7) % 7;
+  // Monday-anchored: 0 on a Monday through 6 on a Sunday, whatever `Date`'s Sunday-first numbering
+  // says. Thursday is three days along from there.
+  const sinceMonday = (candidate.getUTCDay() + 6) % 7;
+  candidate.setUTCDate(candidate.getUTCDate() - sinceMonday + (THURSDAY - 1));
 
-  // On a Thursday before the anchor hour, the most recent one is a week ago.
-  if (daysBack === 0 && candidate.getTime() > now.getTime()) daysBack = 7;
-
-  candidate.setUTCDate(candidate.getUTCDate() - daysBack);
   return candidate.toISOString();
 }

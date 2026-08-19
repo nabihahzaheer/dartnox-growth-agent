@@ -18,7 +18,7 @@ export { CLIENT_TIMEZONE };
 
 /** Used when the build did not inline an anchor. A real Thursday, so the fallback obeys the same
  *  invariant as the computed value; it costs freshness, never correctness. */
-const FALLBACK_ANCHOR_ISO = '2026-08-13T14:00:00.000Z';
+const FALLBACK_ANCHOR_ISO = '2026-08-20T14:00:00.000Z';
 
 /**
  * Inlined as a string literal at build by the `env` block in `next.config.ts` — there is no

@@ -1165,17 +1165,18 @@ export type StreamHandle = {
  * One multiplier here rather than eighty edited fixture values: the ratio to `latency_ms` is a
  * property of the playback, not of any step, and it is the number the README quotes.
  *
- * 1.7 → 2.8 → 4.2 → 3.6. The first three were raises: at 1.7 a run was over in twenty seconds, and
- * at 2.8 it was still gone before anyone had read it. The drop to 3.6 is not a reversal — the run
- * itself got longer. Its pre-writing phase went from three steps to seven (see `childSteps`), so
- * the same multiplier would now have played a 39-second run over 45 seconds.
+ * 1.7 → 2.8 → 4.2 → 3.6, and the step budgets underneath it grew by about 5.6× at the same time.
+ * The raises were all the same complaint: the run was over before anyone had read it.
  *
- * WHICH IS WORTH SAYING PLAINLY, BECAUSE IT CHANGES WHAT THIS NUMBER IS FOR. A drafting child's
- * real duration is 38.8s and its playback is 38.6s: the demo no longer compresses at all. What it
- * does is REDISTRIBUTE. In the real run one step — the 18.6s drafting call — is half the total, and
- * playing that literally means eighteen seconds of a single line saying "Writing the draft". The
- * playback gives that step 1.4s of the budget and hands the rest to the steps a person can actually
- * learn something from: searching, reading, screening, retrieving. Same wall clock, readable shape.
+ * WHAT THIS NUMBER IS FOR HAS CHANGED, AND THE README SAYS SO. A drafting child's real duration is
+ * 38.8s; its playback is 3m36s. So the demo does not compress — it SLOWS DOWN, by about 5.6×. That
+ * needs a reason, and the reason is that four children stream at once inside fixed-height windows:
+ * at true speed the console is four cards blurring through eleven steps each in under forty
+ * seconds, which is motion without legibility. Slowed, it is a thing you can read.
+ *
+ * The slowdown is deliberately NOT uniform. Each step's share of the budget tracks roughly the
+ * square root of its own `latency_ms`, so the 18.6s drafting call does not swallow half the run and
+ * a 0.14s tool result does not flash past — see the note on `childSteps`.
  *
  * `latency_ms` remains the honest per-step number and is what the UI displays as a duration. This
  * multiplier never touches it.

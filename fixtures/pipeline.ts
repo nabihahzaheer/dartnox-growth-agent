@@ -1224,7 +1224,7 @@ const cleanSteps: RunStep[] = [
     tokens_out: 180,
     cost_model_usd: 0.0384,
     latency_ms: 3100,
-    playback_ms: 1400,
+    playback_ms: 5_100,
     input_hash: 'sha256:6b1e…c904',
   }),
   step({
@@ -1242,7 +1242,7 @@ const cleanSteps: RunStep[] = [
       allowlist_only: true,
     },
     latency_ms: 900,
-    playback_ms: 600,
+    playback_ms: 2_800,
   }),
   step({
     id: stepId('RS-0141-03'),
@@ -1263,7 +1263,7 @@ const cleanSteps: RunStep[] = [
       ],
     },
     latency_ms: 1240,
-    playback_ms: 700,
+    playback_ms: 3_200,
   }),
   step({
     id: stepId('RS-0141-04'),
@@ -1275,7 +1275,7 @@ const cleanSteps: RunStep[] = [
     tool_name: 'fetch_source',
     tool_input: { url: 'https://www.nyc.gov/site/sustainablebuildings/ll97/local-law-97.page' },
     latency_ms: 1800,
-    playback_ms: 700,
+    playback_ms: 3_900,
   }),
   step({
     id: stepId('RS-0141-05'),
@@ -1311,7 +1311,7 @@ const cleanSteps: RunStep[] = [
       },
     ],
     latency_ms: 2400,
-    playback_ms: 900,
+    playback_ms: 4_500,
   }),
   step({
     id: stepId('RS-0141-06'),
@@ -1322,7 +1322,7 @@ const cleanSteps: RunStep[] = [
     started_at: t(CLEAN_START, 14),
     guardrail_event_id: eventId('GE-0141-01'),
     latency_ms: 260,
-    playback_ms: 600,
+    playback_ms: 1_500,
   }),
   step({
     id: stepId('RS-0141-07'),
@@ -1342,7 +1342,7 @@ const cleanSteps: RunStep[] = [
     tokens_out: 320,
     cost_model_usd: 0.0114,
     latency_ms: 4200,
-    playback_ms: 1100,
+    playback_ms: 6_000,
   }),
   step({
     id: stepId('RS-0141-08'),
@@ -1354,7 +1354,7 @@ const cleanSteps: RunStep[] = [
     tool_name: 'retrieve_examples',
     tool_input: { pillar: 'The compliance clock', channel: 'linkedin', k: 2, min_maturity_days: 7 },
     latency_ms: 480,
-    playback_ms: 600,
+    playback_ms: 2_000,
   }),
   step({
     id: stepId('RS-0141-09'),
@@ -1369,7 +1369,7 @@ const cleanSteps: RunStep[] = [
      *  showing the model what not to do shows it what to do (A-05). */
     tool_output: { returned: 2, pool: 24, percentile_floor: 75, negative_examples: 0 },
     latency_ms: 520,
-    playback_ms: 700,
+    playback_ms: 2_100,
   }),
   step({
     id: stepId('RS-0141-10'),
@@ -1390,7 +1390,7 @@ const cleanSteps: RunStep[] = [
     cost_model_usd: 0.0921,
     /** The honest number. Drafting really is the slow step. */
     latency_ms: 19_400,
-    playback_ms: 2600,
+    playback_ms: 12_800,
     /**
      * §6b's load-bearing requirement, and the field that closes the brief's two hardest loops.
      *
@@ -1427,7 +1427,7 @@ const cleanSteps: RunStep[] = [
     started_at: t(CLEAN_START, 45),
     guardrail_event_id: eventId('GE-0141-02'),
     latency_ms: 90,
-    playback_ms: 500,
+    playback_ms: 900,
   }),
   step({
     id: stepId('RS-0141-12'),
@@ -1448,7 +1448,7 @@ const cleanSteps: RunStep[] = [
     tokens_out: 240,
     cost_model_usd: 0.0198,
     latency_ms: 6100,
-    playback_ms: 1600,
+    playback_ms: 7_200,
   }),
   step({
     id: stepId('RS-0141-13'),
@@ -1459,7 +1459,7 @@ const cleanSteps: RunStep[] = [
     started_at: t(CLEAN_START, 53),
     guardrail_event_id: eventId('GE-0141-03'),
     latency_ms: 3400,
-    playback_ms: 1500,
+    playback_ms: 5_400,
   }),
   step({
     id: stepId('RS-0141-14'),
@@ -1651,7 +1651,7 @@ const liveSteps: RunStep[] = [
     tokens_out: 160,
     cost_model_usd: 0.0348,
     latency_ms: 2900,
-    playback_ms: 1300,
+    playback_ms: 7_100,
   }),
   step({
     id: stepId('RS-0143-02'),
@@ -1669,7 +1669,7 @@ const liveSteps: RunStep[] = [
     tokens_out: 90,
     cost_model_usd: 0.0198,
     latency_ms: 2100,
-    playback_ms: 1100,
+    playback_ms: 6_100,
   }),
   step({
     id: stepId('RS-0143-03'),
@@ -1681,7 +1681,7 @@ const liveSteps: RunStep[] = [
     tool_name: 'retrieve_examples',
     tool_input: { pillar: 'Field notes', channel: 'x', k: 2, min_maturity_days: 7 },
     latency_ms: 460,
-    playback_ms: 600,
+    playback_ms: 2_800,
   }),
   step({
     id: stepId('RS-0143-04'),
@@ -1694,7 +1694,7 @@ const liveSteps: RunStep[] = [
     outcome: 'ok',
     tool_output: { returned: 2, pool: 11, percentile_floor: 75, negative_examples: 0 },
     latency_ms: 510,
-    playback_ms: 650,
+    playback_ms: 3_000,
   }),
   step({
     id: stepId('RS-0143-05'),
@@ -1709,7 +1709,7 @@ const liveSteps: RunStep[] = [
     tokens_out: 190,
     cost_model_usd: 0.0742,
     latency_ms: 17_200,
-    playback_ms: 2500,
+    playback_ms: 17_400,
     applied_inputs: [
       { kind: 'reflection_rule', id: 'REF-003', label: 'Open on the building, not the technology' },
       { kind: 'reflection_rule', id: 'REF-002', label: 'Say owner, not landlord' },
@@ -1736,7 +1736,7 @@ const liveSteps: RunStep[] = [
     started_at: t(LIVE_START, 30),
     guardrail_event_id: eventId('GE-0143-01'),
     latency_ms: 80,
-    playback_ms: 500,
+    playback_ms: 1_300,
   }),
   /* ---- everything below this line has not happened yet. The run is here, right now. --------- */
   step({
@@ -1755,7 +1755,7 @@ const liveSteps: RunStep[] = [
     tokens_out: 220,
     cost_model_usd: 0.0156,
     latency_ms: 5800,
-    playback_ms: 1700,
+    playback_ms: 10_100,
   }),
   step({
     id: stepId('RS-0143-08'),
@@ -1769,7 +1769,7 @@ const liveSteps: RunStep[] = [
       'owner name appears. Passing, but this is the check most likely to fire on this pillar.',
     guardrail_event_id: eventId('GE-0143-02'),
     latency_ms: 2900,
-    playback_ms: 1600,
+    playback_ms: 7_100,
   }),
   step({
     id: stepId('RS-0143-09'),
@@ -1780,7 +1780,7 @@ const liveSteps: RunStep[] = [
     started_at: t(LIVE_START, 42),
     guardrail_event_id: eventId('GE-0143-03'),
     latency_ms: 3100,
-    playback_ms: 1400,
+    playback_ms: 7_400,
   }),
   step({
     id: stepId('RS-0143-10'),
@@ -1796,7 +1796,7 @@ const liveSteps: RunStep[] = [
       deadline: minutes(5 * DAY + 2 * HOUR),
     },
     latency_ms: 40,
-    playback_ms: 900,
+    playback_ms: 1_300,
   }),
 ];
 

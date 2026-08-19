@@ -202,17 +202,16 @@ export default function ConsolePage() {
       </section>
 
       {/**
-       * ONE COLUMN OF WORK, AND A RAIL FOR WHAT IS COMING.
+       * ONE COLUMN. NOT TWO, AND NOT A TOGGLE BETWEEN TWO.
        *
-       * The console had a split/stacked toggle. Split put the live runs and the decisions
-       * side by side, which is the wrong division — they are the same stream of work at two
-       * different moments, not two parallel concerns — and stacked left the right half of a wide
-       * screen empty. The toggle is gone. There is one reading column at a fixed measure, and the
-       * space beside it holds the thing that genuinely is separate: posts already approved and
-       * scheduled, which need nothing from you and belong out of the way but in view.
+       * This screen has now been three things. A split/stacked toggle, which asked the operator to
+       * choose a layout for a screen they open once a morning. Then one column with a rail of
+       * scheduled posts beside it, which filled the empty right side with the least urgent thing
+       * on the whole console. Now: one column of work, in the order the morning happens. The only
+       * thing that pairs up is the drafting cards, because four of them stacked is a scroll and
+       * two-by-two is a glance.
        */}
       <div className="console-cols">
-        <div className="console-main">
         {/* THE LIVE RUNS COME FIRST IN THE MARKUP. They used to sit below the queue and the
             decided list, so the only thing on the screen that moves was the last thing you could
             reach. */}
@@ -239,11 +238,27 @@ export default function ConsolePage() {
             {drafting.length === 0 && (
               <div className="idle">
                 <p className="idle-head">Nothing being drafted right now.</p>
-                <p className="idle-sub">
-                  {batch.upNext.length === 0
-                    ? 'Everything approved has gone out. Next batch Wednesday 06:00.'
-                    : 'Next batch Wednesday 06:00.'}
-                </p>
+                {batch.upNext.length === 0 ? (
+                  <p className="idle-sub">Everything approved has gone out. Next batch Wednesday 06:00.</p>
+                ) : (
+                  <>
+                    {/* Scheduled, not waiting. These are decided — approved and given a slot — and
+                        are simply being held until their time. "Waiting" is the queue's word for
+                        waiting on a person, and nothing here is waiting on anyone. */}
+                    <p className="idle-sub">
+                      {batch.upNext.length} approved {batch.upNext.length === 1 ? 'post is' : 'posts are'} scheduled.
+                    </p>
+                    <ul className="idle-list">
+                      {batch.upNext.map((u) => (
+                        <li key={u.run.id}>
+                          <ChannelMark channel={u.post.channel} size={14} />
+                          <span className="idle-angle">{u.slot?.angle ?? 'Scheduled post'}</span>
+                          <span className="idle-when">{formatDateTime(u.post.scheduled_at)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -300,33 +315,6 @@ export default function ConsolePage() {
             </div>
           )}
         </section>
-        </div>
-
-        {/**
-         * SCHEDULED, NOT WAITING.
-         *
-         * These are decided: approved, given a slot, and now simply held until their time. Calling
-         * that "waiting to publish" put them in the same language as the queue, where "waiting"
-         * means waiting on a person. Nothing here is waiting on anyone.
-         */}
-        <aside className="console-side">
-          <h2 className="sec col-head">Scheduled</h2>
-          {batch.upNext.length === 0 ? (
-            <p className="side-empty">Nothing scheduled. Everything approved has gone out.</p>
-          ) : (
-            <ul className="side-list">
-              {batch.upNext.map((u) => (
-                <li key={u.run.id}>
-                  <span className="side-row1">
-                    <ChannelMark channel={u.post.channel} size={13} />
-                    <span className="side-when">{formatDateTime(u.post.scheduled_at)}</span>
-                  </span>
-                  <span className="side-angle">{u.slot?.angle ?? 'Scheduled post'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
       </div>
 
     </>

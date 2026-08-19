@@ -42,11 +42,11 @@ import type { MinutesFromAnchor } from '@/lib/types';
  * THE REAL TODAY, NOT THE FIXTURE'S TODAY.
  *
  * Everything with a date in this prototype is an offset from a build-fixed anchor — the Thursday
- * at or before the build (D-030). That is what keeps the server render and the browser render
- * identical, and it is the right call for the *data*. It is the wrong call for the one mark on
- * this screen that is not about the data: which square is today. Six days after a build, the
- * calendar was tinting last Thursday and captioning the week before this one "Current week",
- * while the real today sat untinted in the next grid over.
+ * of the week the build ran in (D-030). That is what keeps the server render and the browser
+ * render identical, and it is the right call for the *data*. It is the wrong call for the one mark
+ * on this screen that is not about the data: which square is today. The anchor's Thursday is a
+ * whole-week approximation of now, so on any other weekday it tinted the wrong square and captioned
+ * the wrong week "Current week".
  *
  * So the data stays anchored and the calendar reads the actual clock, once, after mount. After
  * mount rather than during render because `Date.now()` differs between the server render and the
