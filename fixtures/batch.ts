@@ -423,6 +423,22 @@ export const batchRuns: Run[] = [
  * STEPS
  * ==============================================================================================*/
 
+/**
+ * THE STEPS EVERY DRAFTING CHILD RUNS, IDENTICAL ACROSS ALL FOUR.
+ *
+ * TWO THINGS CHANGED HERE AFTER WATCHING IT. The pre-writing phase was three steps totalling 1.5s
+ * of playback, so a card attached at seq 2 reached "Waiting for a decision" in about fourteen
+ * seconds — the run was over before you had finished reading its title. And research is the part
+ * of this agent's work that is actually interesting to watch: it reads sources, screens them, and
+ * looks up what performed before it writes a word. Three of those four moves were invisible.
+ *
+ * So the phase is now seven steps and the playback budget in front of "Writing the draft" is
+ * roughly 7s rather than 1.5s. Every child uses these same numbers — the four cards on the console
+ * run in step with each other rather than finishing at four different times for no stated reason.
+ *
+ * `latency_ms` still carries the honest duration and `playback_ms` the demo's; the README states
+ * the ratio. Only the demo number moved.
+ */
 function childSteps(
   run: RunId,
   draft: DraftId,
@@ -443,7 +459,7 @@ function childSteps(
       label: 'Loading the slot',
       started_at: at(0),
       latency_ms: 2200,
-      playback_ms: 600,
+      playback_ms: 900,
       model: 'claude-opus-5',
       model_snapshot: 'opus-5-2026-05-14',
       tokens_in: 2080,
@@ -460,41 +476,96 @@ function childSteps(
       run_id: run,
       seq: 2,
       type: 'tool_call',
-      label: 'Looking up posts that performed',
-      started_at: at(6),
-      latency_ms: 880,
-      playback_ms: 460,
-      tool_name: 'retrieve_examples',
-      tool_input: { pillar_id: pillarId, channel, k: 3 },
+      label: 'Looking for sources',
+      started_at: at(3),
+      latency_ms: 1400,
+      playback_ms: 1100,
+      tool_name: 'search_sources',
+      tool_input: { pillar_id: pillarId, channel, window_days: 30 },
     }),
     step({
       id: id(3),
       run_id: run,
       seq: 3,
       type: 'tool_result',
-      label: 'Found 2 past posts to draw on',
-      started_at: at(8),
-      latency_ms: 140,
-      playback_ms: 440,
-      tool_name: 'retrieve_examples',
+      label: 'Found 3 candidate sources',
+      started_at: at(5),
+      latency_ms: 260,
+      playback_ms: 900,
+      tool_name: 'search_sources',
       outcome: 'ok',
-      tool_output: { returned: 2, cosine: [0.79, 0.74] },
+      tool_output: { returned: 3, above_threshold: 2 },
     }),
     step({
       id: id(4),
       run_id: run,
       seq: 4,
+      type: 'tool_call',
+      label: 'Reading the sources',
+      started_at: at(6),
+      latency_ms: 4100,
+      playback_ms: 1300,
+      tool_name: 'fetch_source',
+      tool_input: { count: 2 },
+    }),
+    step({
+      id: id(5),
+      run_id: run,
+      seq: 5,
+      type: 'thinking',
+      label: 'Screening the sources',
+      started_at: at(11),
+      latency_ms: 2600,
+      playback_ms: 1000,
+      model: 'claude-sonnet-5',
+      model_snapshot: 'sonnet-5-2026-04-02',
+      tokens_in: 3120,
+      tokens_out: 118,
+      cost_model_usd: 0.0121,
+      thinking_text:
+        'Checking each source against the recency and publisher rules before anything from it ' +
+        'can be cited in the draft.',
+    }),
+    step({
+      id: id(6),
+      run_id: run,
+      seq: 6,
+      type: 'tool_call',
+      label: 'Looking up posts that performed',
+      started_at: at(14),
+      latency_ms: 880,
+      playback_ms: 1000,
+      tool_name: 'retrieve_examples',
+      tool_input: { pillar_id: pillarId, channel, k: 3 },
+    }),
+    step({
+      id: id(7),
+      run_id: run,
+      seq: 7,
+      type: 'tool_result',
+      label: 'Found 2 past posts to draw on',
+      started_at: at(16),
+      latency_ms: 140,
+      playback_ms: 900,
+      tool_name: 'retrieve_examples',
+      outcome: 'ok',
+      tool_output: { returned: 2, cosine: [0.79, 0.74] },
+    }),
+    step({
+      id: id(8),
+      run_id: run,
+      seq: 8,
       type: 'action',
       label: 'Writing the draft',
-      started_at: at(11),
+      started_at: at(19),
       latency_ms: 18_600,
-      playback_ms: 880,
+      playback_ms: 1400,
       model: 'claude-opus-5',
       model_snapshot: 'opus-5-2026-05-14',
       tokens_in: 3740,
       tokens_out: 288,
       cost_model_usd: 0.0691,
-      output_ref: `trace://${prefix.replace('RS-', '')}/step-4/output`,
+      output_ref: `trace://${prefix.replace('RS-', '')}/step-8/output`,
       produced: { entity_type: 'draft', id: draft },
       applied_inputs: [
         { kind: 'setting', id: 'tone.register', label: 'plain, technical, first person plural' },
@@ -502,14 +573,14 @@ function childSteps(
       ],
     }),
     step({
-      id: id(5),
+      id: id(9),
       run_id: run,
-      seq: 5,
+      seq: 9,
       type: 'action',
       label: 'Scoring the draft',
-      started_at: at(31),
+      started_at: at(39),
       latency_ms: 5400,
-      playback_ms: 760,
+      playback_ms: 900,
       model: 'claude-sonnet-5',
       model_snapshot: 'sonnet-5-2026-04-02',
       tokens_in: 1980,
@@ -517,23 +588,23 @@ function childSteps(
       cost_model_usd: 0.0104,
     }),
     step({
-      id: id(6),
+      id: id(10),
       run_id: run,
-      seq: 6,
+      seq: 10,
       type: 'guardrail',
       label: 'Checking the finished draft',
-      started_at: at(37),
+      started_at: at(45),
       latency_ms: 3200,
-      playback_ms: 700,
+      playback_ms: 800,
       guardrail_event_id: eventId(`GE-${prefix.replace('RS-', '')}-01`),
     }),
     step({
-      id: id(7),
+      id: id(11),
       run_id: run,
-      seq: 7,
+      seq: 11,
       type: 'interrupt',
       label: 'Waiting for a decision',
-      started_at: at(41),
+      started_at: at(49),
       latency_ms: 0,
       playback_ms: 520,
       interrupt: {

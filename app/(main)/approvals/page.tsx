@@ -95,7 +95,7 @@ export default function ApprovalsPage() {
           {QUEUE_COLUMNS.map((col) => {
             const rows = items.filter(col.match);
             return (
-              <section key={col.key} className="qcol">
+              <section key={col.key} className={`qcol qcol-${col.key}`}>
                 <h2 className="qcol-head">
                   {col.title}
                   <span className="sec-n">{rows.length}</span>
@@ -129,20 +129,20 @@ const QUEUE_COLUMNS: {
 }[] = [
   {
     key: 'decide',
-    title: 'Needs your decision',
+    title: 'Your decisions',
     detail: 'Drafts and posts waiting on you.',
     match: (i) => i.kind !== 'run',
   },
   {
     key: 'clear',
-    title: 'Stopped, needs clearing',
-    detail: 'Runs that produced nothing and will not resume on their own.',
+    title: 'Stopped',
+    detail: 'Produced nothing and will not resume on their own.',
     match: (i) => i.kind === 'run' && (i.run.state === 'quarantined' || i.run.state === 'parked_blocked'),
   },
   {
     key: 'recovering',
-    title: 'Recovering on its own',
-    detail: 'No action needed unless these keep failing.',
+    title: 'Retrying',
+    detail: 'Recovering on their own. No action needed unless they keep failing.',
     match: (i) => i.kind === 'run' && i.run.state === 'parked_transient',
   },
 ];

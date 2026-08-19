@@ -18,7 +18,7 @@
  * job is to show where that stands, not to offer a control for someone else's approval.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { getWeek, initialWeekIndex, subscribeToWorld } from '@/lib/agentClient';
 import { WEEK_SLOT_LABEL, type Week } from '@/lib/week';
@@ -26,7 +26,47 @@ import type { ConsoleError } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
 import { LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 import { ChannelMark } from '@/components/ChannelMark';
-import { formatDate, formatDateTime, formatDayNumber, formatRelative, formatTime } from '@/lib/time';
+import {
+  ANCHOR_MS,
+  at,
+  formatDate,
+  formatDateTime,
+  formatDayNumber,
+  formatRelative,
+  formatTime,
+  weekIndexOf,
+} from '@/lib/time';
+import type { MinutesFromAnchor } from '@/lib/types';
+
+/**
+ * THE REAL TODAY, NOT THE FIXTURE'S TODAY.
+ *
+ * Everything with a date in this prototype is an offset from a build-fixed anchor — the Thursday
+ * at or before the build (D-030). That is what keeps the server render and the browser render
+ * identical, and it is the right call for the *data*. It is the wrong call for the one mark on
+ * this screen that is not about the data: which square is today. Six days after a build, the
+ * calendar was tinting last Thursday and captioning the week before this one "Current week",
+ * while the real today sat untinted in the next grid over.
+ *
+ * So the data stays anchored and the calendar reads the actual clock, once, after mount. After
+ * mount rather than during render because `Date.now()` differs between the server render and the
+ * client's, which is a hydration mismatch; until the effect runs, the anchor's answer is used, so
+ * the first paint is still deterministic.
+ */
+let clientNowMs: number | null = null;
+/** Read once and cached, because `useSyncExternalStore` requires a snapshot that is stable
+ *  between calls — `Date.now()` straight out of `getSnapshot` is a new value every render and
+ *  React loops on it. Nothing here needs the clock to tick: a page open across midnight showing
+ *  yesterday tinted is not a bug worth a subscription. */
+const readClientNow = () => (clientNowMs ??= Date.now());
+const noClockOnTheServer = () => null;
+const neverChanges = () => () => {};
+
+function useRealNow(): number | null {
+  return useSyncExternalStore(neverChanges, readClientNow, noClockOnTheServer);
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * The rebuilt palette's own tone map, kept separate from v1's `weekSlotTone` in `components/Badge`.
@@ -99,6 +139,16 @@ export default function WeekPage() {
    *  it re-subscribes when `index` changes. The shared hook takes a zero-argument loader on purpose
    *  — generalising it to carry a parameter would make it a data hook, which is the thing its own
    *  docblock argues against. One screen out of five differing is cheaper than that. */
+  const realNow = useRealNow();
+  /** Before the effect runs, fall back to the anchor's answers: week 0 and `day.isToday`. */
+  const currentWeekIndex =
+    realNow === null ? 0 : weekIndexOf(((realNow - ANCHOR_MS) / 60_000) as MinutesFromAnchor);
+  const isRealToday = (day: { start: MinutesFromAnchor; isToday: boolean }) => {
+    if (realNow === null) return day.isToday;
+    const from = at(day.start).getTime();
+    return realNow >= from && realNow < from + DAY_MS;
+  };
+
   useEffect(() => {
     const unsubscribe = subscribeToWorld(() => void load(index));
     const timer = setTimeout(() => void load(index), 0);
@@ -128,7 +178,7 @@ export default function WeekPage() {
                   for. The button between the arrows still says "This week", because that is a
                   destination rather than a description. */}
               <h2>{weekRangeLabel(week)}</h2>
-              {week.index === 0 && <span className="wk-now">Current week</span>}
+              {week.index === currentWeekIndex && <span className="wk-now">Current week</span>}
               {week.waitingOnYou > 0 && (
                 <span className="pill pill-attend">{week.waitingOnYou} need you</span>
               )}
@@ -150,7 +200,7 @@ export default function WeekPage() {
                  * own heading read "Next week", both visible at once. The landing week and the
                  * current week are different questions and only one of them is called "this week".
                  */}
-                <button type="button" className="btn btn-sm" onClick={() => setIndex(0)}>
+                <button type="button" className="btn btn-sm" onClick={() => setIndex(currentWeekIndex)}>
                   This week
                 </button>
                 <button
@@ -170,7 +220,7 @@ export default function WeekPage() {
 
           <div className="wk-grid">
             {week.days.map((day) => (
-              <div key={day.index} className={`wk-day${day.isToday ? ' wk-today' : ''}`}>
+              <div key={day.index} className={`wk-day${isRealToday(day) ? ' wk-today' : ''}`}>
                 {/* Weekday and date number, the way every calendar shows a day. The grid used to
                     print only "Mon", so nothing on the screen said which Monday you were looking
                     at except the week label above it. */}

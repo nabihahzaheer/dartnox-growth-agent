@@ -583,7 +583,14 @@ body {
   font-size: 13px;
   color: var(--text-muted);
   margin: 0;
+  text-decoration: none;
+  border-radius: 7px;
 }
+.shell-chan:hover { background: var(--surface-sunk); color: var(--text); }
+.shell-chan:hover .shell-out { opacity: 1; }
+/* Only on hover: two arrows sitting permanently in the rail is two more marks competing with the
+   nav above them, for a fact the cursor already tells you. */
+.shell-out { margin-left: auto; font-size: 11px; opacity: 0; transition: opacity .12s; }
 
 /* ---- the demo control (D-020) ----
    `margin-top: auto` pins it to the bottom of the rail; it is the last block in the sidebar. */
@@ -932,8 +939,16 @@ body {
 .qrow-stop { border-color: #e8c4bd; }
 /* An expandable row. `.qrow` supplies the surface; this marks the ones that open. */
 .qrow-open { cursor: default; }
-.qrow-run { display: flex; align-items: flex-start; gap: 11px; padding: 12px 15px;
-  background: var(--surface-sunk); box-shadow: none; border-style: dashed; }
+/**
+ * BLOCK, NOT FLEX.
+ *
+ * `.qrow-run` was `display:flex`, and when the row gained an expandable panel that panel became a
+ * flex *sibling* of the header button — so opening one laid the detail out as a second column
+ * beside a header squeezed to a few characters wide, with both texts wrapping to ribbons. The row
+ * is a stack: a header, then its detail. The flex belongs on the header.
+ */
+.qrow-run { display: block; background: var(--surface-sunk); box-shadow: none;
+  border-style: dashed; }
 .qico { width: 17px; height: 17px; flex: none; margin-top: 1px; }
 .qico svg { width: 100%; height: 100%; display: block; }
 .qico-stop { color: var(--stop); }
@@ -1284,23 +1299,6 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
  * drafting is done. Both put the live run first in the markup, so it is also first for a screen
  * reader and on a narrow viewport regardless of which is chosen.
  */
-.console-grid { display: grid; gap: 16px; align-items: start; }
-.console-split { grid-template-columns: 1fr 380px; }
-.console-split .console-live { order: 2; position: sticky; top: 20px; }
-.console-split .console-work { order: 1; min-width: 0; }
-.console-stacked { grid-template-columns: 1fr; }
-@media (max-width: 1020px) {
-  .console-split { grid-template-columns: 1fr; }
-  .console-split .console-live { order: 0; position: static; }
-  .console-split .console-work { order: 1; }
-}
-
-.lay-toggle { margin-left: auto; display: inline-flex; border: 1px solid var(--border-strong);
-  border-radius: 99px; overflow: hidden; background: var(--surface); }
-.lay-toggle button { appearance: none; border: 0; background: none; font: inherit; font-size: 12px;
-  font-weight: 600; padding: 4px 12px; color: var(--text-faint); cursor: pointer; }
-.lay-toggle button.is-on { background: var(--accent-soft); color: var(--accent-text); }
-.lay-toggle button + button { border-left: 1px solid var(--border); }
 
 /* ---- the live run ---- */
 .card-live.live { border-color: #bbd0ec; box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
@@ -1511,39 +1509,27 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
   color: var(--text-faint); }
 
 /* ---- the work heading row, with the layout control ---- */
-.work-head { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
-.work-head .sec { margin: 0; }
-.lay-toggle { margin-left: auto; display: inline-flex; border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
-.lay-toggle button { appearance: none; border: 0; background: none; padding: 5px 9px;
-  cursor: pointer; color: var(--text-faint); display: grid; place-items: center; }
-.lay-toggle button svg { width: 15px; height: 15px; fill: currentColor; display: block; }
-.lay-toggle button.is-on { background: var(--accent-soft); color: var(--accent-text); }
-.lay-toggle button + button { border-left: 1px solid var(--border); }
 
 /* ---- the activity column when nothing is drafting ---- */
 .idle { background: var(--surface); border: 1px dashed var(--border-strong);
   border-radius: var(--radius); padding: var(--sp-4) var(--sp-4) var(--sp-4); }
 .idle-head { margin: 0; font-size: var(--fs-body); font-weight: 550; }
 .idle-sub { margin: var(--sp-1) 0 0; font-size: var(--fs-sub); color: var(--text-muted); }
-.idle-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0; display: flex;
-  flex-direction: column; gap: var(--sp-2); }
-.idle-list li { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sub); }
-.idle-angle { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.idle-when { margin-left: auto; color: var(--text-faint); font-variant-numeric: tabular-nums;
-  flex: none; font-size: var(--fs-meta); }
 
 /* ---- queue rows: a run opens onto its reason, a draft onto its post ---- */
 .qrun-head { appearance: none; border: 0; background: none; font: inherit; width: 100%;
   display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4);
   cursor: pointer; text-align: left; }
+.qrun-head .qrow-body { flex: 1; min-width: 0; }
 .qrun-head:hover { background: var(--surface); }
-.qrow-run { padding: 0; }
-.qrow-run .pill { align-self: center; flex: none; }
-.qrow-run .qcar { align-self: center; }
-.qrun-full { padding-top: var(--sp-3); }
-.qrun-kv { display: grid; grid-template-columns: 128px 1fr; gap: var(--sp-1) var(--sp-3);
-  margin: 0; font-size: var(--fs-sub); }
+.qrow-run .qcar { align-self: center; margin-left: auto; }
+.qrun-full { padding: var(--sp-3) var(--sp-4) var(--sp-4); }
+/* Stacked label-over-value rather than a 128px label column: these columns are a third of the
+   page, and a two-column key/value grid inside one leaves ~90px for the value. */
+.qrun-kv { display: flex; flex-direction: column; gap: var(--sp-3); margin: 0;
+  font-size: var(--fs-sub); }
+.qrun-kv dt { font-size: var(--fs-meta); font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-faint); margin-bottom: 2px; }
 .qrun-kv dt { color: var(--text-faint); }
 .qrun-kv dd { margin: 0; color: var(--text-muted); }
 
@@ -1600,8 +1586,6 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 }
 
 /* ---- column headings align, and only the toggle sits above the grid ---- */
-.work-head { display: flex; align-items: center; min-height: 0; margin-bottom: 0; }
-.work-head-spacer { flex: 1; }
 .col-head { margin-top: 0; margin-bottom: var(--sp-3); min-height: 26px; display: flex;
   align-items: center; }
 
@@ -1615,16 +1599,25 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
    rather than enlarge the text ("keeping the font size smaller and easier to read"). A stacked
    console gave each card the full 1157px while the post inside was capped at 72ch, leaving a wide
    dead gutter and text that looked arbitrarily wrapped. The card is now sized to its content. */
-.console-stacked .console-work { max-width: 780px; }
-.console-stacked .console-live { max-width: 780px; }
 
 /* ================================================================================================
  * QUEUE — three columns by what the item needs from you
  * ==============================================================================================*/
-.qcols { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: var(--sp-5); align-items: start; }
+.qcols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5);
+  align-items: start; }
 .qcol { min-width: 0; }
+/* A colour rail per column, so the three are told apart before the titles are read. The rail
+   carries the meaning; the cards inside stay neutral so the colour is not repeated on every row. */
 .qcol-head { display: flex; align-items: center; gap: var(--sp-2); margin: 0;
-  font-size: var(--fs-head); font-weight: 600; letter-spacing: -.01em; }
+  font-size: var(--fs-head); font-weight: 600; letter-spacing: -.01em;
+  padding-left: var(--sp-3); border-left: 3px solid var(--rail); }
+.qcol-sub { padding-left: var(--sp-3); border-left: 3px solid var(--rail); }
+/* Accent, stop, neutral — three colours that are actually told apart at a glance. `--attend`
+   (#8a5a08) against `--stop` (#9a3324) were two browns, which is not a distinction. The accent is
+   also the colour of the Review buttons inside this column, so the rail points at its own work. */
+.qcol-decide { --rail: var(--accent); }
+.qcol-clear { --rail: var(--stop); }
+.qcol-recovering { --rail: var(--border-strong); }
 .qcol-sub { margin: var(--sp-1) 0 var(--sp-3); font-size: var(--fs-sub); color: var(--text-muted);
   line-height: 1.45; }
 .qcol-empty { margin: 0; padding: var(--sp-4); font-size: var(--fs-sub); color: var(--text-faint);
@@ -1639,3 +1632,91 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .card-when { margin-left: auto; font-size: var(--fs-meta); color: var(--text-faint);
   font-variant-numeric: tabular-nums; }
 .card-head .card-state { margin-left: var(--sp-2); }
+
+
+/* ============================================================================================
+   THE CONSOLE'S TWO COLUMNS
+
+   A reading column at a fixed measure, and a rail. The measure is the same 780px the stacked
+   layout used, because that is the width at which a draft card's body stays readable; what
+   changed is that the space to its right is no longer empty. The rail is not a second column of
+   work — it holds posts that are already decided and merely scheduled, so it is quieter than
+   anything in the main column and never competes with it.
+   ============================================================================================ */
+.console-cols { display: grid; grid-template-columns: minmax(0, 780px) minmax(0, 300px);
+  gap: var(--sp-6); align-items: start; }
+.console-main { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-5); }
+.console-live, .console-work { min-width: 0; }
+
+/* Four drafting children stacked vertically is a page you scroll to see the batch at all. Paired,
+   the whole batch is one screen. One child keeps the full measure — a lone half-width card beside
+   an empty half reads as a missing card. */
+.live-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4);
+  align-items: stretch; }
+.live-grid > .card { display: flex; flex-direction: column; }
+
+.console-side { position: sticky; top: 20px; min-width: 0; }
+.side-empty { margin: 0; font-size: var(--fs-sub); color: var(--text-muted); }
+.side-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.side-list li { display: flex; flex-direction: column; gap: 3px; padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--border); min-width: 0; }
+.side-list li:last-child { border-bottom: 0; }
+.side-row1 { display: flex; align-items: center; gap: var(--sp-2); }
+.side-when { font-size: var(--fs-meta); color: var(--text-faint);
+  font-variant-numeric: tabular-nums; }
+.side-angle { font-size: var(--fs-sub); color: var(--text); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+
+/* THE DRAFTING CARD IS A WINDOW, NOT A LIST.
+
+   A run is eleven steps now, and a card that grows by a line every couple of seconds shoves
+   everything under it down the page while you are trying to read it — with four of them running
+   the page never sits still. Fixed height, scrolled internally, pinned to the newest step: the
+   card is a window onto the tail of the stream, and the layout underneath stops moving. */
+/* FIXED, not `max-height`. A card that grows from two steps to eleven pushes everything below it
+   down the page eleven times, and with four of them running the console never stands still — which
+   is the thing that made the drafting section unreadable in the first place. The window is the same
+   size from the first frame to the last. */
+.lv-scroll { height: 232px; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; }
+
+@media (max-width: 1180px) {
+  .console-cols { grid-template-columns: minmax(0, 1fr); }
+  .console-side { position: static; }
+}
+@media (max-width: 760px) {
+  .live-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ============================================================================================
+   A DECISION ROW IN A THIRD OF THE PAGE
+
+   The three queue columns are equal width now, and a decision row's six parts — mark, channel,
+   excerpt, time, state, Review — laid out on one flex line inside 376px crushed the excerpt to
+   nothing: the row showed a logo, a date and a button, and not one word of the post it was
+   asking you to decide about. Three bands instead: who and when, then the text, then the action.
+   ============================================================================================ */
+.qcols .qrow-head {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  grid-template-areas:
+    "mark  ch    when  car"
+    "ex    ex    ex    ex"
+    "state state state act";
+  align-items: center;
+  gap: var(--sp-2) var(--sp-2);
+}
+.qcols .qrow-head > svg { grid-area: mark; }
+.qcols .qrow-ch { grid-area: ch; }
+.qcols .qrow-when { grid-area: when; justify-self: end; }
+.qcols .qcar { grid-area: car; align-self: center; margin-left: 0; }
+.qcols .qrow-excerpt { grid-area: ex; white-space: normal; overflow: visible;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; }
+/* Spans the first three columns so the pill's width never widens column one — which it
+   did, pushing the channel name of a blocked row out of line with every other row. */
+.qcols .qrow-head > .pill { grid-area: state; justify-self: start; }
+.qcols .qrow-review { grid-area: act; justify-self: end; }
+
+/* The head is the row, so it takes the row's ground rather than painting white over it. */
+.qrun-head { background: none; }

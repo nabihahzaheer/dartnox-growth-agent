@@ -58,9 +58,6 @@ type Loaded = {
 export default function ConsolePage() {
   const [state, setState] = useState<Loaded | null>(null);
   const [error, setError] = useState<ConsoleError | null>(null);
-  /** Stacked by default: it is the layout that suits the screen once drafting is done, which is
-   *  most of the time, and it gives the posts the full column. */
-  const [layout, setLayout] = useState<'split' | 'stacked'>('stacked');
 
   /**
    * Nothing here sets state before the first `await`. That is deliberate rather than incidental:
@@ -148,10 +145,6 @@ export default function ConsolePage() {
 
   return (
     <>
-      <PageHead>
-        <AgentLine batch={batch} waitingCount={waiting.length} blockedCount={blocked.length} />
-      </PageHead>
-
       {/** Above the batch, not inside it: at `stopped` the gate is the reason the batch looks the
        *   way it does, so it has to be readable before the progress bar rather than after it. */}
       {error && <StaleWarning error={error} onRetry={() => void load()} />}
@@ -190,6 +183,7 @@ export default function ConsolePage() {
             )}
           </p>
           <h2 className="hero-title">Wednesday drafting batch</h2>
+          <AgentLine batch={batch} waitingCount={waiting.length} blockedCount={blocked.length} />
           <p className="hero-meta">
             <span className="mono">{batch.parent.id}</span>
             <span className="mono">settings {settings.current_version_id}</span>
@@ -207,52 +201,26 @@ export default function ConsolePage() {
         </div>
       </section>
 
-      <div className="work-head">
-        {/* Only the layout control lives above the grid now. The "Waiting on you" heading used to
-            sit here too, which meant that in stacked view it rendered above BOTH columns — so the
-            order read: heading, Agent activity, then the cards the heading was introducing. Each
-            column now carries its own heading, which also makes the two line up in split view. */}
-        <span className="work-head-spacer" />
-        {/* Sits with the work it arranges, not inside the batch bar. Icons rather than words: two
-            columns and two rows are the shapes themselves, and the labels were doing nothing a
-            picture could not. */}
-        <span className="lay-toggle" role="group" aria-label="Layout">
-          <button
-            type="button"
-            className={layout === 'stacked' ? 'is-on' : undefined}
-            aria-pressed={layout === 'stacked'}
-            aria-label="Stacked layout"
-            title="Stacked"
-            onClick={() => setLayout('stacked')}
-          >
-            <svg viewBox="0 0 16 16" aria-hidden>
-              <rect x="1.5" y="2" width="13" height="4.5" rx="1.2" />
-              <rect x="1.5" y="9.5" width="13" height="4.5" rx="1.2" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className={layout === 'split' ? 'is-on' : undefined}
-            aria-pressed={layout === 'split'}
-            aria-label="Split layout"
-            title="Split"
-            onClick={() => setLayout('split')}
-          >
-            <svg viewBox="0 0 16 16" aria-hidden>
-              <rect x="1.5" y="2" width="5.5" height="12" rx="1.2" />
-              <rect x="9" y="2" width="5.5" height="12" rx="1.2" />
-            </svg>
-          </button>
-        </span>
-      </div>
-
-      <div className={`console-grid console-${layout}`}>
-        {/* THE LIVE RUN COMES FIRST IN THE MARKUP in both layouts. It used to sit below the queue
-            and the decided list, so the only thing on the screen that moves was the last thing you
-            could reach. In `split` it is a sticky column; in `stacked` it is simply the first card. */}
+      {/**
+       * ONE COLUMN OF WORK, AND A RAIL FOR WHAT IS COMING.
+       *
+       * The console had a split/stacked toggle. Split put the live runs and the decisions
+       * side by side, which is the wrong division — they are the same stream of work at two
+       * different moments, not two parallel concerns — and stacked left the right half of a wide
+       * screen empty. The toggle is gone. There is one reading column at a fixed measure, and the
+       * space beside it holds the thing that genuinely is separate: posts already approved and
+       * scheduled, which need nothing from you and belong out of the way but in view.
+       */}
+      <div className="console-cols">
+        <div className="console-main">
+        {/* THE LIVE RUNS COME FIRST IN THE MARKUP. They used to sit below the queue and the
+            decided list, so the only thing on the screen that moves was the last thing you could
+            reach. */}
         <section className="console-live">
           <h2 className="sec col-head">Agent activity</h2>
-          <div className="stack">
+          {/* One drafting child gets the full measure; two or more pair up, because four cards
+              stacked one under another is a page you have to scroll to see the batch at all. */}
+          <div className={drafting.length > 1 ? 'live-grid' : 'stack'}>
             {drafting.length > 0 &&
               drafting.map((c) => (
                 <LiveRun
@@ -271,24 +239,11 @@ export default function ConsolePage() {
             {drafting.length === 0 && (
               <div className="idle">
                 <p className="idle-head">Nothing being drafted right now.</p>
-                {batch.upNext.length === 0 ? (
-                  <p className="idle-sub">Everything approved has gone out. Next batch Wednesday 06:00.</p>
-                ) : (
-                  <>
-                    <p className="idle-sub">
-                      {batch.upNext.length} approved {batch.upNext.length === 1 ? 'post is' : 'posts are'} waiting to publish.
-                    </p>
-                    <ul className="idle-list">
-                      {batch.upNext.map((u) => (
-                        <li key={u.run.id}>
-                          <ChannelMark channel={u.post.channel} size={14} />
-                          <span className="idle-angle">{u.slot?.angle ?? 'Scheduled post'}</span>
-                          <span className="idle-when">{formatDateTime(u.post.scheduled_at)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
+                <p className="idle-sub">
+                  {batch.upNext.length === 0
+                    ? 'Everything approved has gone out. Next batch Wednesday 06:00.'
+                    : 'Next batch Wednesday 06:00.'}
+                </p>
               </div>
             )}
           </div>
@@ -345,6 +300,33 @@ export default function ConsolePage() {
             </div>
           )}
         </section>
+        </div>
+
+        {/**
+         * SCHEDULED, NOT WAITING.
+         *
+         * These are decided: approved, given a slot, and now simply held until their time. Calling
+         * that "waiting to publish" put them in the same language as the queue, where "waiting"
+         * means waiting on a person. Nothing here is waiting on anyone.
+         */}
+        <aside className="console-side">
+          <h2 className="sec col-head">Scheduled</h2>
+          {batch.upNext.length === 0 ? (
+            <p className="side-empty">Nothing scheduled. Everything approved has gone out.</p>
+          ) : (
+            <ul className="side-list">
+              {batch.upNext.map((u) => (
+                <li key={u.run.id}>
+                  <span className="side-row1">
+                    <ChannelMark channel={u.post.channel} size={13} />
+                    <span className="side-when">{formatDateTime(u.post.scheduled_at)}</span>
+                  </span>
+                  <span className="side-angle">{u.slot?.angle ?? 'Scheduled post'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
       </div>
 
     </>
@@ -352,16 +334,19 @@ export default function ConsolePage() {
 }
 
 /**
- * `Console` stays a plain heading — h1 is not the place for a composed sentence. What sits below it
- * is `children`, and it is empty until there is real batch data to compose from: a narrator line
- * cannot say anything true before the first read returns, and a placeholder sentence would be
- * exactly the kind of prose this rebuild has spent five steps replacing with values.
+ * ONLY WHERE THERE IS NO HERO.
+ *
+ * The loaded console used to open with "Console" and a narrator sentence, and then immediately
+ * with "Wednesday drafting batch" at hero size — two headings, one above the other, competing to
+ * be the name of the screen. The hero is the better one: it names the actual thing and carries its
+ * state and its count. So the page title now renders only in the states that have no hero to name
+ * them — loading, load failure, and the no-batch-yet empty state — where something has to say what
+ * screen you are on. The narrator line moved into the hero, where the numbers it recites live.
  */
-function PageHead({ children }: { children?: React.ReactNode }) {
+function PageHead() {
   return (
     <header className="page-head">
       <h1 className="page-title">Console</h1>
-      {children}
     </header>
   );
 }

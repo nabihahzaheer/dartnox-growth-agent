@@ -86,15 +86,31 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/** The two accounts this agent posts to. They were flat text, which made the only two
+       *   proper nouns in the rail look like disabled nav items. They are links now — outward, to
+       *   the platforms themselves, since the prototype has no backend to show an account page
+       *   against (D-002) and a link to nowhere would be worse than no link. */}
       <p className="shell-group">Channels</p>
-      <p className="shell-chan">
+      <a
+        className="shell-chan"
+        href="https://www.linkedin.com/"
+        target="_blank"
+        rel="noreferrer noopener"
+      >
         <ChannelMark channel="linkedin" size={15} />
         brightsill
-      </p>
-      <p className="shell-chan">
+        <span className="shell-out" aria-hidden>↗</span>
+      </a>
+      <a
+        className="shell-chan"
+        href="https://x.com/"
+        target="_blank"
+        rel="noreferrer noopener"
+      >
         <ChannelMark channel="x" size={15} />
         brightsill_nyc
-      </p>
+        <span className="shell-out" aria-hidden>↗</span>
+      </a>
 
       {/** Last in the rail, below the channels: it is about the prototype rather than about the
        *   client. Labelled as a demo control on itself, because a reviewer must never have to guess

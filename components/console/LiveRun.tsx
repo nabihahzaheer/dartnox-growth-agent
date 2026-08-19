@@ -33,7 +33,7 @@
  * `lib/world.ts`.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   PLAYBACK_SCALE,
   haltRun,
@@ -199,7 +199,7 @@ export function LiveRun({
     /** Paced against the step's own playback length rather than a fixed 700ms, so a long drafting
      *  call fills its time instead of showing everything in the first two seconds and then sitting
      *  on "working…" for the rest. */
-    const per = Math.max(500, (newest.playback_ms * 4.2) / (subLines.length + 1));
+    const per = Math.max(500, (newest.playback_ms * PLAYBACK_SCALE) / (subLines.length + 1));
     const reveal = setInterval(() => setRevealed((r) => Math.min(r + 1, subLines.length)), per);
     return () => {
       clearInterval(tick);
@@ -228,6 +228,16 @@ export function LiveRun({
 
   const done = steps.filter((s) => settled.has(s.id) || s.id !== newest?.id);
 
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    /* `revealed`, not `subLines.length`: the sub-lines are all computed up front and shown one at
+       a time, so the array's length never changes while the card is growing. Keying the scroll off
+       it left the newest line clipped at the bottom edge of the window. */
+  }, [steps.length, revealed, ended]);
+
+
   return (
     <article className="card card-live live">
       <header className="card-head">
@@ -244,7 +254,15 @@ export function LiveRun({
         </span>
       </header>
 
-      <div className="card-body">
+      {/**
+       * PINNED TO THE NEWEST STEP.
+       *
+       * The card has a fixed height and scrolls inside itself (see `.lv-scroll`), so the step that
+       * is running has to be brought into view as it arrives — otherwise the live part of a live
+       * card is the part below the fold. Scrolling on every step and every sub-line, rather than
+       * only on step change, because an open step grows as its sub-lines appear.
+       */}
+      <div className="card-body lv-scroll" ref={scrollRef}>
         <ol className="lv">
           {/* Finished steps, collapsed. One line each so the open step is the only detailed thing. */}
           {done.map((s) => (

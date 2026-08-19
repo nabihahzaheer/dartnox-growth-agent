@@ -59,11 +59,13 @@ export function Verdict({
 
   return (
     <div className={`vd ${blocked ? 'vd-stop' : 'vd-attend'}`}>
-      {/* No em dashes, and each line says one thing. The old copy read "Blocked — this cannot be
-          approved", which states the same fact twice and then contradicts the buttons underneath,
-          since Edit and Send back are both still offered. */}
+      {/* Each line says one thing, and the headline names the cause rather than the consequence.
+          "This one cannot be approved" told you what you had already worked out from the missing
+          Approve button, and told you nothing about why. The other two headlines here name a cause
+          — a score, a flag — so this one does too, and the consequence moves to the line below
+          where the two ways forward already are. */}
       <p className="vd-head">
-        {blocked ? 'This one cannot be approved' : belowBar ? 'Scored below your bar' : 'Flagged for a look'}
+        {blocked ? 'Blocked by a guardrail' : belowBar ? 'Scored below your bar' : 'Flagged for a look'}
       </p>
       <p className="vd-lede">
         {blocked

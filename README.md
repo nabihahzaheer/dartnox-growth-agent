@@ -92,10 +92,15 @@ of inputs that run consumed is assembled at emit time from current state. What's
 inputs the run consumed**, not the prose. Send a draft back marked *off pillar* and the next drafting
 step lists `Avoiding: Off pillar`; pick a different reason and it says that instead.
 
-**Timing.** Every step carries two numbers: `latency_ms` (honest — a drafting call really takes ~17s,
-shown as the step's duration) and `playback_ms` (how long that step is shown working). The live run's
-real duration is 35s and it plays in 21s — **about 1.7×**. Played at true speed it's unwatchable; a
-uniform 300ms tick is the faked streaming the brief rejects.
+**Timing.** Every step carries two numbers: `latency_ms` (honest — the drafting call really takes
+18.6s, and that is the duration shown on the step) and `playback_ms` (how long that step is shown
+working). A drafting child's real duration is **38.8s** and it plays in **38.6s** — so the playback
+does not compress, it **redistributes**. Played literally, one step is half the run: eighteen
+seconds of a single line reading "Writing the draft". The playback gives that step 1.4s of the
+budget and spends the rest on the steps you can learn something from — searching, reading, screening
+and retrieving sources. A uniform 300ms tick is the faked streaming the brief rejects; so is a
+progress bar with nothing behind it. Both numbers are on every step and `PLAYBACK_SCALE`
+(`lib/agentClient.ts`) is the single multiplier between them.
 
 A step arrives when it **starts**, not when it finishes, and settles after its own duration. While
 it's in flight the console withholds the duration, tokens and cost, because those facts don't exist
