@@ -79,13 +79,24 @@ export type BudgetPosture = {
  * Ordered stop-first: at a cap below spend both comparisons are true, and `stopped` is the
  * answer — a system that has blown its cap is not merely alerting.
  */
+/**
+ * Spend as a percentage of cap, guarding a zero cap.
+ *
+ * Extracted because this file spends a paragraph arguing that the gate rule must have exactly one
+ * home and then wrote the percentage three times — twice here and once more in the Settings cap
+ * preview. The same argument applies one level down.
+ */
+export function budgetPct(spent: number, cap: number): number {
+  return cap === 0 ? 0 : (spent / cap) * 100;
+}
+
 export function budgetStateAt(
   spent: number,
   cap: number,
   alertPct: number,
   stopPct: number,
 ): BudgetState {
-  const pct = cap === 0 ? 0 : (spent / cap) * 100;
+  const pct = budgetPct(spent, cap);
   return pct >= stopPct ? 'stopped' : pct >= alertPct ? 'alert' : 'under';
 }
 
@@ -108,13 +119,11 @@ export function budgetPosture(world: FixtureSet): BudgetPosture {
     world.client.opening_spend_usd +
     steps.reduce((total, s) => total + s.cost_model_usd + s.cost_platform_usd, 0);
 
-  const pct = cap === 0 ? 0 : (spent / cap) * 100;
-
   return {
     state: budgetStateAt(spent, cap, alert_pct, stop_pct),
     cap,
     spent,
-    pct,
+    pct: budgetPct(spent, cap),
     period_start: since,
     sample_n: steps.length,
     alert_pct,

@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getQueue, subscribeToWorld } from '@/lib/agentClient';
+import { needsAPerson } from '@/lib/world';
 import { BreakNextRead } from './BreakNextRead';
 import { NavIcon } from './NavIcon';
 import { ChannelMark } from '@/components/ChannelMark';
@@ -48,20 +49,9 @@ export function Sidebar() {
     let cancelled = false;
     const refresh = () => {
       void getQueue().then((items) => {
-        /**
-         * Not `items.length`.
-         *
-         * The queue holds runs that are recovering on their own — `parked_transient` renders the
-         * copy "Retrying automatically", and the hourly sweep releases it without anybody touching
-         * it. Counting those made the badge read 9 while the console said 5 and the week said 4, and
-         * four of the nine were rows with no control on them at all. The sidebar's own docblock calls
-         * this "the one figure an operator needs before deciding whether to open the app", which it
-         * cannot be if it counts work nobody has to do.
-         */
-        const needsAPerson = items.filter(
-          (i) => i.kind !== 'run' || i.run.state === 'quarantined' || i.run.state === 'parked_blocked',
-        );
-        if (!cancelled) setWaiting(needsAPerson.length);
+        /** Not `items.length` — see `needsAPerson` in `lib/world.ts` for what that counted and why
+         *  the badge disagreed with the console. */
+        if (!cancelled) setWaiting(items.filter(needsAPerson).length);
       });
     };
     const unsubscribe = subscribeToWorld(refresh);
@@ -106,9 +96,9 @@ export function Sidebar() {
         brightsill_nyc
       </p>
 
-      {/** Below the channels and above the v1 link, which is where the two things that are about the
-       *   prototype rather than about the client belong. Labelled as a demo control on itself — a
-       *   reviewer must never have to guess whether a switch is a product feature (D-020). */}
+      {/** Last in the rail, below the channels: it is about the prototype rather than about the
+       *   client. Labelled as a demo control on itself, because a reviewer must never have to guess
+       *   whether a switch is a product feature (D-020). */}
       <BreakNextRead />
 
     </aside>

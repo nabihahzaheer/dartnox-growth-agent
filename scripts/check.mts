@@ -812,7 +812,7 @@ check('fixture set declares the schema version', fixtures.schemaVersion === '1')
 
 section('Transitions');
 
-const { approve, reject, escalate, workingDaysUntil } = await import('../lib/world.ts');
+const { approve, reject, escalate, landRun, workingDaysUntil } = await import('../lib/world.ts');
 
 /**
  * The runway arithmetic, checked directly.
@@ -1358,6 +1358,78 @@ if (capPatch.settings) {
  * succeeds. Written down because an untested behaviour that *looks* like it should be in the
  * checker is worth a sentence saying why it is not.
  * ============================================================================================*/
+
+/* ==============================================================================================
+ * LANDING A RUN AT ITS INTERRUPT
+ *
+ * The bug this transition exists for was the most serious one in the prototype: the live run
+ * streamed to "Waiting for a decision" and stopped, while the draft it produced stayed in
+ * `drafting` — a state the queue does not render. The run announced it was waiting on a person and
+ * the thing it waited on appeared nowhere.
+ *
+ * What is asserted is the property that made it invisible AND the property that would have made it
+ * undecidable even once rendered: three records have to move together, and the third is the
+ * Approval row, without which `approve()` throws "No pending approval".
+ * ============================================================================================*/
+
+section('Landing a run');
+
+/** Same run the fixture-invariant section above already found; re-resolved here so this block
+ *  reads on its own rather than depending on a binding four hundred lines up. */
+const landing_run = fixtures.runs.find((r) => r.state === 'running');
+check('a running run exists to land', landing_run !== undefined);
+
+if (landing_run) {
+  const targetId = landing_run.target_draft_id;
+  const before = fixtures.drafts.find((d) => d.id === targetId);
+  check('its draft starts in `drafting`, which the queue does not render',
+    before?.state === 'drafting', `state is ${before?.state}`);
+
+  const landed = landRun(fixtures, landing_run.id, ctx);
+
+  check('landing moves the run to `awaiting_human`',
+    landed.runs?.[0]?.state === 'awaiting_human');
+  check('landing moves the draft into review',
+    landed.drafts?.[0]?.state === 'awaiting_approval',
+    `draft state is ${landed.drafts?.[0]?.state}`);
+  check('landing stamps `queued_at`, which the queue sorts on',
+    landed.drafts?.[0]?.queued_at !== null);
+
+  /** The one that matters most. `pendingApproval` treats `decided_at: null` as the canonical test
+   *  for waiting, so without this row the draft renders and then cannot be decided. */
+  const opened = landed.approvals?.[0];
+  check('landing opens a pending Approval', opened !== undefined && opened.decided_at === null);
+  /**
+   * WEAK TODAY, AND SAID SO RATHER THAN LEFT LOOKING SOLID.
+   *
+   * This assertion is correct and it cannot currently fail: the live draft carries exactly one
+   * version, so `versions[0].id` and `current_version_id` are the same string and binding the wrong
+   * one is indistinguishable from binding the right one. Negative-testing it — swapping the field
+   * for `versions[0].id` — still passes, which is how the weakness was found.
+   *
+   * It is kept because it starts catching a real bug the moment any live draft has a second
+   * version, which `approve_with_edits` creates. Recorded here because an assertion that cannot
+   * fail reads as coverage, and the whole reason this file negative-tests is that a checker with a
+   * silent gap is more dangerous than no checker.
+   */
+  check('and it binds the version the operator will see',
+    opened?.draft_version_id === before?.current_version_id);
+
+  /** Purity, same rule as every other transition in this file. */
+  check('landRun does not mutate the world it is given',
+    fixtures.drafts.find((d) => d.id === targetId)?.state === 'drafting');
+
+  /** Idempotent by construction rather than by a spent-key check: the draft is no longer
+   *  `drafting` on a second call, so nothing further is written. */
+  const applied = {
+    ...fixtures,
+    drafts: fixtures.drafts.map((d) => (d.id === targetId ? landed.drafts![0] : d)),
+    runs: fixtures.runs.map((r) => (r.id === landing_run.id ? landed.runs![0] : r)),
+  };
+  const again = landRun(applied, landing_run.id, ctx);
+  check('landing twice writes no second draft or approval',
+    again.drafts === undefined && again.approvals === undefined);
+}
 
 console.log(`\n${checks - failures}/${checks} checks passed.`);
 

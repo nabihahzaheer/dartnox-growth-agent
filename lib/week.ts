@@ -35,6 +35,7 @@
  * eight — visible, but only if someone counts.
  */
 
+import { CHANNEL_LABEL } from './types.ts';
 import type {
   CalendarSlot,
   Draft,
@@ -79,6 +80,31 @@ export type WeekSlotState =
   | 'slipped'
   | 'dropped'
   | 'quarantined';
+
+/**
+ * What each state is called in English.
+ *
+ * Lives here rather than in `components/Badge.tsx` because it is keyed on `WeekSlotState`, declared
+ * six lines above, and because the rebuilt calendar was importing it out of a v1-only component —
+ * pointing the living interface at the frozen one, which is the exact dependency direction
+ * `lib/errorCopy.ts` was created to avoid. Same argument, same fix; it had been made once and then
+ * contradicted by a comment justifying the import instead.
+ */
+export const WEEK_SLOT_LABEL: Record<WeekSlotState, string> = {
+  planned: 'Planned',
+  drafting: 'Drafting',
+  needs_you: 'Needs you',
+  approved: 'Approved',
+  scheduled: 'Scheduled',
+  published: 'Published',
+  blocked: 'Blocked',
+  rejected: 'Rejected',
+  failed: 'Failed',
+  pulled: 'Pulled',
+  slipped: 'Slipped',
+  dropped: 'Dropped',
+  quarantined: 'Quarantined',
+};
 
 /** One slot in a week, with everything a row needs already resolved. */
 export type WeekEntry = {
@@ -240,7 +266,7 @@ function entryFor(
  * RUN LABELLING
  *
  * Lives here rather than in `agentClient.ts` so that the rail, the console and the queue cannot
- * describe the same run three different ways. `getRunSummaries` calls it too.
+ * describe the same run three different ways. Only `buildWeek` reads it now.
  * ==============================================================================================*/
 
 export function describeRun(world: FixtureSet, run: Run): { title: string; detail: string } {
@@ -269,7 +295,7 @@ export function describeRun(world: FixtureSet, run: Run): { title: string; detai
 
   return {
     title: `Draft · ${pillar?.name ?? 'Unknown pillar'}`,
-    detail: `${draft.channel === 'linkedin' ? 'LinkedIn' : 'X'}${slot ? ` · ${slot.angle}` : ''}`,
+    detail: `${CHANNEL_LABEL[draft.channel]}${slot ? ` · ${slot.angle}` : ''}`,
   };
 }
 

@@ -15,15 +15,14 @@
  * and never the withheld text.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
-import { getQueue, subscribeToWorld } from '@/lib/agentClient';
+import { getQueue } from '@/lib/agentClient';
 import type { ConsoleError, QueueItem } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
+import { useWorldRead } from '@/lib/useWorldRead';
 import { EmptyState, LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
-import { ChannelMark } from '@/components/ChannelMark';
-
-const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
+import { CHANNEL_LABEL, ChannelMark } from '@/components/ChannelMark';
 
 /** `park_reason` is a code, not a sentence — rendering it raw would print `upstream_error` at an
  *  operator. This is the plain-language side of the same taxonomy `StepTimeline`'s detail rows
@@ -51,14 +50,7 @@ export default function ApprovalsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = subscribeToWorld(() => void load());
-    const timer = setTimeout(() => void load(), 0);
-    return () => {
-      clearTimeout(timer);
-      unsubscribe();
-    };
-  }, [load]);
+  useWorldRead(load);
 
   return (
     <>

@@ -145,18 +145,13 @@ export function formatRelative(offset: MinutesFromAnchor): string {
     return past ? `${n} hour${n === 1 ? '' : 's'} ago` : `in ${n} hour${n === 1 ? '' : 's'}`;
   }
 
-  const days = calendarDaysBetween(NOW, offset);
+  const days = Math.abs(signedCalendarDays(NOW, offset));
   if (days === 0) return past ? 'earlier today' : 'later today';
   if (days === 1) return past ? 'yesterday' : 'tomorrow';
   if (days < 7) return past ? `${days} days ago` : `in ${days} days`;
 
   const w = Math.round(days / 7);
   return past ? `${w} week${w === 1 ? '' : 's'} ago` : `in ${w} week${w === 1 ? '' : 's'}`;
-}
-
-/** Whole client-local calendar days between two offsets. */
-export function calendarDaysBetween(a: MinutesFromAnchor, b: MinutesFromAnchor): number {
-  return Math.abs(signedCalendarDays(a, b));
 }
 
 /** As above, keeping direction: negative when `b` is before `a`. Days come from the client-local

@@ -63,6 +63,7 @@ import type {
   RejectionReasonEntry,
 } from '@/lib/types';
 import { asConsoleError, errorCopy } from '@/lib/errorCopy';
+import { EDIT_TAG_LABEL } from '@/lib/types';
 
 const ACTION_LABEL: Partial<Record<InterruptOption, string>> = {
   approve: 'Approve',
@@ -83,16 +84,15 @@ const ACTION_LABEL: Partial<Record<InterruptOption, string>> = {
    */
 };
 
-/** The tags an operator can attach to their own edit. A closed set because `EditTag` is closed —
- *  these are the evidence a reflection rule is later built from, so a free-text label would make
- *  the learning loop unfalsifiable. */
-const TAG_OPTIONS: { tag: EditTag; label: string }[] = [
-  { tag: 'tightened', label: 'Tightened' },
-  { tag: 'claim_softened', label: 'Claim softened' },
-  { tag: 'jargon_removed', label: 'Jargon removed' },
-  { tag: 'specific_detail_added', label: 'Added a specific detail' },
-  { tag: 'hook_rewritten', label: 'Rewrote the opening' },
-  { tag: 'length_cut', label: 'Cut for length' },
+/** Which of the nine tags the dialog offers. The wording comes from `EDIT_TAG_LABEL`, so the
+ *  dialog and the version history cannot name the same tag differently — they did. */
+const OFFERED_TAGS: EditTag[] = [
+  'tightened',
+  'claim_softened',
+  'jargon_removed',
+  'specific_detail_added',
+  'hook_rewritten',
+  'length_cut',
 ];
 
 type Mode = 'reject' | 'edit';
@@ -140,7 +140,8 @@ export function DecisionBar({
       await run();
       setMode(null);
       setLanded(outcome);
-      /** Long enough to register, short enough not to feel like waiting. Matches `.decided-in`. */
+      /** Long enough to register, short enough not to feel like waiting. Slightly longer than
+       *  `card-settle`'s 700ms so the card finishes settling before the parent refetches. */
       window.setTimeout(onDecided, 750);
     } catch (e) {
       setError(errorCopy(asConsoleError(e)));
@@ -364,7 +365,7 @@ function EditDialog({
         What did you change? (optional — this is what the agent learns from)
       </p>
       <div className="chip-row">
-        {TAG_OPTIONS.map(({ tag, label }) => (
+        {OFFERED_TAGS.map((tag) => (
           <button
             key={tag}
             type="button"
@@ -374,7 +375,7 @@ function EditDialog({
               setTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
             }
           >
-            {label}
+            {EDIT_TAG_LABEL[tag]}
           </button>
         ))}
       </div>

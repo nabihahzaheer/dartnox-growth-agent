@@ -14,7 +14,10 @@
  * platform colour identifies a platform and must never be borrowed to mean a state.
  */
 
-const LABEL = { linkedin: 'LinkedIn', x: 'X' } as const;
+/** Re-exported so the marks and their names stay one import for a component that renders both. The
+ *  map itself lives in `lib/types.ts`, beside the `Channel` union — see the note there. */
+export { CHANNEL_LABEL } from '@/lib/types';
+import { CHANNEL_LABEL } from '@/lib/types';
 
 export function ChannelMark({
   channel,
@@ -29,7 +32,7 @@ export function ChannelMark({
 }) {
   const mark =
     channel === 'linkedin' ? (
-      <svg viewBox="0 0 24 24" width={size} height={size} role="img" aria-label={LABEL[channel]}>
+      <svg viewBox="0 0 24 24" width={size} height={size} role="img" aria-label={CHANNEL_LABEL[channel]}>
         <rect width="24" height="24" rx="4" fill="var(--ch-linkedin)" />
         <path
           fill="#fff"
@@ -37,7 +40,7 @@ export function ChannelMark({
         />
       </svg>
     ) : (
-      <svg viewBox="0 0 24 24" width={size} height={size} role="img" aria-label={LABEL[channel]}>
+      <svg viewBox="0 0 24 24" width={size} height={size} role="img" aria-label={CHANNEL_LABEL[channel]}>
         <rect width="24" height="24" rx="4" fill="var(--ch-x)" />
         <path
           fill="#fff"
@@ -50,7 +53,7 @@ export function ChannelMark({
   return (
     <span className="ch-pair">
       {mark}
-      {LABEL[channel]}
+      {CHANNEL_LABEL[channel]}
     </span>
   );
 }

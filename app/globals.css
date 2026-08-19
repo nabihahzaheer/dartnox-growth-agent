@@ -529,13 +529,6 @@ body {
   background: var(--accent-soft);
   color: var(--accent-text);
 }
-.shell-glyph {
-  width: 16px;
-  text-align: center;
-  font-size: 13px;
-  opacity: 0.75;
-  flex: none;
-}
 .shell-badge {
   margin-left: auto;
   font-size: 11px;
@@ -564,16 +557,9 @@ body {
   color: var(--text-muted);
   margin: 0;
 }
-.shell-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  flex: none;
-}
 
 /* ---- the demo control (D-020) ----
-   `margin-top: auto` here rather than on .shell-foot, because this is now the first of the two
-   blocks pinned to the bottom of the rail and the spacer belongs on whichever comes first. */
+   `margin-top: auto` pins it to the bottom of the rail; it is the last block in the sidebar. */
 .demo-box {
   margin: auto 0 0;
   padding: 12px 9px 10px;
@@ -616,20 +602,6 @@ body {
   color: var(--text-faint);
 }
 
-.shell-foot {
-  margin: 0;
-  padding: 12px 9px 0;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-}
-.shell-foot a {
-  color: var(--text-faint);
-  text-decoration: none;
-}
-.shell-foot a:hover {
-  color: var(--accent-text);
-  text-decoration: underline;
-}
 
 .shell-main {
   padding: 26px 30px 80px;
@@ -722,7 +694,6 @@ body {
   .shell-client,
   .shell-group,
   .shell-chan,
-  .shell-foot,
   .demo-box {
     display: none;
   }
@@ -780,7 +751,6 @@ body {
 .card-head { display: flex; align-items: center; gap: 8px; padding: 10px 16px;
   border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--text-faint); }
 .card-state { margin-left: auto; }
-.ch-dot { width: 13px; height: 13px; border-radius: 4px; flex: none; display: inline-block; }
 .card-body { padding: 16px; }
 .prov { display: flex; align-items: center; gap: 7px; margin: 0 0 12px; font-size: 12px;
   font-weight: 600; color: var(--text-faint); }
@@ -821,8 +791,6 @@ body {
   padding: 0 13px 11px; font-size: 12.5px; line-height: 1.6; }
 .vd-grid dt { color: var(--text-faint); font-family: var(--font-mono); font-size: 11.5px; }
 .vd-grid dd { margin: 0; color: var(--text-muted); }
-.vd-quote { background: rgb(255 255 255 / 80%); border-radius: 5px; padding: 5px 9px;
-  border-left: 2px solid currentcolor; color: var(--text); }
 .vd-withheld { font-style: italic; }
 .vd-src { font-size: 11.5px; }
 .is-bad { color: var(--stop); font-weight: 600; }
@@ -917,6 +885,8 @@ body {
 .qrow { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: var(--shadow); overflow: hidden; }
 .qrow-stop { border-color: #e8c4bd; }
+/* An expandable row. `.qrow` supplies the surface; this marks the ones that open. */
+.qrow-open { cursor: default; }
 .qrow-run { display: flex; align-items: flex-start; gap: 11px; padding: 12px 15px;
   background: var(--surface-sunk); box-shadow: none; border-style: dashed; }
 .qico { width: 17px; height: 17px; flex: none; margin-top: 1px; }
@@ -1007,11 +977,6 @@ body {
 .tag-btn.is-on { border-color: var(--go); background: var(--go-soft); color: var(--go);
   font-weight: 600; }
 
-/* ---- the live run: in-flight step, ending, halt ---- */
-.live-working { display: flex; align-items: center; gap: 8px; margin: 2px 0 0;
-  font-size: 12.5px; font-weight: 550; color: var(--accent-text); }
-.live-ended { margin: 6px 0 0; font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
-.live-halt { margin-top: 12px; }
 
 /* ---- the agent's narrator line, above the batch panel ---- */
 .agent-line { display: flex; align-items: flex-start; gap: 11px; margin: 4px 0 18px; }
@@ -1094,7 +1059,6 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 }
 
 /* ---- results: tiles ---- */
-.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 26px; }
 .tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 15px 16px; box-shadow: var(--shadow); }
 .tl2 { font-size: 13px; color: var(--text-muted); font-weight: 550; margin-bottom: 5px; }
@@ -1105,7 +1069,6 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .tv.go { color: var(--go); }
 .tv.at { color: var(--attend); }
 .tv.nd { color: var(--text-faint); font-weight: 500; }
-.tv-n { font-weight: 500; color: var(--text-faint); }
 
 /* ---- results: guardrail-by-layer chart + drill-down ---- */
 .chart { display: flex; flex-direction: column; gap: 8px; }
@@ -1117,6 +1080,7 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .ctrack { height: 15px; background: var(--surface-sunk); border-radius: 4px; overflow: hidden; }
 .ctrack i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
 .crow-on .ctrack i { background: var(--accent-text); }
+.cname { font-size: 12px; font-weight: 600; color: var(--text-muted); }
 .cval { font-size: 12.5px; color: var(--text-muted); text-align: right;
   font-variant-numeric: tabular-nums; }
 .drill { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 13px; }
@@ -1130,8 +1094,7 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .dq b { color: var(--text); font-weight: 600; }
 
 @media (max-width: 900px) {
-  .grid3 { grid-template-columns: 1fr; }
-}
+  }
 
 /**
  * ---- settings ----
@@ -1182,13 +1145,8 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .rule-body { flex: 1; min-width: 0; }
 .rule-title { margin: 0; font-size: 13.5px; font-weight: 550; color: var(--text); }
 .rule-sub { margin: 2px 0 0; font-size: 11.5px; color: var(--text-faint); }
-.pill-lock { background: var(--surface-sunk); color: var(--text-faint); }
 .pill-calm { background: var(--surface-sunk); color: var(--text-muted); }
 
-.layer-group + .layer-group { margin-top: 18px; }
-.layer-head { display: flex; align-items: center; gap: 8px; margin: 0 0 2px; }
-.layer-name { font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-  color: var(--text-faint); letter-spacing: 0.04em; }
 
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .phrase-chip { font-size: 12.5px; background: var(--surface-sunk); color: var(--text-muted);

@@ -45,21 +45,17 @@ import { errorCopy } from '@/lib/errorCopy';
 export function LoadError({
   error,
   onRetry,
-  retryLabel = 'Try again',
-  notFoundCopy,
 }: {
   error: ConsoleError;
   onRetry?: () => void;
-  retryLabel?: string;
-  notFoundCopy?: string;
 }) {
   return (
     <div className="panel state-panel" role="alert">
-      <p className="state-title">{errorCopy(error, notFoundCopy)}</p>
+      <p className="state-title">{errorCopy(error)}</p>
       <p className="state-kind mono">{error.kind}</p>
       {onRetry && (
         <button type="button" className="btn" onClick={onRetry}>
-          {retryLabel}
+          Try again
         </button>
       )}
     </div>

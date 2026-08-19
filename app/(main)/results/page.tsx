@@ -33,7 +33,7 @@
  * It shows as an informational value here, honestly, rather than a fabricated pass/fail.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   METRICS,
   ROLLING_4W,
@@ -53,12 +53,14 @@ import {
  * whole build and the one the walkthrough states in as many words. The seam function existed the
  * entire time and had zero callers. One grep by a reviewer finds this, and it costs the argument.
  */
-import { getBudget, getMetricDescriptors, getWorld, subscribeToWorld } from '@/lib/agentClient';
+import { getBudget, getMetricDescriptors, getWorld } from '@/lib/agentClient';
 import { BudgetLine, BudgetNotice } from '@/components/BudgetNotice';
+import { CHANNEL_LABEL } from '@/components/ChannelMark';
 import { formatDate } from '@/lib/time';
 import type { BudgetPosture } from '@/lib/budget';
 import type { ConsoleError, FixtureSet, GuardrailEvent, MetricResult } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
+import { useWorldRead } from '@/lib/useWorldRead';
 import { LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 
 const ALARM_IDS = new Set(['guardrail_block_rate', 'rubber_stamp_rate', 'queue_age_p95']);
@@ -92,9 +94,7 @@ function verdict(value: number, min: number | null, max: number | null): 'go' | 
   return within ? 'go' : 'attend';
 }
 
-type Row = KeyedMetricDescriptor;
-
-function Tile({ d, result }: { d: Row; result: MetricResult<number> }) {
+function Tile({ d, result }: { d: KeyedMetricDescriptor; result: MetricResult<number> }) {
   const band = bandLabel(d.unit, d.healthy_range.min, d.healthy_range.max);
 
   if (result.kind === 'no_data') {
@@ -163,7 +163,7 @@ function MetricGroup({
 }: {
   title: string;
   detail?: string;
-  rows: Row[];
+  rows: KeyedMetricDescriptor[];
   results: Map<string, MetricResult<number>>;
 }) {
   if (rows.length === 0) return null;
@@ -187,8 +187,6 @@ export default function ResultsPage() {
   const [descriptors, setDescriptors] = useState<KeyedMetricDescriptor[] | null>(null);
   const [budget, setBudget] = useState<BudgetPosture | null>(null);
   const [error, setError] = useState<ConsoleError | null>(null);
-  const [openLayer, setOpenLayer] = useState<string | null>(null);
-  const [openCohort, setOpenCohort] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -202,14 +200,7 @@ export default function ResultsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = subscribeToWorld(() => void load());
-    const timer = setTimeout(() => void load(), 0);
-    return () => {
-      clearTimeout(timer);
-      unsubscribe();
-    };
-  }, [load]);
+  useWorldRead(load);
 
   return (
     <>
@@ -227,10 +218,6 @@ export default function ResultsPage() {
           world={world}
           descriptors={descriptors}
           budget={budget}
-          openLayer={openLayer}
-          setOpenLayer={setOpenLayer}
-          openCohort={openCohort}
-          setOpenCohort={setOpenCohort}
         />
       )}
     </>
@@ -241,19 +228,16 @@ function Loaded({
   world,
   descriptors,
   budget,
-  openLayer,
-  setOpenLayer,
-  openCohort,
-  setOpenCohort,
 }: {
   world: FixtureSet;
   descriptors: KeyedMetricDescriptor[];
   budget: BudgetPosture;
-  openLayer: string | null;
-  setOpenLayer: (l: string | null) => void;
-  openCohort: string | null;
-  setOpenCohort: (c: string | null) => void;
 }) {
+  /** Held here rather than lifted. Both are open/closed flags for charts that live only inside this
+   *  component, and `Loaded` never unmounts once the first read lands, so lifting them bought
+   *  nothing and drilled four props through a boundary that had no use for them. */
+  const [openLayer, setOpenLayer] = useState<string | null>(null);
+  const [openCohort, setOpenCohort] = useState<string | null>(null);
   const results = new Map<string, MetricResult<number>>();
   for (const d of descriptors) {
     results.set(d.id, METRICS[d.compute_key](world, windowFor(d.window_default)));
@@ -360,7 +344,7 @@ function Loaded({
                     <span className="dt2">{d.id}</span>
                     <span className="dq">
                       <b>{edited ? 'Edited' : 'Approved as written'}</b> ·{' '}
-                      {d.channel === 'linkedin' ? 'LinkedIn' : 'X'} · {d.versions.length} version
+                      {CHANNEL_LABEL[d.channel]} · {d.versions.length} version
                       {d.versions.length === 1 ? '' : 's'}
                     </span>
                   </div>

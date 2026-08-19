@@ -24,6 +24,9 @@ import {
 } from '@/lib/agentClient';
 import type { DraftDetail } from '@/lib/agentClient';
 import type { ConsoleError, DraftId, GuardrailRule, Settings } from '@/lib/types';
+import { EDIT_TAG_LABEL } from '@/lib/types';
+import { needsDecision } from '@/lib/world';
+import { CHANNEL_LABEL } from '@/components/ChannelMark';
 import { asConsoleError } from '@/lib/errorCopy';
 import { DecisionBar } from '@/components/console/DecisionBar';
 import { Evidence } from '@/components/console/Evidence';
@@ -32,20 +35,6 @@ import { formatDateTime } from '@/lib/time';
 import { EmptyState, LoadError, LoadingState } from '@/components/ScreenState';
 import { StepTimeline } from '@/components/console/StepTimeline';
 import { Verdict } from '@/components/console/Verdict';
-
-const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
-
-const TAG_LABEL: Record<string, string> = {
-  tightened: 'Tightened',
-  claim_softened: 'Claim softened',
-  jargon_removed: 'Jargon removed',
-  specific_detail_added: 'Specific detail added',
-  cta_changed: 'Call to action changed',
-  hook_rewritten: 'Opening line rewritten',
-  length_cut: 'Cut for length',
-  terminology_corrected: 'Terminology corrected',
-  client_example_added: "Client's own example added",
-};
 
 export default function DraftDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -125,7 +114,7 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
    * all. This page opens by direct link, including to an already-decided draft, so it has to make
    * the check itself rather than relying on an upstream filter.
    */
-  const decidable = draft.state === 'awaiting_approval' || draft.state === 'blocked_guardrail';
+  const decidable = needsDecision(draft);
   const gate = decidable ? (steps.find((s) => s.interrupt !== null)?.interrupt ?? null) : null;
   const offers = gate?.options ?? [];
   const history = [...draft.versions].sort((a, b) => b.version - a.version);
@@ -212,7 +201,7 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
                     <p className="hist-tags">
                       {v.edit_tags.map((t) => (
                         <span key={t} className="tag-soft">
-                          {TAG_LABEL[t] ?? t}
+                          {EDIT_TAG_LABEL[t]}
                         </span>
                       ))}
                     </p>

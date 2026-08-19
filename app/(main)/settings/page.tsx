@@ -45,7 +45,6 @@ import {
   addBannedPhrase,
   getSettingsScreen,
   previewBannedPhrase,
-  subscribeToWorld,
   toggleGuardrail,
   updateSettings,
   type SettingsScreen,
@@ -59,13 +58,13 @@ import type {
   GuardrailRule,
   Settings,
 } from '@/lib/types';
+import { ChannelMark } from '@/components/ChannelMark';
 import { asConsoleError, errorCopy } from '@/lib/errorCopy';
 import { LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
-import { budgetStateAt, type BudgetPosture } from '@/lib/budget';
+import { useWorldRead } from '@/lib/useWorldRead';
+import { budgetPct, budgetStateAt, type BudgetPosture } from '@/lib/budget';
 import { BudgetLine, BudgetNotice } from '@/components/BudgetNotice';
 import { formatDate } from '@/lib/time';
-
-const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
 
 const TRIGGER_LABEL: Record<EscalationTrigger, string> = {
   low_score: 'Low score',
@@ -200,14 +199,7 @@ export default function SettingsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = subscribeToWorld(() => void load());
-    const timer = setTimeout(() => void load(), 0);
-    return () => {
-      clearTimeout(timer);
-      unsubscribe();
-    };
-  }, [load]);
+  useWorldRead(load);
 
   /** Toasts state the outcome and stop (D-052) — so they stop, on their own, a few seconds later. */
   useEffect(() => {
@@ -512,13 +504,8 @@ function ThresholdSection({
           <ul className="preview-list">
             {sorted.map((d) => (
               <li key={d.id} className="preview-row">
-                <span
-                  className="ch-dot"
-                  style={{ width: 10, height: 10, background: `var(--ch-${d.channel})` }}
-                  aria-hidden
-                />
                 <span className="preview-score">{d.composite_score.toFixed(2)}</span>
-                <span>{CHANNEL_LABEL[d.channel]}</span>
+                <ChannelMark channel={d.channel} size={14} withLabel />
                 <span
                   className={`pill ${d.composite_score < value ? 'pill-attend' : 'pill-go'}`}
                   style={{ marginLeft: 'auto' }}
@@ -574,7 +561,7 @@ function BudgetSection({
   const pending: BudgetPosture = {
     ...budget,
     cap: value,
-    pct: value === 0 ? 0 : (budget.spent / value) * 100,
+    pct: budgetPct(budget.spent, value),
     state: budgetStateAt(budget.spent, value, budget.alert_pct, budget.stop_pct),
   };
 

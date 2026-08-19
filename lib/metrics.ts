@@ -33,7 +33,6 @@ import type {
   GuardrailEvent,
   MetricDescriptor,
   MetricResult,
-  MetricSnapshot,
   Post,
 } from './types.ts';
 
@@ -462,9 +461,3 @@ export function draftsInCohort(w: FixtureSet, settingsVersionId: string): Draft[
   );
 }
 
-/** Snapshots for one post, oldest first — the accrual curve behind an engagement figure. */
-export function accrualCurve(w: FixtureSet, postId: string): MetricSnapshot[] {
-  return w.metricSnapshots
-    .filter((s) => s.post_id === postId)
-    .sort((a, b) => (a.captured_at as number) - (b.captured_at as number));
-}

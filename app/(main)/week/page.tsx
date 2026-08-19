@@ -21,18 +21,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getWeek, initialWeekIndex, subscribeToWorld } from '@/lib/agentClient';
-import type { Week } from '@/lib/week';
+import { WEEK_SLOT_LABEL, type Week } from '@/lib/week';
 import type { ConsoleError } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
 import { LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
+import { ChannelMark } from '@/components/ChannelMark';
 import { formatDate, formatDateTime, formatDayNumber, formatRelative, formatTime } from '@/lib/time';
-/**
- * The label map only, not the `Badge` component — `Badge` renders through v1's Tailwind classes and
- * CSS tokens scoped to `[data-ui='v1']`, which do not exist at `:root`. `WEEK_SLOT_LABEL` is a plain
- * `Record<string,string>` with no such scoping, so importing just it keeps one source of truth for
- * what a state is called in English without dragging in styling built for the other palette.
- */
-import { WEEK_SLOT_LABEL } from '@/components/Badge';
 
 /**
  * The rebuilt palette's own tone map, kept separate from v1's `weekSlotTone` in `components/Badge`.
@@ -93,6 +87,10 @@ export default function WeekPage() {
     }
   }, []);
 
+  /** Not `useWorldRead`, and deliberately: this one is parameterised by the week being viewed, so
+   *  it re-subscribes when `index` changes. The shared hook takes a zero-argument loader on purpose
+   *  — generalising it to carry a parameter would make it a data hook, which is the thing its own
+   *  docblock argues against. One screen out of five differing is cheaper than that. */
   useEffect(() => {
     const unsubscribe = subscribeToWorld(() => void load(index));
     const timer = setTimeout(() => void load(index), 0);
@@ -173,11 +171,7 @@ export default function WeekPage() {
                   const body = (
                     <>
                       <span className="wk-row1">
-                        <span
-                          className="ch-dot"
-                          style={{ background: `var(--ch-${entry.channel})` }}
-                          aria-hidden
-                        />
+                        <ChannelMark channel={entry.channel} size={13} />
                         <span className="wk-time">{formatTime(entry.publish_at)}</span>
                         <span className={`pill ${pillClass(entry.state)} wk-pill`}>
                           {WEEK_SLOT_LABEL[entry.state]}

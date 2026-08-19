@@ -113,6 +113,16 @@ export type VariantGroupId = Brand<string, 'VariantGroupId'>;
 /** Two channels in v1 (A-07). Cadence is 3 LinkedIn + 5 X. */
 export type Channel = 'linkedin' | 'x';
 
+/**
+ * What each channel is called on screen.
+ *
+ * Beside the union it is keyed on, and not in `components/ChannelMark.tsx` where it briefly lived:
+ * `lib/week.ts` needs it too, and a module under `lib/` importing a `.tsx` component points the
+ * dependency the wrong way *and* breaks `scripts/check.mts`, which runs under Node's type stripping
+ * and cannot parse JSX. Caught by the checker rather than by review.
+ */
+export const CHANNEL_LABEL: Record<Channel, string> = { linkedin: 'LinkedIn', x: 'X' };
+
 /** A-12's three-state result, used by rules, events and per-source input checks alike. */
 export type GuardrailResult = 'pass' | 'warn' | 'fail';
 
@@ -160,6 +170,30 @@ export type EditTag =
   | 'length_cut'
   | 'terminology_corrected'
   | 'client_example_added';
+
+/**
+ * What each edit tag is called on screen.
+ *
+ * There were two of these — `TAG_OPTIONS` in the edit dialog and `TAG_LABEL` in the version
+ * history — and they disagreed. An operator picked "Rewrote the opening" in the dialog, submitted,
+ * and the history section *on the same page* rendered it as "Opening line rewritten". Two names for
+ * one tag, one click apart.
+ *
+ * Total over `EditTag`, so adding a tenth tag is a compile error here rather than an `undefined`
+ * rendered at an operator. Which of the nine the dialog *offers* is a separate list, because that
+ * is a product choice rather than a vocabulary.
+ */
+export const EDIT_TAG_LABEL: Record<EditTag, string> = {
+  tightened: 'Tightened',
+  claim_softened: 'Claim softened',
+  jargon_removed: 'Jargon removed',
+  specific_detail_added: 'Specific detail added',
+  cta_changed: 'Call to action changed',
+  hook_rewritten: 'Opening line rewritten',
+  length_cut: 'Cut for length',
+  terminology_corrected: 'Terminology corrected',
+  client_example_added: "Client's own example added",
+};
 
 /* ============================================================================================
  * 5 · THE TWO ERROR TAXONOMIES  (D-031 · annex B2)
@@ -1302,9 +1336,6 @@ export type AutoApproveDraftPrereq =
   | 'all_guardrails_pass'
   | 'not_degraded'
   | 'pillar_not_always_review';
-
-/** Kept so the count of ten stays expressible in one place. */
-export type AutoApprovePrereq = AutoApproveClientPrereq | AutoApproveDraftPrereq;
 
 export type AutoApprovePrereqStatus = {
   key: AutoApproveClientPrereq;

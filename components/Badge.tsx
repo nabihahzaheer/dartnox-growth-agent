@@ -68,21 +68,10 @@ export function weekSlotTone(state: WeekSlotState): BadgeTone {
 
 /** What an operator would say about a slot. `needs_you` is second person on purpose — it is the
  *  one state that is a request rather than a description. */
-export const WEEK_SLOT_LABEL: Record<WeekSlotState, string> = {
-  planned: 'Planned',
-  drafting: 'Drafting',
-  needs_you: 'Needs you',
-  approved: 'Approved',
-  scheduled: 'Scheduled',
-  published: 'Published',
-  blocked: 'Blocked',
-  rejected: 'Rejected',
-  failed: 'Failed',
-  pulled: 'Pulled',
-  slipped: 'Slipped',
-  dropped: 'Dropped',
-  quarantined: 'Quarantined',
-};
+/** Moved to `lib/week.ts`, beside the `WeekSlotState` union it is keyed on, so the rebuilt
+ *  interface no longer imports a label map out of this frozen file. Re-exported so v1's own call
+ *  sites are unchanged. */
+export { WEEK_SLOT_LABEL } from '@/lib/week';
 
 export function guardrailTone(result: string): BadgeTone {
   if (result === 'pass') return 'approved';

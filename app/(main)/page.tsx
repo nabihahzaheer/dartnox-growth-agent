@@ -27,17 +27,18 @@
  * streaming is now real (`LiveRun`) and the seam refuses to hand back unemitted steps (`getRunSteps`).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   getBatch,
   getGuardrailRules,
   getRunSteps,
   getSettings,
-  subscribeToWorld,
   type Batch,
 } from '@/lib/agentClient';
 import type { ConsoleError, GuardrailRule, RunStep, Settings } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
+import { needsDecision } from '@/lib/world';
+import { useWorldRead } from '@/lib/useWorldRead';
 import { EmptyState, LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 import { DraftCard } from '@/components/console/DraftCard';
 import { LiveRun } from '@/components/console/LiveRun';
@@ -51,9 +52,6 @@ type Loaded = {
   steps: Map<string, RunStep[]>;
 };
 
-/** A draft that has reached a person and not been decided. Both states qualify: a blocked draft
- *  still needs an operator, it just cannot be approved. */
-const NEEDS_DECISION = new Set(['awaiting_approval', 'blocked_guardrail']);
 
 export default function ConsolePage() {
   const [state, setState] = useState<Loaded | null>(null);
@@ -88,22 +86,7 @@ export default function ConsolePage() {
     }
   }, []);
 
-  /**
-   * Subscribe first, then let the subscription drive the initial load too.
-   *
-   * `subscribeToWorld` fires on every write, so the effect only ever registers a listener and asks
-   * the external system for a first value — it never sets state itself. That is the shape the
-   * react-hooks rule is asking for, and it is also the honest description of what this screen is:
-   * a view onto a world that changes underneath it.
-   */
-  useEffect(() => {
-    const unsubscribe = subscribeToWorld(() => void load());
-    const timer = setTimeout(() => void load(), 0);
-    return () => {
-      clearTimeout(timer);
-      unsubscribe();
-    };
-  }, [load]);
+  useWorldRead(load);
 
   /**
    * `not_found` is an empty state, not a failure (D-031), and this screen used to render it as one.
@@ -148,11 +131,11 @@ export default function ConsolePage() {
   const { batch, settings, rules, steps } = state;
   const threshold = settings.score_threshold;
 
-  const waiting = batch.children.filter((c) => c.draft && NEEDS_DECISION.has(c.draft.state));
+  const waiting = batch.children.filter((c) => c.draft && needsDecision(c.draft));
   const blocked = waiting.filter((c) => c.draft?.state === 'blocked_guardrail');
   const drafting = batch.children.filter((c) => c.run.state === 'running' || c.run.state === 'queued');
   const settled = batch.children.filter(
-    (c) => c.draft && !NEEDS_DECISION.has(c.draft.state) && c.run.state !== 'running',
+    (c) => c.draft && !needsDecision(c.draft) && c.run.state !== 'running',
   );
 
   return (

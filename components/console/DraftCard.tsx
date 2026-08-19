@@ -21,11 +21,10 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { BatchChild } from '@/lib/agentClient';
 import type { GuardrailRule, RejectionReasonEntry, RunStep } from '@/lib/types';
+import { ChannelMark } from '@/components/ChannelMark';
 import { DecisionBar } from './DecisionBar';
 import { StepTimeline, runDurationSeconds } from './StepTimeline';
 import { Verdict } from './Verdict';
-
-const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
 
 function formatSpan(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -59,12 +58,7 @@ export function DraftCard({
     return (
     <article className={`card${blocked ? ' card-stop' : ''}`}>
       <header className="card-head">
-        <span
-          className="ch-dot"
-          style={{ background: `var(--ch-${draft.channel})` }}
-          aria-hidden
-        />
-        <span>{CHANNEL_LABEL[draft.channel]}</span>
+        <ChannelMark channel={draft.channel} withLabel />
         <span aria-hidden>·</span>
         <span>{child.slot?.angle ?? 'Untitled slot'}</span>
         <span className="card-state">

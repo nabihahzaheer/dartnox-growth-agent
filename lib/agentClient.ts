@@ -31,6 +31,13 @@
  * mutable world, deep-cloned from the fixtures at initialisation. The React store caches what it
  * returns. Writes land here and hand back the records they changed, which is what a real API does.
  *
+ * PRUNED 19 AUG. `getClient`, `getPillars`, `getRuns`, `getDraft` and `getRunSummaries` were
+ * exported and called by nothing in either interface, and `getRun` was reachable only from
+ * `openRun`. This module's own claim is that its signatures are "the contract you would hand a
+ * backend engineer on day one" — five endpoints no screen calls make that contract look
+ * speculative rather than derived from the screens, which is the opposite of the argument. What is
+ * left is what something actually reads.
+ *
  * The clone is not a formality. Mutating the imported fixture arrays would corrupt state across
  * React 19 StrictMode's deliberate double-mount, and the symptom would look like a rendering fault
  * rather than the aliasing bug it is.
@@ -38,7 +45,7 @@
 
 import { fixtures, LIVE_RUN_EMITTED_THROUGH_SEQ } from '@/fixtures';
 import { NOW } from '@/lib/time';
-import { buildWeek, defaultWeekIndex, describeRun, type Week } from '@/lib/week';
+import { buildWeek, defaultWeekIndex, type Week } from '@/lib/week';
 import { budgetPosture, type BudgetPosture } from '@/lib/budget';
 import type { KeyedMetricDescriptor } from '@/lib/metrics';
 import {
@@ -60,7 +67,6 @@ import type {
   Approval,
   BriefRef,
   CalendarSlot,
-  Client,
   ConsoleError,
   Draft,
   DraftId,
@@ -210,14 +216,6 @@ async function read<T>(latency: number, produce: () => T): Promise<T> {
  * READS
  * ==============================================================================================*/
 
-export async function getClient(): Promise<Client> {
-  return read(LATENCY_MS.config, () => world.client);
-}
-
-export async function getPillars(): Promise<Pillar[]> {
-  return read(LATENCY_MS.config, () => world.pillars);
-}
-
 export async function getSettings(): Promise<Settings> {
   return read(LATENCY_MS.config, () => world.settings);
 }
@@ -305,23 +303,14 @@ export async function getMetricDescriptors(): Promise<KeyedMetricDescriptor[]> {
   return read(LATENCY_MS.config, () => world.metricDescriptors as KeyedMetricDescriptor[]);
 }
 
-export async function getRuns(): Promise<Run[]> {
-  return read(LATENCY_MS.list, () => world.runs);
-}
-
-export async function getRun(id: RunId): Promise<Run> {
+/** Not exported: `openRun` is the only caller, and a seam function nothing outside can reach is
+ *  better described as a helper than advertised as an endpoint. */
+async function getRun(id: RunId): Promise<Run> {
   return read(LATENCY_MS.list, () => {
     const run = world.runs.find((r) => r.id === id);
     /** `not_found` renders as an empty state rather than as an error — D-031 is explicit that
      *  those are different things to show a person. */
     return run ?? fail({ kind: 'not_found' });
-  });
-}
-
-export async function getDraft(id: DraftId): Promise<Draft> {
-  return read(LATENCY_MS.detail, () => {
-    const draft = world.drafts.find((d) => d.id === id);
-    return draft ?? fail({ kind: 'not_found' });
   });
 }
 
@@ -543,24 +532,6 @@ export async function landRunAtInterrupt(id: RunId): Promise<WorldPatch> {
 }
 
 /**
- * A run described in terms of the work it is doing rather than its id and type.
- *
- * `RUN-0143 · draft` is an identifier and a category. It tells an operator nothing about what the
- * agent is actually doing. Resolving the run to its draft, its pillar and its channel turns the
- * list into a list of *work* — which is what a person scanning it is looking for.
- *
- * The join lives here rather than in the component because in production it is a server-side
- * concern: one query returning a list ready to render, not four round trips per row.
- */
-export type RunSummary = {
-  run: Run;
-  /** What this run is doing. */
-  title: string;
-  /** Where it is going, when it fired. */
-  detail: string;
-};
-
-/**
  * THE WEEK — the read every screen frames itself with.
  *
  * `list` latency rather than `trace`: it is a join across slots, drafts, posts and runs, but all of
@@ -698,30 +669,6 @@ export async function getBatch(): Promise<Batch> {
       budget: budgetPosture(world),
     };
   });
-}
-
-export async function getRunSummaries(): Promise<RunSummary[]> {
-  return read(LATENCY_MS.list, () =>
-    world.runs
-      /**
-       * A run with no steps opens onto an empty screen, which reads as broken.
-       *
-       * Three qualify: the Wednesday batch parent, which is a container whose children hold the
-       * work, and the two queued publish runs, which have not executed yet. Listing them invites a
-       * click that lands nowhere, and the batch parent in particular is the most tempting row in
-       * the rail because it is the one that sounds like the whole week.
-       *
-       * The runs are not removed from the world — they are real records and the queue, the metrics
-       * and `Run.parent_run_id` all still use them. This is a rendering decision about a list, and
-       * it belongs here rather than in the component because "has anything happened yet" is a fact
-       * about the run.
-       */
-      .filter((run) => world.runSteps.some((s) => s.run_id === run.id))
-      /** The labelling itself moved to `lib/week.ts` when the rail stopped being a run list. One
-       *  labeller, so the week's "about the week" group and this summary cannot describe the same
-       *  run two different ways. */
-      .map((run) => ({ run, ...describeRun(world, run) })),
-  );
 }
 
 /**

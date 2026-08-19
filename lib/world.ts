@@ -39,6 +39,7 @@ import type {
   MinutesFromAnchor,
   Post,
   PostId,
+  QueueItem,
   RejectionReasonCode,
   Run,
   RunId,
@@ -108,6 +109,38 @@ export type DecisionContext = {
    *  approvals. The client rejects a repeat of a key it has already seen. */
   idempotencyKey: string;
 };
+
+/* ================================================================================================
+ * WHAT NEEDS A PERSON
+ *
+ * Written four ways in four files before this: a `Set` on the console, a two-clause `||` on the
+ * detail page, a different predicate over `QueueItem` in the sidebar, and a bare equality repeated
+ * in three components. Two of those carried long comments describing the same class of bug — a
+ * surface disagreeing with another surface about what needs attention. The sidebar's records the
+ * badge reading 9 while the console read 5.
+ *
+ * That is a rule about the work, and this module already argues (see the queue sort in
+ * `agentClient.ts`) that such rules belong beside the transitions rather than in whichever
+ * component happens to render the row.
+ * ==============================================================================================*/
+
+/** A draft a person still has to decide. `blocked_guardrail` qualifies: it cannot be approved, but
+ *  it still needs someone to edit it or send it back. */
+export function needsDecision(draft: Draft): boolean {
+  return draft.state === 'awaiting_approval' || draft.state === 'blocked_guardrail';
+}
+
+/**
+ * A queue item that genuinely needs a human, as opposed to one the system is clearing itself.
+ *
+ * A `parked_transient` run renders the copy "Retrying automatically" and the hourly sweep releases
+ * it without anybody touching it. Counting those is what made the sidebar badge read 9 against a
+ * console reading 5, with four of the nine being rows carrying no control at all.
+ */
+export function needsAPerson(item: QueueItem): boolean {
+  if (item.kind !== 'run') return true;
+  return item.run.state === 'quarantined' || item.run.state === 'parked_blocked';
+}
 
 /* ================================================================================================
  * HELPERS
