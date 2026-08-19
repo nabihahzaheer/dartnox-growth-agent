@@ -779,3 +779,37 @@ body {
   width: 60%; animation: shimmer 1.4s ease-in-out infinite; }
 .skeleton.short { width: 38%; }
 @keyframes shimmer { 50% { opacity: 0.45; } }
+
+/* ---- approvals: queue rows ---- */
+.qrow { display: flex; align-items: flex-start; gap: 11px; padding: 13px 15px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); text-decoration: none; color: inherit; }
+.qrow:hover { border-color: var(--border-strong); }
+.qrow-stop { border-color: #e8c4bd; }
+.qrow-static { cursor: default; }
+.qrow-glyph { font-size: 15px; flex: none; margin-top: 1px; }
+.qrow-body { flex: 1; min-width: 0; }
+.qrow-title { margin: 0; font-size: 14.5px; font-weight: 600; color: var(--text); }
+.qrow-excerpt { font-weight: 400; color: var(--text-muted); }
+.qrow-sub { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+/* ---- detail page ---- */
+.crumb { font-size: 13px; color: var(--text-faint); margin: 0 0 4px; }
+.crumb a { color: var(--accent-text); text-decoration: none; }
+.crumb a:hover { text-decoration: underline; }
+.trace-foot { margin: 10px 2px 0; font-size: 11.5px; color: var(--text-faint); }
+
+.hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.hist-row { display: flex; gap: 11px; padding: 13px 0; border-bottom: 1px solid var(--border); }
+.hist-row:last-child { border-bottom: none; }
+.hist-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; margin-top: 6px; }
+.hist-agent { background: var(--accent); }
+.hist-human { background: var(--go); }
+.hist-body { flex: 1; }
+.hist-head { display: flex; align-items: center; gap: 9px; margin: 0 0 4px; font-size: 13.5px; }
+.hist-author { color: var(--text-faint); }
+.hist-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 7px; }
+.tag-soft { font-size: 11.5px; font-weight: 600; background: var(--go-soft); color: var(--go);
+  border-radius: 99px; padding: 2px 9px; }
+.hist-text { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-muted);
+  white-space: pre-wrap; }

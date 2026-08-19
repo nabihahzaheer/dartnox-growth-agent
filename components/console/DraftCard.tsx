@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { BatchChild } from '@/lib/agentClient';
 import { submitReview } from '@/lib/agentClient';
 import type { GuardrailRule, InterruptOption, RunStep } from '@/lib/types';
@@ -166,6 +167,9 @@ export function DraftCard({
           </span>
           {steps.length} steps
         </button>
+        <Link href={`/approvals/${draft.id}`} className="trace-link">
+          Open in full →
+        </Link>
       </footer>
 
       {error && <p className="card-err">{error}</p>}

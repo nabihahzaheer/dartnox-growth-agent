@@ -516,6 +516,16 @@ export function initialWeekIndex(): number {
  * decisions that gate permits. A blocked draft's gate omits `approve`, so the interface renders the
  * controls the gate offers rather than deciding for itself which button to disable — two screens
  * cannot then disagree about a rule the architecture states once.
+ *
+ * CAVEAT FOUND BY TESTING, NOT BY INSPECTION: `gate` is a historical record and does not clear once
+ * the draft is decided. The interrupt step stays in `RunStep[]` forever with its original options,
+ * because it is an accurate account of what the run stopped at — mutating it after the fact would
+ * make the trace lie about the past. A caller rendering decision controls from `gate.options` must
+ * first check the draft is still in a state a decision applies to
+ * (`awaiting_approval`/`blocked_guardrail`); it is not safe to infer that from `gate` alone. The
+ * console gets this for free because it only renders a `DraftCard` for children already filtered to
+ * those two states; `app/(main)/approvals/[id]/page.tsx` opens by direct link and has to check it
+ * itself, which is where this was found — a completed approval still showed a live Approve button.
  */
 export type BatchChild = {
   run: Run;

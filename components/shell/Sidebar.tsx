@@ -17,8 +17,10 @@
  * Sprout Social's published rule and the reason a multi-channel interface does not turn to confetti.
  */
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { getQueue, subscribeToWorld } from '@/lib/agentClient';
 
 type Dest = { href: string; label: string; glyph: string };
 
@@ -30,8 +32,27 @@ const DESTINATIONS: Dest[] = [
   { href: '/settings', label: 'Settings', glyph: '⚙' },
 ];
 
-export function Sidebar({ waiting }: { waiting: number }) {
+export function Sidebar() {
   const pathname = usePathname();
+  /** Own read, not a prop from the layout. The badge has to move the moment anything decides an
+   *  item anywhere in the app, and a server-rendered prop would only ever reflect the page the
+   *  operator loaded first. */
+  const [waiting, setWaiting] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      void getQueue().then((items) => {
+        if (!cancelled) setWaiting(items.length);
+      });
+    };
+    const unsubscribe = subscribeToWorld(refresh);
+    refresh();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   return (
     <aside className="shell-side">
