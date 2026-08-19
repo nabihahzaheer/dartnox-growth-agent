@@ -139,7 +139,11 @@
 
   --text: #151a1e;
   --text-muted: #4c555c;
-  --text-faint: #78838b;
+  /* Was #78838b — 3.9:1 on white and 3.6:1 on the sunk surface, both under the 4.5:1 that normal
+     text needs. It carries the descriptor under all 29 rule rows on Settings, every "takes effect"
+     line and every tile caption, so it was the single most-read failing colour in the app.
+     #626c75 measures 5.36:1 on white and 4.83:1 on --surface-sunk. */
+  --text-faint: #626c75;
 
   --accent: #2c5aa8;
   --accent-ink: #ffffff;
@@ -637,6 +641,11 @@ body {
 }
 
 
+/* `min-width: 0`, because a grid child defaults to `min-width: auto` and is therefore never
+   allowed to be narrower than its content. At 375px the horizontal nav strip is 573px wide, so the
+   track grew to fit it and the whole page scrolled sideways behind an `overflow-x: auto` that
+   never got the chance to fire. */
+.shell-side, .shell-main { min-width: 0; }
 .shell-main {
   padding: 26px 30px 80px;
   /* Was a hard 1020px cap, which left the seven-column calendar squeezed into two thirds of a wide
@@ -647,7 +656,24 @@ body {
 }
 
 /* ---- page furniture ---- */
+/**
+ * OPTICALLY ALIGNED WITH THE PANELS, NOT MATHEMATICALLY.
+ *
+ * The heading and its lede sat flush with the panels' outer BORDER, while the first text inside a
+ * panel sits at the panel's padding. So the page had two text columns a few pixels apart, and
+ * because the panel's corner is rounded, the eye reads its content edge as the panel's real left
+ * edge — the page text then looks like it is hanging off to the left. The correction is the one
+ * every rounded container needs: pad the text by an amount derived from the radius so it aligns
+ * with the shape rather than with the bounding box.
+ *
+ * The inset matches the panels' own padding, so every piece of text on the screen — the h1, its
+ * lede, each panel's heading, each tile's label — begins on one line, and the panel boxes sit
+ * slightly outside it. That is the iOS grouped-settings arrangement and the one that actually
+ * removes the misalignment rather than halving it: a correction of half the radius still leaves
+ * the page text 16px short of the panel text, which is the gap the eye was catching.
+ */
 .page-head {
+  padding-left: var(--sp-5);
   margin-bottom: var(--sp-6);
 }
 .page-title {
@@ -1044,7 +1070,7 @@ body {
   font-size: 10.5px; font-weight: 700; }
 
 /* ---- buttons: small variant ---- */
-.btn-sm { font-size: 12.5px; padding: 5px 11px; }
+.btn-sm { font-size: var(--fs-sub); padding: 6px 12px; }
 
 /* ---- the week ----
    `.rh` / `.l1` were referenced by week/page.tsx and defined nowhere, so Tailwind's preflight left
@@ -1185,7 +1211,8 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .rng { flex: 1; accent-color: var(--accent); height: 4px; cursor: pointer; }
 
 .tgl { appearance: none; border: 0; padding: 0; cursor: pointer; flex: none;
-  width: 34px; height: 20px; border-radius: 99px; background: var(--border-strong);
+  /* The off track was #cdd3d8 on white — 1.5:1, against the 3:1 a control boundary needs. */
+  width: 34px; height: 20px; border-radius: 99px; background: #9aa4ad;
   position: relative; transition: background 0.15s; }
 .tgl:disabled { opacity: 0.5; cursor: not-allowed; }
 .tgl-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
@@ -1196,7 +1223,7 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
    the cursor says it is not an ordinary switch. Still clickable — D-047's refusal has to be
    reachable, because a disabled input cannot answer "why". */
 .tgl-locked { background: var(--surface-sunk); border: 1px solid var(--border-strong);
-  color: var(--text-faint); display: grid; place-items: center; cursor: help; }
+  color: var(--text-faint); display: grid; place-items: center; cursor: not-allowed; }
 .tgl-locked.tgl-on { background: var(--surface-sunk); }
 .tgl-lock { width: 11px; height: 11px; }
 .tgl-on .tgl-knob { transform: translateX(14px); }
@@ -1220,6 +1247,17 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .preview-score { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600;
   width: 40px; }
 
+/* FIXED TO THE VIEWPORT.
+   Every settings write reported into a paragraph at the top of a 2,400px page — so toggling a
+   guardrail 2,000px down, or a locked switch refusing and explaining why, produced feedback the
+   operator could not see. It follows the eye now. */
+.note-dock { position: fixed; left: 50%; bottom: var(--sp-5); transform: translateX(-50%);
+  z-index: 40; max-width: min(560px, calc(100vw - var(--sp-5) * 2)); pointer-events: none; }
+.note-dock .note { box-shadow: 0 6px 24px rgb(16 24 32 / 14%); pointer-events: auto; margin: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .note-dock .note { animation: note-in .16s ease-out; }
+}
+@keyframes note-in { from { opacity: 0; transform: translateY(6px); } }
 .note { margin: 0 0 16px; padding: 9px 13px; border-radius: var(--radius-sm); font-size: 13px;
   background: var(--go-soft); color: #1d5238; }
 .note-stop { background: var(--stop-soft); color: var(--stop); }
@@ -1385,19 +1423,6 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 /* ================================================================================================
  * METRICS — grouped surfaces rather than tiles floating on the page
  * ==============================================================================================*/
-.mgroup { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden; }
-.mgroup-head { padding: 14px 18px 12px; border-bottom: 1px solid var(--border); }
-.mgroup-title { margin: 0; font-size: var(--fs-head); font-weight: 600; letter-spacing: -.01em; }
-.mgroup-detail { margin: var(--sp-1) 0 0; font-size: var(--fs-sub); color: var(--text-muted); }
-.mgroup-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
-.mgroup-grid > * { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-/* Hairlines only between cells, never on the outer edge — the card's own border is the outline. */
-.mgroup-grid > *:nth-child(3n) { border-right: 0; }
-.mgroup-grid > *:nth-last-child(-n+3):nth-child(3n+1),
-.mgroup-grid > *:nth-last-child(-n+3):nth-child(3n+1) ~ * { border-bottom: 0; }
-@media (max-width: 900px) { .mgroup-grid { grid-template-columns: 1fr; }
-  .mgroup-grid > * { border-right: 0; } }
 
 /**
  * Stat anatomy taken from Insightful's ROI summary and Gumloop's stat row: the NUMBER leads, and
@@ -1406,27 +1431,6 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
  * of the one that stopped you. Mine had a 13px label above the number, so every tile asked to be
  * read as a sentence before it would give up its value.
  */
-.tile { background: var(--surface); border: 0; border-radius: 0; padding: var(--sp-4) var(--sp-5);
-  box-shadow: none; display: flex; flex-direction: column; gap: 2px; }
-.tl2 { font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
-  color: var(--text-faint); margin: 0; order: 2; }
-.tb { font-size: 30px; font-weight: 660; letter-spacing: -.03em; line-height: 1.05;
-  font-variant-numeric: tabular-nums; }
-.tb-muted { font-size: 19px; font-weight: 620; color: var(--text-faint); letter-spacing: -.01em;
-  order: 1; }
-.tfoot { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
-  margin-top: var(--sp-2); order: 3; }
-.vpill { font-size: var(--fs-meta); font-weight: 640; padding: 1px 8px; border-radius: 99px; }
-.v-go { background: var(--go-soft); color: var(--go); }
-.v-at { background: var(--attend-soft); color: var(--attend); }
-.tband { font-size: var(--fs-meta); color: var(--text-faint); }
-.tn { font-size: var(--fs-meta); color: var(--text-faint); }
-.tv.nd { font-size: var(--fs-meta); color: var(--text-faint); font-weight: 400; order: 3;
-  margin-top: var(--sp-1); }
-/* Insightful tints exactly one cell in a row to mark the headline figure and leaves the rest
-   plain. Colour that appears on every cell stops meaning anything. */
-.tile-lead { background: var(--go-soft); }
-.tile-lead .tb { color: var(--go); }
 
 /* ---- settings: things you see but rarely change ---- */
 .adv { margin-top: 14px; }
@@ -1462,6 +1466,12 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
  * four related switches into four separate things and makes the screen read as a long ruled list.
  * The card edge is the grouping; rows inside it are separated by space.
  */
+/* Wraps below the point where the control column stops leaving room for a label. It did not, so
+   at 375px the name column collapsed to 51px and set one word per line down six lines. */
+@media (max-width: 620px) {
+  .set-row { flex-wrap: wrap; }
+  .set-control { width: 100%; justify-content: flex-start; }
+}
 .set-row { display: flex; align-items: flex-start; gap: var(--sp-5); padding: var(--sp-3) 0; }
 .set-row + .set-row { padding-top: var(--sp-3); }
 .set-label { flex: 1; min-width: 0; }
@@ -1485,12 +1495,6 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 /* ---- metrics: the same rhythm as everywhere else ----
    The groups sat flush under the page subtitle with no breathing room, and the tiles were packed
    to their cell edges. Spacing now comes off the same scale the rest of the app uses. */
-.mgroup { margin-bottom: var(--sp-4); }
-.mgroup-head { padding: var(--sp-4) var(--sp-5) var(--sp-3); }
-.tile { padding: var(--sp-4) var(--sp-5) var(--sp-5); gap: var(--sp-1); }
-.tb { font-size: 30px; font-weight: 640; letter-spacing: -.03em; line-height: 1.05;
-  font-variant-numeric: tabular-nums; order: 1; }
-.tfoot { margin-top: var(--sp-2); }
 /* The first group needs air under the page head, and the drill-downs need it under the groups. */
 .metrics-top { margin-top: var(--sp-5); }
 
@@ -1555,9 +1559,6 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .wk-today .wk-daylabel { border-bottom-color: var(--border-strong); }
 
 /* ---- metric group footnote (Insightful) ---- */
-.mgroup-foot { margin: 0; padding: var(--sp-3) var(--sp-5) var(--sp-4); font-size: var(--fs-sub);
-  color: var(--text-muted); line-height: 1.55; border-top: 1px solid var(--border);
-  max-width: 88ch; }
 
 /* ================================================================================================
  * CONSOLE HERO — the batch leads the screen
@@ -1791,3 +1792,122 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
   .runlist li { grid-template-columns: 10px minmax(0, 1fr) auto; }
   .run-detail, .run-id { display: none; }
 }
+
+
+/* ============================================================================================
+   METRICS — ONE PANEL SHAPE, ONE TILE SHAPE
+
+   The screen had three: cards with the title inside, bare headings over an unstyled panel, and a
+   heading with a decorative pill beside it. Everything is a `.mpanel` now, and the heading always
+   lives on the panel.
+
+   The tiles used to be grid cells separated by borders on each cell, which is why there were thin
+   rules that stopped partway across — with seven tiles in a three-column grid, the bottom border
+   of row three runs under one cell and stops. Gaps do the same job and cannot end anywhere odd.
+   ============================================================================================ */
+.mpanel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); margin-bottom: var(--sp-4); }
+.mpanel-head { padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--border); }
+.mpanel-title { margin: 0; font-size: var(--fs-head); font-weight: 600; letter-spacing: -.01em; }
+.mpanel-detail { margin: var(--sp-1) 0 0; font-size: var(--fs-sub); color: var(--text-muted);
+  max-width: 78ch; text-wrap: pretty; }
+.mpanel-body { padding: var(--sp-5); }
+.mpanel-empty { margin: 0; font-size: var(--fs-sub); color: var(--text-muted); }
+
+/* Four across, so a panel of four is one row rather than three and an orphan. `auto-fill` with a
+   floor rather than a fixed count, so the last row of a seven-tile panel keeps the same cell width
+   as the first instead of stretching to fill. */
+.tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: var(--sp-5); padding: var(--sp-5); }
+/* Scoped, and resetting explicitly. `.tile` is also v1's metric card — bordered, padded, shadowed
+   — and v1 is the preserved 17 Aug submission, so its rule stays and this one overrides inside the
+   new grid only. Without the reset the tiles inherited a border and 16px of padding, which added a
+   third text column to a page that already had two too many. */
+.tile-grid .tile { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0;
+  background: none; border: 0; border-radius: 0; padding: 0; box-shadow: none; }
+.tile-grid .tile-label { margin: 0; font-size: var(--fs-meta); font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--text-faint); text-wrap: pretty; }
+.tile-grid .tile-value { margin: 2px 0 0; font-size: 30px; font-weight: 640; letter-spacing: -.03em;
+  line-height: 1.05; font-variant-numeric: tabular-nums; }
+/* Amber is the only colour on a tile and it means one thing: outside the band. It used to be green
+   on whichever tile happened to be first, which put a healthy tint behind "Needs a look". */
+.tile-grid .tile-value-attend { color: var(--attend); }
+.tile-grid .tile-value-off { font-size: 19px; font-weight: 600; color: var(--text-faint); letter-spacing: -.01em;
+  padding-top: 7px; }
+.tile-grid .tile-target { margin: var(--sp-2) 0 0; font-size: var(--fs-meta); color: var(--text-faint);
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.tile-grid .tile-flag { font-size: var(--fs-meta); font-weight: 640; padding: 1px 8px; border-radius: 99px;
+  background: var(--attend-soft); color: var(--attend); }
+.tile-grid .tile-note { margin: var(--sp-2) 0 0; font-size: var(--fs-sub); color: var(--text-muted);
+  line-height: 1.45; text-wrap: pretty; }
+@media (max-width: 620px) {
+  .tile-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---- the two comparison charts ---- */
+.chart { display: flex; flex-direction: column; gap: var(--sp-2); }
+.crow { appearance: none; border: 0; background: none; font: inherit; cursor: pointer; width: 100%;
+  display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr) 128px;
+  align-items: center; gap: var(--sp-4); padding: var(--sp-3); border-radius: var(--radius-sm);
+  text-align: left; }
+.crow:hover { background: var(--surface-sunk); }
+.crow-on { background: var(--accent-soft); }
+.cname { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cname-t { font-size: var(--fs-body); font-weight: 600; }
+.cname-s { font-size: var(--fs-meta); color: var(--text-muted); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.ctrack { height: 10px; background: var(--surface-sunk); border-radius: 99px; overflow: hidden; }
+.ctrack i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.crow-on .ctrack i { background: var(--accent-text); }
+.cval { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.cval-n { font-size: var(--fs-lede); font-weight: 640; font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em; }
+.cval-s { font-size: var(--fs-meta); color: var(--text-faint); }
+@media (max-width: 760px) {
+  .crow { grid-template-columns: minmax(0, 1fr) auto; }
+  .crow .ctrack { grid-column: 1 / -1; }
+}
+
+/* ============================================================================================
+   SETTINGS — a typed money field, and section notes that used to live inside a disclosure
+   ============================================================================================ */
+.money-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  margin-top: var(--sp-4); }
+.money-label { font-size: var(--fs-sub); color: var(--text-muted); }
+/* The sign sits inside the field, the way every currency input does, so the amount reads as one
+   value rather than as a symbol next to a number. */
+.money-input { display: inline-flex; align-items: center; gap: 2px; background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  padding: 0 var(--sp-3); height: 36px; }
+.money-input:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.money-input.is-bad { border-color: var(--stop); }
+.money-sign { font-size: var(--fs-body); color: var(--text-faint); }
+.money-input input { border: 0; background: none; outline: none; font: inherit;
+  font-size: var(--fs-body); font-variant-numeric: tabular-nums; width: 88px; padding: 0;
+  color: var(--text); }
+.money-per { font-size: var(--fs-sub); color: var(--text-faint); }
+.field-note { margin: var(--sp-2) 0 0; font-size: var(--fs-sub); color: var(--text-muted);
+  max-width: 72ch; text-wrap: pretty; }
+/* The line under a section heading, which used to be `.adv-note` inside a `<details>`. */
+.sec-note { margin: calc(var(--sp-1) * -1) 0 var(--sp-3); font-size: var(--fs-sub);
+  color: var(--text-muted); max-width: 72ch; text-wrap: pretty; }
+.preview-line { margin: var(--sp-3) 0 0; }
+.set-panel > .bud-line + .money-row { margin-top: var(--sp-4); }
+
+
+/* Settings sections are the metrics panel. `.set-panel` brought its own surface, border and radius
+   from when it WAS the panel; inside one it is just the body. */
+.mpanel-body.set-panel { background: none; border: 0; border-radius: 0; box-shadow: none;
+  padding: var(--sp-5); }
+
+/* The reason a control is locked, as row text. It used to be a `title` attribute — a mouse-only
+   affordance — so keyboard and touch users had no way to reach it at all. */
+.rule-lock { margin: var(--sp-1) 0 0; font-size: var(--fs-sub); color: var(--text-muted);
+  max-width: 68ch; text-wrap: pretty; }
+.rule-row-flush { padding-top: 0; }
+.preview-pill { margin-left: auto; }
+
+/* Replaces four inline styles in the Voice section that were re-tuning the same two values. */
+.t-label { margin: 0; }
+.t-sample { margin: var(--sp-1) 0 0; color: var(--text-muted); }
+.chip-row { margin-top: var(--sp-2); }

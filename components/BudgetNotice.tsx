@@ -94,7 +94,13 @@ const STATE_PILL: Record<BudgetPosture['state'], string> = {
 export function BudgetLine({ budget }: { budget: BudgetPosture }) {
   return (
     <div className="bud-line">
-      <span className={`pill ${STATE_PILL[budget.state]}`}>{STATE_LABEL[budget.state]}</span>
+      {/* NO PILL WHILE THE SPEND IS FINE. A green "under cap" chip beside a bar that is 30% full
+          is the bar's own information said twice, and it put a coloured badge on the one state
+          nobody needs telling about. The pill returns at `alert` and `stopped`, where it is the
+          only thing on the line saying the gate has changed what the agent may do. */}
+      {budget.state !== 'under' && (
+        <span className={`pill ${STATE_PILL[budget.state]}`}>{STATE_LABEL[budget.state]}</span>
+      )}
       <span className="bud-figs">
         <b>{money(budget.spent)}</b> of {money(budget.cap)} this period
       </span>

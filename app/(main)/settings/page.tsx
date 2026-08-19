@@ -135,7 +135,7 @@ function Toggle({
   busy,
   label,
   locked = false,
-  lockReason,
+  describedBy,
   onToggle,
 }: {
   on: boolean;
@@ -143,9 +143,9 @@ function Toggle({
   label: string;
   /** Renders as a locked control rather than being labelled "locked" beside a normal one. */
   locked?: boolean;
-  /** Shown on hover. The row already knows why — `fixed_reason` on a rule, `lock_reason` on
-   *  auto-approve — so the control says it instead of making the operator find out by pressing. */
-  lockReason?: string;
+  /** The id of the element holding the reason this control is locked. The reason is visible row
+   *  text; this only binds it to the switch for assistive tech. */
+  describedBy?: string;
   onToggle: () => void;
 }) {
   return (
@@ -156,10 +156,12 @@ function Toggle({
       aria-label={locked ? `${label} (locked)` : label}
       className={`tgl${on ? ' tgl-on' : ''}${locked ? ' tgl-locked' : ''}`}
       disabled={busy}
-      /** The reason, on hover and on focus, rather than only after a click. D-047 keeps the click
-       *  working — the refusal has to be reachable — but making the operator press a control to
-       *  learn they cannot press it is a poor first answer. */
-      title={locked ? lockReason : undefined}
+      /** `title` is a MOUSE affordance: it does not fire on keyboard focus and never appears on
+       *  touch, so eight locked controls carried their justification somewhere two of three input
+       *  methods could not reach. The reason is rendered as row text now (see `lockReason` in
+       *  `RuleSection` and `GuardrailSection`) and referenced here, so it is announced with the
+       *  control rather than hidden behind a pointer. D-047 still keeps the click working. */
+      aria-describedby={locked && describedBy ? describedBy : undefined}
       onClick={onToggle}
     >
       {/**
@@ -243,7 +245,7 @@ export default function SettingsPage() {
       {/* The only feedback for every settings write, including a locked control's refusal — and a
           locked switch correctly does not change `aria-checked`, so without this a screen-reader
           user clicking one got complete silence. */}
-      <div aria-live="polite">
+      <div aria-live="polite" className="note-dock">
         {note && <p className={`note${note.bad ? ' note-stop' : ''}`}>{note.text}</p>}
       </div>
 
@@ -265,6 +267,7 @@ export default function SettingsPage() {
 
       <RuleSection
         title="Approval rules"
+        detail="When the agent stops and asks a person before it acts."
         kind="approval_rule"
         rows={data.settings.approval_rules}
         say={say}
@@ -273,6 +276,7 @@ export default function SettingsPage() {
 
       <RuleSection
         title="Escalation triggers"
+        detail="What gets raised beyond the queue, and who it goes to."
         kind="escalation_trigger"
         rows={data.settings.escalation_triggers}
         say={say}
@@ -290,6 +294,9 @@ function PageHead() {
   return (
     <header className="page-head">
       <h1 className="page-title">Settings</h1>
+      <p className="page-sub">
+        How the agent writes, what it may spend, and when it stops for a person.
+      </p>
     </header>
   );
 }
@@ -353,12 +360,15 @@ function VoiceSection({
   }
 
   return (
-    <section className="section">
-      <h2 className="sec">Voice</h2>
-      <div className="set-panel">
+    <section className="mpanel">
+      <header className="mpanel-head">
+        <h2 className="mpanel-title">Voice</h2>
+        <p className="mpanel-detail">How the agent writes, and the phrases it may never use.</p>
+      </header>
+      <div className="mpanel-body set-panel">
         <div className="field">
           <label className="t-label" htmlFor="register">
-            Register
+            Tone
           </label>
           <div className="field-row">
             <input
@@ -380,19 +390,13 @@ function VoiceSection({
         </div>
 
         <div className="field">
-          <p className="t-label" style={{ margin: 0 }}>
-            Sample
-          </p>
-          <p className="t-body" style={{ margin: '4px 0 0', color: 'var(--text-muted)' }}>
-            {settings.tone.sample}
-          </p>
+          <p className="t-label">Sample</p>
+          <p className="t-sample">{settings.tone.sample}</p>
         </div>
 
         <div className="field">
-          <p className="t-label" style={{ margin: 0 }}>
-            Banned phrases
-          </p>
-          <div className="chip-row" style={{ marginTop: 6 }}>
+          <p className="t-label">Banned phrases</p>
+          <div className="chip-row">
             {settings.tone.banned_phrases.map((p) => (
               <span key={p} className="phrase-chip">
                 {p}
@@ -403,7 +407,7 @@ function VoiceSection({
 
         <div className="field">
           <label className="t-label" htmlFor="phrase">
-            Add a phrase
+            Add a banned phrase
           </label>
           <div className="field-row">
             <input
@@ -419,7 +423,7 @@ function VoiceSection({
               disabled={banning || !trimmed || alreadyBanned}
               onClick={() => void ban()}
             >
-              {banning ? '…' : 'Ban phrase'}
+              {banning ? '…' : 'Add phrase'}
             </button>
           </div>
           <Timing settings={settings} path="tone.banned_phrases" />
@@ -475,15 +479,18 @@ function ThresholdSection({
   }
 
   return (
-    <section className="section">
-      <h2 className="sec">Review threshold</h2>
-      <div className="set-panel">
+    <section className="mpanel">
+      <header className="mpanel-head">
+        <h2 className="mpanel-title">Review threshold</h2>
+        <p className="mpanel-detail">The score a draft must reach to arrive unflagged.</p>
+      </header>
+      <div className="mpanel-body set-panel">
         {/* A 60px readout and a full-width track was a giant control for one two-digit number. The
             slider is now the width it needs, the value sits with it, and both sit right of the
             label like every other row on this screen. */}
         <div className="set-row">
           <div className="set-label">
-            <p className="set-name">Score a draft must reach</p>
+            <p className="set-name" id="score-threshold-name">Minimum score</p>
             <p className="set-help">Anything below this arrives flagged and sorted to the top.</p>
           </div>
           <div className="set-control">
@@ -494,7 +501,7 @@ function ThresholdSection({
               max={range.max}
               step={0.01}
               value={value}
-              aria-label="Review threshold"
+              aria-labelledby="score-threshold-name"
               onChange={(e) => setValue(Number(e.target.value))}
             />
             <output className="set-value">{value.toFixed(2)}</output>
@@ -509,10 +516,10 @@ function ThresholdSection({
           </div>
         </div>
         <Timing settings={settings} path="score_threshold" />
-        <p className="preview-line" style={{ marginTop: 10 }}>
+        <p className="preview-line">
           {sorted.length === 0
-            ? 'Nothing waiting on a person right now.'
-            : `Would flag ${flagged} of ${sorted.length} waiting draft${sorted.length === 1 ? '' : 's'} at this bar.`}
+            ? 'No drafts waiting.'
+            : `Would flag ${flagged} of ${sorted.length} waiting draft${sorted.length === 1 ? '' : 's'}.`}
         </p>
 
         {sorted.length > 0 && (
@@ -522,8 +529,7 @@ function ThresholdSection({
                 <span className="preview-score">{d.composite_score.toFixed(2)}</span>
                 <ChannelMark channel={d.channel} size={14} withLabel />
                 <span
-                  className={`pill ${d.composite_score < value ? 'pill-attend' : 'pill-go'}`}
-                  style={{ marginLeft: 'auto' }}
+                  className={`pill preview-pill ${d.composite_score < value ? 'pill-attend' : 'pill-go'}`}
                 >
                   {d.composite_score < value ? 'flagged' : 'ready'}
                 </span>
@@ -569,8 +575,13 @@ function BudgetSection({
   onSaved: () => void;
 }) {
   const range = settings.field_meta['budget.cap']?.range ?? { min: 50, max: 2000 };
-  const [value, setValue] = useState(settings.budget.cap);
+  /** Held as the typed string, so a half-finished number is not coerced to 0 under the cursor. */
+  const [draft, setDraft] = useState(String(settings.budget.cap));
   const [saving, setSaving] = useState(false);
+
+  const parsed = Number(draft.replace(/[^0-9.]/g, ''));
+  const valid = draft.trim() !== '' && Number.isFinite(parsed) && parsed >= range.min && parsed <= range.max;
+  const value = valid ? parsed : settings.budget.cap;
 
   /** The posture this cap would produce, through the same function that produced the live one. */
   const pending: BudgetPosture = {
@@ -579,6 +590,8 @@ function BudgetSection({
     pct: budgetPct(budget.spent, value),
     state: budgetStateAt(budget.spent, value, budget.alert_pct, budget.stop_pct),
   };
+
+  const at = (pct: number) => `$${Math.round((value * pct) / 100).toLocaleString()}`;
 
   async function save() {
     setSaving(true);
@@ -594,49 +607,90 @@ function BudgetSection({
   }
 
   return (
-    <section className="section">
-      <h2 className="sec">Monthly budget</h2>
-      <div className="set-panel">
+    <section className="mpanel">
+      <header className="mpanel-head">
+        <h2 className="mpanel-title">Monthly budget</h2>
+        <p className="mpanel-detail">What the agent may spend on models and platform calls each month.</p>
+      </header>
+      <div className="mpanel-body set-panel">
         <BudgetLine budget={pending} />
 
-        <div className="field-row" style={{ marginTop: 14 }}>
-          <input
-            type="range"
-            className="rng"
-            min={range.min}
-            max={range.max}
-            step={10}
-            value={value}
-            onChange={(e) => setValue(Number(e.target.value))}
-            aria-label="Monthly cap"
-          />
-          <span className="t-metric" style={{ width: 76 }}>
-            ${value}
+        {/**
+         * A TYPED AMOUNT, NOT A SLIDER.
+         *
+         * The cap was a range slider you dragged to a dollar figure. Nobody sets a budget that way,
+         * and it is worth saying why rather than just calling it ugly: a slider is for a value where
+         * the position on the scale is the meaning and the exact number is not — a volume control, a
+         * score threshold. A budget is the opposite. The number is the whole point, it is arrived at
+         * outside the app (a finance conversation, a monthly allowance), and the operator comes here
+         * already knowing it. Dragging toward 400 in steps of ten is strictly worse than typing 400.
+         *
+         * What the cost tools actually do, all of them the same: AWS Budgets takes a typed amount
+         * and then percentage thresholds over it; Google Ads takes a typed amount and derives the
+         * monthly limit from it. Neither offers a slider anywhere near a currency. The percentage
+         * thresholds are the second half of that pattern and this screen already had them buried in
+         * prose on the metrics page — they are shown here as what they cost, because "alerts at 80%"
+         * is a rule and "$320" is the thing that happens.
+         *
+         * The score threshold above KEEPS its slider, and the difference is the argument: 0.85 has
+         * no meaning outside the distribution of scores, so the position on the scale is exactly
+         * what the operator is choosing.
+         */}
+        <div className="money-row">
+          <label className="money-label" htmlFor="budget-cap">
+            Cap
+          </label>
+          <span className={`money-input${draft.trim() !== '' && !valid ? ' is-bad' : ''}`}>
+            <span className="money-sign" aria-hidden>
+              $
+            </span>
+            <input
+              id="budget-cap"
+              type="text"
+              inputMode="decimal"
+              value={draft}
+              aria-describedby="budget-cap-note"
+              aria-invalid={draft.trim() !== '' && !valid}
+              onChange={(e) => setDraft(e.target.value)}
+            />
           </span>
+          <span className="money-per">per calendar month</span>
           <button
             type="button"
             className="btn"
-            disabled={saving || value === settings.budget.cap}
+            disabled={saving || !valid || value === settings.budget.cap}
             onClick={() => void save()}
           >
             {saving ? '…' : 'Save'}
           </button>
         </div>
 
+        <p className="field-note" id="budget-cap-note">
+          {draft.trim() !== '' && !valid
+            ? `Enter an amount between $${range.min} and $${range.max}.`
+            : `Alerts at ${budget.alert_pct}% (${at(budget.alert_pct)}). New planning and drafting pause at ${budget.stop_pct}% (${at(budget.stop_pct)}).`}
+        </p>
+
         <Timing settings={settings} path="budget.cap" />
         {pending.state !== budget.state && (
-          <p className="preview-line" style={{ marginTop: 10 }}>
-            Saving this would move the gate from {budget.state} to {pending.state}.
+          <p className="preview-line">
+            Saving this would move the gate from {STATE_WORD[budget.state]} to{' '}
+            {STATE_WORD[pending.state]}.
           </p>
         )}
 
-        <div style={{ marginTop: 12 }}>
-          <BudgetNotice budget={pending} />
-        </div>
+        <BudgetNotice budget={pending} />
       </div>
     </section>
   );
 }
+
+/** The gate's three states as words. `budget.state` is an enum member and was printed raw. */
+const STATE_WORD: Record<BudgetPosture['state'], string> = {
+  under: 'under the cap',
+  alert: 'alerting',
+  stopped: 'paused',
+};
 
 /* ================================================================================================
  * APPROVAL RULES / ESCALATION TRIGGERS — one shape, two settings-write kinds
@@ -644,12 +698,14 @@ function BudgetSection({
 
 function RuleSection({
   title,
+  detail,
   kind,
   rows,
   say,
   onSaved,
 }: {
   title: string;
+  detail: string;
   kind: 'approval_rule' | 'escalation_trigger';
   rows: EscalationRuleEntry[];
   say: (text: string, bad?: boolean) => void;
@@ -671,41 +727,50 @@ function RuleSection({
   }
 
   return (
-    <section className="section">
-      {/**
-       * Behind a disclosure, because these are onboarding decisions rather than daily controls.
-       *
-       * Eleven escalation triggers and four approval rules were presented as fifteen equal switches
-       * beside the tone field, which implies a marketing lead tunes "repeat rule failure" week to
-       * week. They do not — these are set when the client is onboarded and then left alone, and the
-       * screen should say so by how it presents them rather than by burying them.
-       */}
-      <details className="adv adv-flush">
-        <summary>
-          {title} <span className="adv-n">{rows.length}</span>
-        </summary>
-        <p className="adv-note">Set at onboarding. Changing one changes when the agent stops for a person.</p>
-        <div className="set-panel">
+    <section className="mpanel">
+      {/* PERMANENTLY OPEN. These were `<details>`, which put the two sections that say WHEN THE
+          AGENT STOPS FOR A PERSON behind a click, on a screen you visit precisely to check that.
+          A disclosure earns its place when the content is rarely wanted; these are four and eleven
+          rows of the settings most worth reading. */}
+      <header className="mpanel-head">
+        <h2 className="mpanel-title">
+          {title} <span className="sec-n">{rows.length}</span>
+        </h2>
+        <p className="mpanel-detail">{detail}</p>
+      </header>
+      <div className="mpanel-body set-panel">
         {rows.map((row) => (
           <div key={row.trigger} className="rule-row">
             <div className="rule-body">
               <p className="rule-title">{TRIGGER_LABEL[row.trigger]}</p>
+              {/* The two lists share four trigger names, and both said "Goes to you" under every
+                  row — so eight rows across two sections were visually identical and neither said
+                  what the section did differently. An approval rule HOLDS the work; an escalation
+                  RAISES it. The row says which. */}
               <p className="rule-sub">
-                {row.tier === 'stakeholder' ? 'Goes to the client owner' : 'Goes to you'}
+                {kind === 'approval_rule'
+                  ? 'Holds the post and waits for you'
+                  : row.tier === 'stakeholder'
+                    ? 'Notifies the client owner'
+                    : 'Notifies you'}
               </p>
+              {row.is_fixed && (
+                <p className="rule-lock" id={`${kind}-${row.trigger}-why`}>
+                  Cannot be switched off. A miss here is not recoverable.
+                </p>
+              )}
             </div>
             <Toggle
               on={row.enabled}
               locked={row.is_fixed}
-              lockReason="This rule cannot be loosened. Relaxing it on the evidence of its own false positives is only safe where a false negative is recoverable, and this one is not."
+              describedBy={row.is_fixed ? `${kind}-${row.trigger}-why` : undefined}
               busy={busy === row.trigger}
               label={TRIGGER_LABEL[row.trigger]}
               onToggle={() => void flip(row)}
             />
           </div>
         ))}
-        </div>
-      </details>
+      </div>
     </section>
   );
 }
@@ -776,11 +841,16 @@ function GuardrailSection({
           {rule.description}
           {!rule.is_enabled && rule.disabled_at && ` Switched off ${formatDate(rule.disabled_at)}.`}
         </p>
+        {rule.is_fixed && rule.fixed_reason && (
+          <p className="rule-lock" id={`${rule.id}-why`}>
+            {rule.fixed_reason}
+          </p>
+        )}
       </div>
       <Toggle
         on={rule.is_enabled}
         locked={rule.is_fixed}
-        lockReason={rule.fixed_reason}
+        describedBy={rule.is_fixed && rule.fixed_reason ? `${rule.id}-why` : undefined}
         busy={busy === rule.id}
         label={rule.display_name}
         onToggle={() => void flip(rule)}
@@ -789,9 +859,13 @@ function GuardrailSection({
   );
 
   return (
-    <section className="section">
-      <h2 className="sec">What the agent checks</h2>
-      <div className="set-panel">
+    <>
+    <section className="mpanel">
+      <header className="mpanel-head">
+        <h2 className="mpanel-title">Guardrails</h2>
+        <p className="mpanel-detail">Checks that shape what the agent writes.</p>
+      </header>
+      <div className="mpanel-body set-panel">
         {/**
          * ONE FLAT LIST, NOT FOUR LAYERS.
          *
@@ -807,21 +881,21 @@ function GuardrailSection({
          */}
         {[...content].sort((a, b) => Number(a.is_fixed) - Number(b.is_fixed)).map(row)}
       </div>
-
-      {/* Visible, but not presented as a dial. See CONTENT_KINDS above. */}
-      <details className="adv">
-        <summary>
-          System checks <span className="adv-n">{system.length}</span>
-        </summary>
-        <p className="adv-note">
-          These keep the agent honest rather than shaping what it writes. They are set once and
-          rarely changed.
-        </p>
-        <div className="set-panel">
-          {system.map(row)}
-        </div>
-      </details>
     </section>
+
+    {/* Visible, but not presented as a dial. See CONTENT_KINDS above. */}
+    <section className="mpanel">
+      <header className="mpanel-head">
+        <h2 className="mpanel-title">
+          System checks <span className="sec-n">{system.length}</span>
+        </h2>
+        <p className="mpanel-detail">
+          Checks that keep the agent honest rather than shaping what it writes.
+        </p>
+      </header>
+      <div className="mpanel-body set-panel">{system.map(row)}</div>
+    </section>
+    </>
   );
 }
 
@@ -853,20 +927,25 @@ function AutoApproveSection({
   }
 
   return (
-    <section className="section">
-      <h2 className="sec">Auto-approve</h2>
-      <div className="set-panel">
-        <div className="rule-row" style={{ paddingTop: 0 }}>
+    <section className="mpanel">
+      <header className="mpanel-head">
+        <h2 className="mpanel-title">Auto-approve</h2>
+      </header>
+      <div className="mpanel-body set-panel">
+        <div className="rule-row rule-row-flush">
           <div className="rule-body">
-            <p className="rule-title">Skip human review when every prerequisite is met</p>
+            <p className="rule-title">Publish without a person</p>
             <p className="rule-sub">
-              {met} of {auto.prereqs.length} met
+              {met} of {auto.prereqs.length} prerequisites met
+            </p>
+            <p className="rule-lock" id="auto-approve-why">
+              {auto.lock_reason}
             </p>
           </div>
           <Toggle
             on={auto.enabled}
             locked
-            lockReason={auto.lock_reason}
+            describedBy="auto-approve-why"
             busy={busy}
             label="Auto-approve"
             onToggle={() => void attempt()}

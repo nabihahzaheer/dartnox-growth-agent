@@ -59,8 +59,8 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
     label: 'Posts published',
     family: 'business',
     definition:
-      'Of the slots the calendar planned, the share that actually published. Slots that slipped, ' +
-      'were dropped or were quarantined count against it.',
+      'The share of planned slots that actually published. Slots that slipped, were dropped or ' +
+      'were quarantined count against it.',
     unit: '%',
     healthy_range: { min: 90, max: null },
     action_when_outside:
@@ -92,7 +92,7 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
      * hand would have cost — is flat against volume and is the number that actually steers.
      */
     definition:
-      'Time the system saved as a share of what writing those posts by hand would have cost: ' +
+      'Time saved as a share of what writing those posts by hand would have cost. Computed as ' +
       '(posts x your timed baseline − minutes spent in the queue) / (posts x baseline).',
     unit: '%',
     healthy_range: { min: 60, max: null },
@@ -110,9 +110,9 @@ export const metricDescriptors: (MetricDescriptor & { compute_key: ComputeKey })
     label: 'Engagement vs the account’s median',
     family: 'business',
     definition:
-      'Median engagement rate on agent-published posts against your own pre-existing median for ' +
-      'that channel. Mature posts only — engagement is still accruing before day seven, so an ' +
-      'immature post drags the median down for reasons that are not about the post.',
+      'Engagement on agent-published posts against this channel\'s own median before the agent. ' +
+      'Mature posts only — engagement is still accruing before day seven, so an immature post ' +
+      'drags the median down for reasons that are not about the post.',
     unit: 'x baseline',
     healthy_range: { min: 1, max: null },
     action_when_outside:
