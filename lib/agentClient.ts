@@ -384,6 +384,14 @@ export type DraftDetail = {
    *  view can say "below the 0.85 bar" instead of printing a bare number and leaving the reader to
    *  work out whether it is good. */
   threshold: number;
+  /**
+   * The learned writing rules this draft was written under, resolved.
+   *
+   * `Draft.applied_reflection_rule_ids` holds ids, and a screen rendering `REF-004` at an operator
+   * is the same defect as rendering `upstream_error` — the join belongs on the server side of the
+   * seam, where in production one query returns the document ready to render.
+   */
+  appliedRules: ReflectionRule[];
 };
 
 export async function getDraftDetail(id: DraftId): Promise<DraftDetail> {
@@ -408,6 +416,9 @@ export async function getDraftDetail(id: DraftId): Promise<DraftDetail> {
               (d) => d.variant_group_id === draft.variant_group_id && d.id !== draft.id,
             ) ?? null),
       threshold: world.settings.score_threshold,
+      appliedRules: world.reflectionRules.filter((r) =>
+        draft.applied_reflection_rule_ids.includes(r.id),
+      ),
     };
   });
 }

@@ -18,7 +18,7 @@
  * job is to show where that stands, not to offer a control for someone else's approval.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getWeek, initialWeekIndex, subscribeToWorld } from '@/lib/agentClient';
 import type { Week } from '@/lib/week';
@@ -62,12 +62,26 @@ export default function WeekPage() {
   const [week, setWeek] = useState<Week | null>(null);
   const [error, setError] = useState<ConsoleError | null>(null);
 
+  /**
+   * A sequence guard, because the stepper can outrun its own reads.
+   *
+   * `getWeek` sleeps 260ms. Two clicks inside that window race, and nothing stopped the older
+   * response landing last — leaving the grid showing one week while `index` held another. The
+   * previous/next buttons then computed the next step from `week.index` rather than `index`, so the
+   * stepper carried on from the stale week and the two never re-converged. Both halves are fixed:
+   * the buttons step from `index`, and a response is discarded unless it is the newest request.
+   */
+  const latest = useRef(0);
+
   const load = useCallback(async (i: number) => {
+    const ticket = ++latest.current;
     try {
       const w = await getWeek(i);
+      if (ticket !== latest.current) return;
       setWeek(w);
       setError(null);
     } catch (e) {
+      if (ticket !== latest.current) return;
       setError(asConsoleError(e));
     }
   }, []);

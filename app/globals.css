@@ -1149,3 +1149,56 @@ a.wk-entry:hover { background: var(--accent-soft); }
 .prereq-unmet { background: var(--surface-sunk); color: var(--text-faint); }
 .prereq-body p { margin: 0; }
 .prereq-detail { color: var(--text-faint); font-size: 12px; margin-top: 1px; }
+
+/* ---- evidence: what a draft was built from ---- */
+.ev { padding: 4px 18px; }
+.ev-row { display: grid; grid-template-columns: 150px 1fr; gap: 14px; padding: 11px 0;
+  border-bottom: 1px solid var(--border); align-items: start; }
+.ev-row:last-child { border-bottom: none; }
+.ev-k { margin: 0; font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--text-faint); padding-top: 2px; }
+.ev-v { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text-muted); }
+.ev-v b { color: var(--text); font-weight: 600; }
+.ev-stop .ev-k { color: var(--stop); }
+.ev-attend .ev-k { color: var(--attend); }
+.ev-id { font-size: 11.5px; color: var(--text-faint); }
+.ev-detail { color: var(--text-faint); }
+.ev-checks, .ev-rules { list-style: none; margin: 0; padding: 0; display: flex;
+  flex-direction: column; gap: 4px; }
+.ev-checks li { display: flex; align-items: baseline; gap: 8px; }
+.ev-tick { font-size: 10px; font-weight: 700; flex: none; }
+.ev-tick.is-pass { color: var(--go); }
+.ev-tick.is-fail { color: var(--stop); }
+.ev-rules li { padding-left: 12px; position: relative; }
+.ev-rules li::before { content: '·'; position: absolute; left: 2px; color: var(--text-faint); }
+.ev-src { font-size: 12px; }
+
+/* ---- sources inside an expanded step ---- */
+.src-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex;
+  flex-direction: column; gap: 9px; }
+.src { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 9px 11px; }
+.src-head { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; }
+.src-head b { color: var(--text); font-weight: 600; }
+.src-pub { color: var(--text-faint); font-size: 11.5px; margin-left: auto; }
+.src-guard { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--go); }
+.src-warn { background: var(--attend); }
+.src-fail { background: var(--stop); }
+.src-why { margin: 4px 0 0; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.src-quotes { list-style: none; margin: 6px 0 0; padding: 0 0 0 9px;
+  border-left: 2px solid var(--border-strong); display: flex; flex-direction: column; gap: 3px; }
+.src-quotes li { font-size: 12px; color: var(--text); line-height: 1.5; }
+.src-url { margin: 5px 0 0; font-size: 11px; color: var(--text-faint); }
+
+/* ---- escalation labelling ---- */
+.esc { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 15px; margin-top: 12px; box-shadow: var(--shadow); }
+.esc-body { flex: 1; min-width: 200px; }
+.esc-head { margin: 0; font-size: 13.5px; font-weight: 600; }
+.esc-trigger { font-weight: 400; color: var(--text-faint); }
+.esc-detail { margin: 3px 0 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+.esc-act { display: flex; align-items: center; gap: 7px; }
+
+/* ---- settings: when a change takes effect (A-16) ---- */
+.timing { margin: 5px 0 0; font-size: 11px; color: var(--text-faint); }

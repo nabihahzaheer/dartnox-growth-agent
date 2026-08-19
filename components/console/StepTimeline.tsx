@@ -131,6 +131,41 @@ function Row({
               ))}
             </dl>
             {step.thinking_text && <p className="tl-think">{step.thinking_text}</p>}
+
+            {/**
+             * SOURCES AND THEIR CITATIONS, WHICH RENDERED NOWHERE.
+             *
+             * The brief asks for the detail view to show "sources with citations", the PRD promises
+             * it, and `StepSource` carries url, publisher, `citations[]`, a guard result and
+             * `why_selected` — the last of which exists, in its own words, to make source choice
+             * "legible rather than magical". None of it reached a screen in the rebuild; v1 rendered
+             * it. A trace that names a fetch step without saying what was fetched, why it was chosen,
+             * or what was quoted from it is the debugger view the rebuild was supposed to replace,
+             * not an improvement on it.
+             */}
+            {step.sources.length > 0 && (
+              <ul className="src-list">
+                {step.sources.map((src) => (
+                  <li key={src.url} className="src">
+                    <p className="src-head">
+                      <span className={`src-guard src-${src.guard_result}`} aria-hidden />
+                      <span className="sr-only">source check {src.guard_result}</span>
+                      <b>{src.title}</b>
+                      <span className="src-pub">{src.publisher}</span>
+                    </p>
+                    <p className="src-why">{src.why_selected}</p>
+                    {src.citations.length > 0 && (
+                      <ul className="src-quotes">
+                        {src.citations.map((q, i) => (
+                          <li key={i}>“{q}”</li>
+                        ))}
+                      </ul>
+                    )}
+                    <p className="src-url mono">{src.domain}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>

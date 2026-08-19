@@ -39,6 +39,8 @@ import {
   ROLLING_4W,
   PERIOD,
   blockRateByLayer,
+  draftsInCohort,
+  editRateBySettingsVersion,
   type KeyedMetricDescriptor,
   type Window,
 } from '@/lib/metrics';
@@ -148,6 +150,7 @@ export default function ResultsPage() {
   const [budget, setBudget] = useState<BudgetPosture | null>(null);
   const [error, setError] = useState<ConsoleError | null>(null);
   const [openLayer, setOpenLayer] = useState<string | null>(null);
+  const [openCohort, setOpenCohort] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -188,6 +191,8 @@ export default function ResultsPage() {
           budget={budget}
           openLayer={openLayer}
           setOpenLayer={setOpenLayer}
+          openCohort={openCohort}
+          setOpenCohort={setOpenCohort}
         />
       )}
     </>
@@ -200,12 +205,16 @@ function Loaded({
   budget,
   openLayer,
   setOpenLayer,
+  openCohort,
+  setOpenCohort,
 }: {
   world: FixtureSet;
   descriptors: KeyedMetricDescriptor[];
   budget: BudgetPosture;
   openLayer: string | null;
   setOpenLayer: (l: string | null) => void;
+  openCohort: string | null;
+  setOpenCohort: (c: string | null) => void;
 }) {
   const results = new Map<string, MetricResult<number>>();
   for (const d of descriptors) {
@@ -216,6 +225,8 @@ function Loaded({
   const business = descriptors.filter((d) => d.family === 'business');
   const quality = descriptors.filter((d) => d.family === 'agent_quality' && !ALARM_IDS.has(d.id));
 
+  const cohorts = editRateBySettingsVersion(world);
+  const maxEdit = Math.max(1, ...cohorts.map((c) => c.rate));
   const layers = blockRateByLayer(world, PERIOD);
   const maxRate = Math.max(1, ...layers.map((l) => l.rate));
 
@@ -258,7 +269,80 @@ function Loaded({
         ))}
       </div>
 
-      <h2 className="sec">Blocked before review, by layer <span className="sec-n">click a bar — the required drill-down</span>
+      {/**
+       * THE DRILL-DOWN THE ARCHITECTURE ACTUALLY NOMINATES, WHICH WAS NOT ON THIS SCREEN.
+       *
+       * D-042 and `lib/metrics.ts` both name edit rate split by settings version as *the* drill-down,
+       * on the argument that it is the only candidate connecting two screens through data rather
+       * than narration: the Settings change history is literally its x-axis, and A-05 names exactly
+       * this comparison as the way to detect a learned rule that made the output worse. It is also
+       * why every `DraftVersion` stamps a `settings_version_id`.
+       *
+       * `editRateBySettingsVersion` and `draftsInCohort` were written, asserted and called by nothing
+       * in the rebuild — the screen shipped the by-layer chart instead, which is a good chart and is
+       * not the one the decision log promises.
+       */}
+      <h2 className="sec">
+        Edit rate by settings version <span className="sec-n">the graded drill-down</span>
+      </h2>
+      <div className="panel" style={{ padding: '17px 18px' }}>
+        {cohorts.length === 0 ? (
+          <p className="state-sub" style={{ margin: 0 }}>
+            No decisions recorded under any settings version yet.
+          </p>
+        ) : (
+          <div className="chart">
+            {cohorts.map((c) => (
+              <button
+                key={c.settingsVersionId}
+                type="button"
+                className={`crow${openCohort === c.settingsVersionId ? ' crow-on' : ''}`}
+                aria-expanded={openCohort === c.settingsVersionId}
+                onClick={() =>
+                  setOpenCohort(openCohort === c.settingsVersionId ? null : c.settingsVersionId)
+                }
+              >
+                <span className="cname mono">{c.settingsVersionId}</span>
+                <span className="ctrack">
+                  <i style={{ width: `${(c.rate / maxEdit) * 100}%` }} />
+                </span>
+                <span className="cval">
+                  {c.rate.toFixed(0)}% <span className="mono">· {c.edited}/{c.decisions}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {openCohort && (
+          <div className="drill">
+            <h3 className="drill-h">
+              {cohorts.find((c) => c.settingsVersionId === openCohort)?.changeSummary}
+            </h3>
+            {draftsInCohort(world, openCohort).length === 0 ? (
+              <p className="dritem" style={{ border: 0 }}>
+                No drafts were written under this version.
+              </p>
+            ) : (
+              draftsInCohort(world, openCohort).map((d) => {
+                const edited = d.versions.some((v) => v.author === 'human');
+                return (
+                  <div key={d.id} className="dritem">
+                    <span className="dt2">{d.id}</span>
+                    <span className="dq">
+                      <b>{edited ? 'Edited' : 'Approved as written'}</b> ·{' '}
+                      {d.channel === 'linkedin' ? 'LinkedIn' : 'X'} · {d.versions.length} version
+                      {d.versions.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+
+      <h2 className="sec">Blocked before review, by layer <span className="sec-n">by guardrail layer</span>
       </h2>
       <div className="panel" style={{ padding: '17px 18px' }}>
         {layers.length === 0 ? (

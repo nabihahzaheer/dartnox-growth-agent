@@ -53,6 +53,7 @@ import {
 import type {
   ConsoleError,
   Draft,
+  EffectTiming,
   EscalationRuleEntry,
   EscalationTrigger,
   GuardrailLayer,
@@ -91,6 +92,28 @@ const PREREQ_LABEL: Record<string, string> = {
 };
 
 const LAYERS: GuardrailLayer[] = ['L1', 'L2', 'L3', 'L4'];
+
+/**
+ * A-16 requires every settings row to say when a change takes effect, and this screen said it
+ * nowhere. Most of these controls do nothing until the next scheduled run, which is the honest
+ * situation and exactly what an operator needs to know before touching one — a threshold that
+ * re-sorts the queue instantly and a tone register that changes nothing until Wednesday are not the
+ * same kind of control, and the screen was presenting them identically.
+ */
+const TIMING_LABEL: Record<EffectTiming, string> = {
+  immediate: 'Takes effect immediately',
+  next_draft: 'Takes effect on the next drafting run',
+  next_guardrail_run: 'Takes effect the next time guardrails run',
+  next_calendar: 'Takes effect when next week is planned',
+  next_publish: 'Takes effect at the next publish',
+};
+
+/** Reads the timing off `field_meta`, which is where A-16 puts it, rather than a second copy here. */
+function Timing({ settings, path }: { settings: Settings; path: string }) {
+  const timing = settings.field_meta[path]?.effect_timing;
+  if (!timing) return null;
+  return <p className="timing">{TIMING_LABEL[timing]}</p>;
+}
 
 /**
  * Every write here either succeeds or comes back `forbidden` carrying its own reason — see the
@@ -328,6 +351,7 @@ function VoiceSection({
               {savingRegister ? '…' : 'Save'}
             </button>
           </div>
+          <Timing settings={settings} path="tone.register" />
         </div>
 
         <div className="field">
@@ -373,6 +397,7 @@ function VoiceSection({
               {banning ? '…' : 'Ban phrase'}
             </button>
           </div>
+          <Timing settings={settings} path="tone.banned_phrases" />
           {trimmed && (
             <p className="preview-line">
               {alreadyBanned
@@ -451,6 +476,7 @@ function ThresholdSection({
             {saving ? '…' : 'Save'}
           </button>
         </div>
+        <Timing settings={settings} path="score_threshold" />
         <p className="preview-line" style={{ marginTop: 10 }}>
           {sorted.length === 0
             ? 'Nothing waiting on a person right now.'
@@ -570,6 +596,7 @@ function BudgetSection({
           </button>
         </div>
 
+        <Timing settings={settings} path="budget.cap" />
         {pending.state !== budget.state && (
           <p className="preview-line" style={{ marginTop: 10 }}>
             Saving this would move the gate from {budget.state} to {pending.state}.
@@ -688,7 +715,7 @@ function GuardrailSection({
                   <div className="rule-body">
                     <p className="rule-title">{rule.display_name}</p>
                     <p className="rule-sub mono">
-                      {rule.mechanism} · {rule.severity}
+                      {rule.mechanism} · {rule.severity} · {rule.effect_timing.replace(/_/g, ' ')}
                       {!rule.is_enabled && rule.disabled_at && ` · off ${formatDate(rule.disabled_at)}`}
                     </p>
                   </div>

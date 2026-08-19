@@ -16,11 +16,18 @@
 
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getDraftDetail, getGuardrailRules, getSettings } from '@/lib/agentClient';
+import {
+  getDraftDetail,
+  getGuardrailRules,
+  getSettings,
+  labelEscalationUnnecessary,
+} from '@/lib/agentClient';
 import type { DraftDetail } from '@/lib/agentClient';
 import type { ConsoleError, DraftId, GuardrailRule, Settings } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
 import { DecisionBar } from '@/components/console/DecisionBar';
+import { Evidence } from '@/components/console/Evidence';
+import { EscalationLabel } from '@/components/console/EscalationLabel';
 import { formatDateTime } from '@/lib/time';
 import { EmptyState, LoadError, LoadingState } from '@/components/ScreenState';
 import { StepTimeline } from '@/components/console/StepTimeline';
@@ -164,6 +171,27 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
           />
         )}
       </article>
+
+      <Evidence draft={draft} rules={detail.appliedRules} />
+
+      {/**
+       * The one-click control that makes escalation precision a real metric, which had no surface.
+       *
+       * `lib/types.ts` calls `was_unnecessary` "the shortest causal chain in the product between an
+       * action and a metric", and the rebuild left it unreachable — so the Results tile read 66.7%
+       * over three labels with seven escalations unlabelled and no way to label them. A metric that
+       * cannot move is a decoration.
+       */}
+      {events.filter((e) => e.escalation_tier !== 'none').map((e) => (
+        <EscalationLabel
+          key={e.id}
+          event={e}
+          onLabel={async (unnecessary) => {
+            await labelEscalationUnnecessary(e.id, unnecessary);
+            await load();
+          }}
+        />
+      ))}
 
       {history.length > 1 && (
         <section>
