@@ -463,7 +463,6 @@ function compactTrace(
   const base = {
     run_id: runId,
     thinking_text: null,
-    playback_ms: 600,
     model: null,
     model_snapshot: null,
     tokens_in: 0,

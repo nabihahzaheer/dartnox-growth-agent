@@ -92,19 +92,20 @@ of inputs that run consumed is assembled at emit time from current state. What's
 inputs the run consumed**, not the prose. Send a draft back marked *off pillar* and the next drafting
 step lists `Avoiding: Off pillar`; pick a different reason and it says that instead.
 
-**Timing.** Every step carries two numbers: `latency_ms` (honest — the drafting call really takes
-18.6s, and that is the duration shown on the step) and `playback_ms` (how long that step is shown
-working). A drafting child's real duration is **38.8s** and it plays over **3m36s**, or 3m02s from
-where the console attaches mid-run. So the playback does not compress — it **slows down**, by about
-**5.6×**. Four children stream at once inside fixed-height windows; at true speed that is four cards
-blurring through eleven steps each in under forty seconds, which is motion without legibility.
+**Timing.** A step has **one** duration, `latency_ms`, and it is both the figure shown on the step
+and the interval the step is shown working for. Nothing scales it. A drafting child runs **2m56s**
+from where the console attaches mid-run, because that is how long the work takes: a web search
+across a month of sources is 14s, fetching and parsing two documents is 36s, screening them against
+the recency and publisher rules is 31s, drafting is 34s.
 
-The slowdown is not uniform. Each step's share of the budget tracks roughly the **square root** of
-its own latency, so the 18.6s drafting call does not swallow half the run and a 0.14s tool result
-does not flash past — and every step's live clock advances at a rate you can read. A uniform 300ms
-tick is the faked streaming the brief rejects; so is a progress bar with nothing behind it. Both
-numbers sit on every step, and `PLAYBACK_SCALE` (`lib/agentClient.ts`) is the single multiplier
-between `playback_ms` and the wall clock.
+This replaced a two-clock design — an honest `latency_ms` plus a `playback_ms` the demo actually ran
+on, with a multiplier over the top — which was defensible reasoning that produced an indefensible
+screen. A step labelled 4.1s would sit there for twenty-eight seconds while its clock crawled toward
+4.1, so ten seconds of watching moved it three. The arithmetic was right; a clock that reads as a
+lie is broken regardless. The premise had quietly stopped holding anyway: the run is long because
+the work is long, not because the demo needs padding. One number, one timeline, and the live clock
+counts real seconds. A uniform 300ms tick is the faked streaming the brief rejects; so is a progress
+bar with nothing behind it.
 
 A step arrives when it **starts**, not when it finishes, and settles after its own duration. While
 it's in flight the console withholds the duration, tokens and cost, because those facts don't exist

@@ -1140,12 +1140,9 @@ export type StreamHandle = {
 /**
  * Emit a run's steps over time.
  *
- * WHY `playback_ms` AND NOT `latency_ms`. Every step carries both. `latency_ms` is the honest
- * number — a drafting call really does take about twenty seconds — and is rendered as metadata.
- * `playback_ms` is how long the console waits before showing the next step. A run played at its
- * true four-minute duration is unwatchable; a uniform 300ms tick is precisely the "faked
- * streaming" the brief rejects. Two numbers, and the README states the ratio rather than leaving a
- * reviewer to work out that the timings are invented.
+ * REAL TIME. A step is shown working for exactly its own `latency_ms` and not a millisecond more.
+ * There is no playback clock, no compression, no multiplier — see the note where `playback_ms`
+ * used to be defined for why the second number had to go.
  *
  * WHY A SELF-RESCHEDULING TIMEOUT AND A `cancelled` FLAG. React 19's StrictMode mounts every
  * component, unmounts it and mounts it again in development, on purpose, to expose effects that
@@ -1155,33 +1152,26 @@ export type StreamHandle = {
  * flight when cleanup runs.
  */
 /**
- * ◆ DEMO AFFORDANCE — no production counterpart. Named as such in the README.
+ * THERE IS NO PLAYBACK CLOCK ANY MORE, AND THAT IS THE POINT.
  *
- * `RunStep.playback_ms` is the fixture's own compression of `latency_ms`: a run whose steps really
- * take four minutes is unwatchable, and a uniform 300ms tick is the faked streaming the brief
- * rejects. The authored values land around 500–1600ms, which turned out to be too quick to read —
- * a fourteen-step run was over in twelve seconds and registered as a flicker rather than as work.
+ * A step used to carry two durations: `latency_ms`, the honest one, and `playback_ms`, the demo's,
+ * with a `PLAYBACK_SCALE` multiplier on top. The reasoning was that a four-minute run is
+ * unwatchable and a uniform 300ms tick is the faked streaming the brief rejects, so the demo needed
+ * its own timeline. It was defensible and it produced something indefensible on screen: a step
+ * labelled 4.1s would sit there for twenty-eight seconds with its clock crawling toward 4.1, so ten
+ * seconds of watching advanced it by three. Nabihah's words: "That timer isn't correct. It makes no
+ * sense." Arithmetically it was fine. For a clock, reading as a lie and being broken are the same
+ * failure.
  *
- * One multiplier here rather than eighty edited fixture values: the ratio to `latency_ms` is a
- * property of the playback, not of any step, and it is the number the README quotes.
+ * The fix was not a better multiplier. It was to notice that the premise had stopped holding: the
+ * run is long because the work is long, not because a demo needs padding. The durations moved onto
+ * `latency_ms` where they belong — a web search across a month of sources is 14s, fetching and
+ * parsing two documents is 36s, drafting is 34s — and the second number went away. A drafting child
+ * takes 2m56s from where the console attaches because it takes 2m56s.
  *
- * 1.7 → 2.8 → 4.2 → 3.6, and the step budgets underneath it grew by about 5.6× at the same time.
- * The raises were all the same complaint: the run was over before anyone had read it.
- *
- * WHAT THIS NUMBER IS FOR HAS CHANGED, AND THE README SAYS SO. A drafting child's real duration is
- * 38.8s; its playback is 3m36s. So the demo does not compress — it SLOWS DOWN, by about 5.6×. That
- * needs a reason, and the reason is that four children stream at once inside fixed-height windows:
- * at true speed the console is four cards blurring through eleven steps each in under forty
- * seconds, which is motion without legibility. Slowed, it is a thing you can read.
- *
- * The slowdown is deliberately NOT uniform. Each step's share of the budget tracks roughly the
- * square root of its own `latency_ms`, so the 18.6s drafting call does not swallow half the run and
- * a 0.14s tool result does not flash past — see the note on `childSteps`.
- *
- * `latency_ms` remains the honest per-step number and is what the UI displays as a duration. This
- * multiplier never touches it.
+ * What is left is one number per step, rendered as the step's duration and used as the interval it
+ * is shown working for. Those cannot disagree, because they are the same field.
  */
-export const PLAYBACK_SCALE = 3.6;
 
 export function streamRun(
   runId: RunId,
@@ -1292,9 +1282,9 @@ export function streamRun(
      * work happening. Same records, same order, same total elapsed time — the difference is
      * entirely that there is now a present tense.
      *
-     * It also makes the per-step duration legible for the first time: a 17-second drafting call
-     * visibly dwells where a 200ms guardrail check flicks past, and `playback_ms` finally means
-     * something on screen rather than just spacing the arrivals.
+     * It also makes the per-step duration legible: a 34-second drafting call visibly dwells where a
+     * 2.5-second tool result passes quickly, and the interval a step occupies IS the duration the
+     * step reports, because both read the same field.
      */
     const step = pending[index];
     onEvent({ type: 'step', step });
@@ -1303,7 +1293,7 @@ export function streamRun(
       if (cancelled) return;
       onEvent({ type: 'settled', id: step.id });
       emitNext(index + 1);
-    }, step.playback_ms * PLAYBACK_SCALE);
+    }, step.latency_ms);
   }
 
   return { stop };

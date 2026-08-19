@@ -1039,11 +1039,9 @@ body {
 
 
 /* ---- the agent's narrator line, above the batch panel ---- */
-.agent-line { display: flex; align-items: flex-start; gap: 11px; margin: 4px 0 18px; }
-.agent-avatar { width: 26px; height: 26px; border-radius: 7px; flex: none; margin-top: 1px;
+.agent-avatar { width: 34px; height: 34px; border-radius: 9px; flex: none; margin-top: 1px;
   background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
   font-size: 10.5px; font-weight: 700; }
-.agent-said { font-size: 15.5px; line-height: 1.55; color: var(--text); margin: 2px 0 0; }
 
 /* ---- buttons: small variant ---- */
 .btn-sm { font-size: 12.5px; padding: 5px 11px; }
@@ -1523,15 +1521,20 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .qrun-head .qrow-body { flex: 1; min-width: 0; }
 .qrun-head:hover { background: var(--surface); }
 .qrow-run .qcar { align-self: center; margin-left: auto; }
-.qrun-full { padding: var(--sp-3) var(--sp-4) var(--sp-4); }
-/* Stacked label-over-value rather than a 128px label column: these columns are a third of the
-   page, and a two-column key/value grid inside one leaves ~90px for the value. */
-.qrun-kv { display: flex; flex-direction: column; gap: var(--sp-3); margin: 0;
-  font-size: var(--fs-sub); }
-.qrun-kv dt { font-size: var(--fs-meta); font-weight: 700; letter-spacing: .06em;
-  text-transform: uppercase; color: var(--text-faint); margin-bottom: 2px; }
-.qrun-kv dt { color: var(--text-faint); }
-.qrun-kv dd { margin: 0; color: var(--text-muted); }
+.qrun-full { padding: 0 var(--sp-4) var(--sp-4); }
+/* One line per fact: label left, value right. The gap BETWEEN facts is wider than the gap inside
+   the one fact that has to wrap, which is the whole of what says which line belongs to which. */
+.qrun-kv { display: flex; flex-direction: column; gap: var(--sp-4); margin: 0;
+  font-size: var(--fs-sub); padding-top: var(--sp-3); border-top: 1px solid var(--border); }
+/* `.kvrow`, not `.kv` — `.kv` is the step timeline's monospace detail list, and reusing the name
+   here inherited its mono face onto a date and a sentence. */
+.qrun-kv .kvrow { display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--sp-3); }
+.qrun-kv dt { color: var(--text-faint); flex: none; }
+.qrun-kv dd { margin: 0; text-align: right; min-width: 0; color: var(--text); }
+.qrun-kv dd.mono { font-family: var(--font-mono); font-size: var(--fs-meta); }
+.qrun-kv .kv-stack { flex-direction: column; align-items: stretch; gap: 3px; }
+.qrun-kv .kv-stack dd { text-align: left; color: var(--text-muted); line-height: 1.5; }
 
 /* 1c: the icons were 17px next to 14px text, which read as oversized clip-art. */
 .qico { width: 15px; height: 15px; margin-top: 2px; }
@@ -1559,30 +1562,38 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 /* ================================================================================================
  * CONSOLE HERO — the batch leads the screen
  * ==============================================================================================*/
-.hero { display: flex; align-items: flex-start; gap: var(--sp-6); padding: 0 0 var(--sp-5);
-  margin-bottom: var(--sp-5); border-bottom: 1px solid var(--border); }
-.hero-left { flex: 1; min-width: 0; }
+/* FULL BLEED. The negative margins cancel `.shell-main`'s padding exactly, so the band runs to the
+   edges of the content area and up under the top of it — square corners, its own ground, flooded
+   in. There is no rule beneath it: the change of ground is the separation, and the rule that used
+   to do that job was the heaviest mark on the screen. */
+.hero { display: flex; align-items: flex-end; gap: var(--sp-6); flex-wrap: wrap;
+  margin: -26px -30px var(--sp-5); padding: 26px 30px 22px;
+  background: var(--surface-sunk); }
+.hero-left { flex: 1; min-width: 260px; }
 .hero-eyebrow { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-2);
   font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
   color: var(--accent-text); }
 .hero-title { margin: 0; font-size: 30px; font-weight: 640; letter-spacing: -.028em;
   line-height: 1.12; }
-.hero-meta { display: flex; gap: var(--sp-3); margin: var(--sp-3) 0 0; font-size: var(--fs-meta);
+
+/* Four figures, evenly spaced, each with its label above it. Aligned to the baseline of the title
+   rather than floated right, so the band reads as one row of information. */
+.hero-stats { display: flex; gap: var(--sp-6); margin: 0; flex: none; }
+.hstat { display: flex; flex-direction: column; gap: 3px; min-width: 84px; }
+.hstat dt { font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
   color: var(--text-faint); }
-/* Right-aligned and only as wide as it needs to be. The bar used to stretch the full page, which
-   made a count of eight look like a loading screen. */
-.hero-right { flex: none; width: 170px; text-align: right; }
-.hero-num { margin: 0; font-size: 38px; font-weight: 640; letter-spacing: -.035em; line-height: 1;
+.hstat dd { margin: 0; font-size: 26px; font-weight: 640; letter-spacing: -.03em; line-height: 1.1;
   font-variant-numeric: tabular-nums; }
-.hero-of { font-size: 20px; color: var(--text-faint); margin-left: 4px; font-weight: 500; }
-.hero-label { margin: var(--sp-1) 0 var(--sp-2); font-size: 10.5px; font-weight: 700;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--text-faint); }
-.hero-track { display: block; height: 4px; border-radius: 99px; background: var(--surface-sunk);
-  overflow: hidden; }
+.hstat dd.is-attend { color: var(--attend); }
+.hstat dd.hstat-sm { font-size: 15px; font-weight: 560; letter-spacing: -.01em; padding-top: 6px; }
+.hstat-of { font-size: 14px; color: var(--text-faint); margin-left: 4px; font-weight: 500;
+  letter-spacing: 0; }
+.hero-track { display: block; height: 4px; border-radius: 99px; background: var(--border);
+  overflow: hidden; margin-top: 6px; }
 .hero-track i { display: block; height: 100%; background: var(--go); transition: width .4s; }
-@media (max-width: 720px) {
-  .hero { flex-direction: column; gap: var(--sp-4); }
-  .hero-right { width: 100%; text-align: left; }
+@media (max-width: 900px) {
+  .hero { margin: -18px -16px var(--sp-5); padding: 18px 16px; }
+  .hero-stats { gap: var(--sp-5); flex-wrap: wrap; }
 }
 
 /* ---- column headings align, and only the toggle sits above the grid ---- */
@@ -1606,18 +1617,30 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .qcols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5);
   align-items: start; }
 .qcol { min-width: 0; }
-/* A colour rail per column, so the three are told apart before the titles are read. The rail
-   carries the meaning; the cards inside stay neutral so the colour is not repeated on every row. */
+/* THE COLUMN IS THE PANEL, AND THE COUNT CARRIES THE COLOUR.
+ *
+ * There were two vertical coloured rules down the left of each column header — one on the title,
+ * one on the line under it — which is a shape that turns up on every generated dashboard and reads
+ * as decoration bolted onto a heading rather than as structure. Nabihah called it a dead giveaway
+ * and she is right.
+ *
+ * The separation people actually needed was between the three COLUMNS, not beside three headings,
+ * so each column is now a panel on its own ground with its rows lifted off it in white. That is a
+ * real boundary rather than a hint at one, and it matches the console's agent panel, so the two
+ * screens share a way of saying "this is one space".
+ *
+ * The colour moved to the count. A number in a tinted chip is a place colour belongs — it is the
+ * thing being counted that is urgent or not — and it puts the hue at the one point on the column
+ * the eye already goes to. */
+.qcol { background: var(--surface-sunk); border: 1px solid var(--border); border-radius: 14px;
+  padding: var(--sp-4); min-width: 0; }
+.qcol .card, .qcol .qrow { background: var(--surface); }
 .qcol-head { display: flex; align-items: center; gap: var(--sp-2); margin: 0;
-  font-size: var(--fs-head); font-weight: 600; letter-spacing: -.01em;
-  padding-left: var(--sp-3); border-left: 3px solid var(--rail); }
-.qcol-sub { padding-left: var(--sp-3); border-left: 3px solid var(--rail); }
-/* Accent, stop, neutral — three colours that are actually told apart at a glance. `--attend`
-   (#8a5a08) against `--stop` (#9a3324) were two browns, which is not a distinction. The accent is
-   also the colour of the Review buttons inside this column, so the rail points at its own work. */
-.qcol-decide { --rail: var(--accent); }
-.qcol-clear { --rail: var(--stop); }
-.qcol-recovering { --rail: var(--border-strong); }
+  font-size: var(--fs-head); font-weight: 600; letter-spacing: -.01em; }
+.qcol-head .sec-n { background: var(--chip-bg); color: var(--chip-fg); }
+.qcol-decide { --chip-bg: var(--accent-soft); --chip-fg: var(--accent-text); }
+.qcol-clear { --chip-bg: var(--stop-soft); --chip-fg: var(--stop); }
+.qcol-recovering { --chip-bg: var(--border); --chip-fg: var(--text-muted); }
 .qcol-sub { margin: var(--sp-1) 0 var(--sp-3); font-size: var(--fs-sub); color: var(--text-muted);
   line-height: 1.45; }
 .qcol-empty { margin: 0; padding: var(--sp-4); font-size: var(--fs-sub); color: var(--text-faint);
@@ -1642,8 +1665,31 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
    thing on the console, so it is gone. Scheduled posts live where they belong — inside the idle
    panel, which is the only place they are the answer to a question anyone is asking.
    ============================================================================================ */
-.console-cols { max-width: 780px; display: flex; flex-direction: column; gap: var(--sp-5); }
-.console-live, .console-work { min-width: 0; }
+/* Centred rather than pinned left. At 1440 a left-pinned 780px column left a third of the screen
+   blank down one side, which reads as something missing rather than as space. 980px because the
+   post text inside a card is capped at its own measure anyway, so the extra width goes to the
+   two-up drafting grid and not to the prose. */
+.console-cols { max-width: 980px; margin-inline: auto; display: flex; flex-direction: column;
+  gap: var(--sp-5); }
+.console-work { min-width: 0; }
+
+/* ---- the agent's environment ---------------------------------------------------------------
+   Its own ground, so the boundary of the space the agent works in is visible. Built like a
+   message: mark, then what it is saying, then what it produced. */
+.agent-env { background: var(--surface-sunk); border: 1px solid var(--border);
+  border-radius: 14px; padding: var(--sp-4); min-width: 0; }
+.env-head { display: flex; align-items: flex-start; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.env-say { flex: 1; min-width: 0; }
+.env-said { margin: 0; font-size: var(--fs-lede); font-weight: 600; letter-spacing: -.012em;
+  line-height: 1.3; }
+.env-sub { margin: 4px 0 0; font-size: var(--fs-sub); color: var(--text-muted); max-width: 62ch; }
+.env-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin: 0;
+  flex: none; font-size: var(--fs-meta); color: var(--text-faint); }
+@media (max-width: 720px) {
+  .env-meta { display: none; }
+}
+/* The cards sit on the environment's ground, so they carry their own surface to lift off it. */
+.agent-env .card { background: var(--surface); }
 
 /* Four drafting children stacked vertically is a page you scroll to see the batch at all. Paired,
    the whole batch is one screen. One child keeps the full measure — a lone half-width card beside
@@ -1680,25 +1726,25 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
    ============================================================================================ */
 .qcols .qrow-head {
   display: grid;
-  grid-template-columns: auto auto 1fr auto;
+  grid-template-columns: auto 1fr auto;
   grid-template-areas:
-    "mark  ch    when  car"
-    "ex    ex    ex    ex"
-    "state state state act";
-  align-items: center;
-  gap: var(--sp-2) var(--sp-2);
+    "mark  ex    act"
+    "when  when  when"
+    "state state state";
+  align-items: start;
+  gap: var(--sp-2) var(--sp-3);
 }
 .qcols .qrow-head > svg { grid-area: mark; }
-.qcols .qrow-ch { grid-area: ch; }
-.qcols .qrow-when { grid-area: when; justify-self: end; }
-.qcols .qcar { grid-area: car; align-self: center; margin-left: 0; }
+.qcols .qrow-when { grid-area: when; justify-self: start; color: var(--text-faint); }
 .qcols .qrow-excerpt { grid-area: ex; white-space: normal; overflow: visible;
   display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; }
 /* Spans the first three columns so the pill's width never widens column one — which it
    did, pushing the channel name of a blocked row out of line with every other row. */
 .qcols .qrow-head > .pill { grid-area: state; justify-self: start; }
-.qcols .qrow-review { grid-area: act; justify-self: end; }
+/* Top right, on the first line, level with the mark — not floated after a run of variable-length
+   text, which is where it used to land and why it never sat in the corner. */
+.qcols .qrow-review { grid-area: act; justify-self: end; align-self: start; }
 
 /* The head is the row, so it takes the row's ground rather than painting white over it. */
 .qrun-head { background: none; }
@@ -1710,3 +1756,38 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .idle-angle { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .idle-when { margin-left: auto; color: var(--text-faint); font-variant-numeric: tabular-nums;
   font-size: var(--fs-meta); flex: none; }
+
+
+/* ============================================================================================
+   THE CALENDAR'S RUN LIST
+
+   Four facts per row, so it is a grid and the columns line up — it was a flex row with the last
+   item pushed right by `margin-left: auto`, which meant the middle column began wherever the
+   title happened to end. It also needed air above it: the heading sat directly under the last
+   calendar cell with a single line of space, so the section read as part of the grid.
+   ============================================================================================ */
+.wk-runs { margin-top: var(--sp-6); }
+.wk-runs .sec { margin-top: 0; margin-bottom: var(--sp-3); }
+.runlist { list-style: none; margin: 0; padding: 0; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.runlist li { display: grid; grid-template-columns: 10px minmax(0, 200px) minmax(0, 1fr) 84px auto;
+  align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border); font-size: var(--fs-sub); }
+.runlist li:last-child { border-bottom: 0; }
+.runlist li:hover { background: var(--surface-sunk); }
+.run-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--tone); }
+.run-title { font-weight: 550; color: var(--text); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.run-detail { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.run-state { font-size: var(--fs-meta); font-weight: 600; color: var(--tone); text-align: right; }
+.run-id { font-size: var(--fs-meta); color: var(--text-faint); }
+.tone-done { --tone: var(--go); }
+.tone-attend { --tone: var(--attend); }
+.tone-stop { --tone: var(--stop); }
+.tone-live { --tone: var(--accent); }
+.tone-wait { --tone: var(--text-faint); }
+@media (max-width: 860px) {
+  .runlist li { grid-template-columns: 10px minmax(0, 1fr) auto; }
+  .run-detail, .run-id { display: none; }
+}

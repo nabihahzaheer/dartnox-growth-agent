@@ -35,7 +35,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  PLAYBACK_SCALE,
   haltRun,
   landRunAtInterrupt,
   openRun,
@@ -174,20 +173,22 @@ export function LiveRun({
   const newest = newestStep;
 
   /**
-   * The clock counts toward the step's OWN duration, not wall-clock playback time.
+   * ONE SECOND ON THIS CLOCK IS ONE SECOND.
    *
-   * It used to show real seconds elapsed while the step played, then the finished row showed
-   * `latency_ms` — so a step counted up to 5s and then settled reading 3.1s. Two numbers for one
-   * step, and neither obviously wrong, which is the worst kind of inconsistency.
+   * This used to run from zero to the step's `latency_ms` across a playback window that was several
+   * times longer, so the reading was arithmetically correct and behaved like a broken clock: ten
+   * seconds of watching advanced it by three. The two timelines are gone (see the note in
+   * `agentClient` where `PLAYBACK_SCALE` used to be) and a step is now shown working for exactly
+   * its own duration, so the honest clock is the simplest one — real seconds since the step
+   * opened. It lands on `latency_ms` at the moment the step settles, which is the figure the
+   * finished row then keeps, because they are the same number arrived at two ways.
    *
-   * The step is a compressed replay of something that really took `latency_ms`, so the honest
-   * reading is the agent's own clock: run it from zero to `latency_ms` across the playback window
-   * and it lands exactly on the figure the finished row keeps.
+   * Capped at the step's own duration so a slow frame or a backgrounded tab cannot overshoot the
+   * value the settled row is about to show.
    */
-  const playbackMs = (newestStep?.playback_ms ?? 0) * PLAYBACK_SCALE;
+  const stepMs = newestStep?.latency_ms ?? 0;
   const realMs = startedAt === 0 ? 0 : now - startedAt;
-  const progress = playbackMs === 0 ? 1 : Math.min(1, realMs / playbackMs);
-  const elapsed = ((newestStep?.latency_ms ?? 0) / 1000) * progress;
+  const elapsed = Math.min(stepMs, realMs) / 1000;
 
   const working = newest !== undefined && !settled.has(newest.id) && ended === null;
   const subLines = newest ? subLinesFor(newest, events, rules) : [];
@@ -196,16 +197,18 @@ export function LiveRun({
   useEffect(() => {
     if (!working) return;
     const tick = setInterval(() => setNow(Date.now()), 100);
-    /** Paced against the step's own playback length rather than a fixed 700ms, so a long drafting
+    /** Paced against the step's own duration rather than a fixed 700ms, so a 34-second drafting
      *  call fills its time instead of showing everything in the first two seconds and then sitting
      *  on "working…" for the rest. */
-    const per = Math.max(500, (newest.playback_ms * PLAYBACK_SCALE) / (subLines.length + 1));
+    /** Spread across the first two thirds of the step, so the last line lands well before the step
+     *  settles rather than racing the tick that closes it. */
+    const per = Math.max(700, (newest.latency_ms * 0.66) / (subLines.length + 1));
     const reveal = setInterval(() => setRevealed((r) => Math.min(r + 1, subLines.length)), per);
     return () => {
       clearInterval(tick);
       clearInterval(reveal);
     };
-  }, [working, newest?.id, newest?.playback_ms, subLines.length]);
+  }, [working, newest?.id, newest?.latency_ms, subLines.length]);
 
   async function halt() {
     setHalting(true);

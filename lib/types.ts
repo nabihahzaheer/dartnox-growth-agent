@@ -1182,12 +1182,6 @@ export type RunStep = {
   started_at: MinutesFromAnchor;
   /** C2 · the honest number, shown as metadata. A drafting call is ~20s. */
   latency_ms: number;
-  /**
-   * ◆ DEMO AFFORDANCE — no production counterpart. Must be named as such in the README.
-   * C2: a run played at its true four-minute duration is unwatchable; a uniform 300ms tick is
-   * the faked streaming the brief rejects. Two numbers, ratio stated in the README.
-   */
-  playback_ms: number;
   model: string | null;
   model_snapshot: string | null;
   /** Replaces B1's single `tokens`. Input and output pricing differ ~5×; one count makes the

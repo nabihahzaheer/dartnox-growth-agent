@@ -427,25 +427,23 @@ export const batchRuns: Run[] = [
  * THE STEPS EVERY DRAFTING CHILD RUNS, IDENTICAL ACROSS ALL FOUR.
  *
  * TWO THINGS CHANGED HERE AFTER WATCHING IT. The pre-writing phase was three steps totalling 1.5s
- * of playback, so a card attached at seq 2 reached "Waiting for a decision" in about fourteen
+ * of demo time, so a card attached at seq 2 reached "Waiting for a decision" in about fourteen
  * seconds — the run was over before you had finished reading its title. And research is the part
  * of this agent's work that is actually interesting to watch: it reads sources, screens them, and
  * looks up what performed before it writes a word. Three of those four moves were invisible.
  *
- * So the phase is seven steps now, and the playback budget is far larger: 60s of `playback_ms`
- * across eleven steps, which at `PLAYBACK_SCALE` is a 3m36s run, or 3m02s from where the console
- * attaches. Every child uses these same numbers — the four cards run in step with each other
- * rather than finishing at four different times for no stated reason.
+ * So the phase is seven steps now, and the durations are the durations of an agent doing the work
+ * carefully rather than out of a warm cache: a web search across a month of sources takes fourteen
+ * seconds, fetching and parsing two documents takes thirty-six, screening them against the recency
+ * and publisher rules takes thirty-one. Every child runs about 2m56s from where the console
+ * attaches, and they all use the same budget — the four cards run in step with each other rather
+ * than finishing at four different times for no stated reason.
  *
- * HOW THE BUDGET IS SHARED OUT, since it is not proportional and that is deliberate. Each step's
- * share tracks roughly the SQUARE ROOT of its real `latency_ms`. Proportional would give the 18.6s
- * drafting call half the entire run and leave a 0.14s tool result on screen for a third of a
- * second; the square root pulls both extremes toward the middle without reordering them, so the
- * slowest step is still visibly the slowest. It also keeps every step's live clock ticking at a
- * readable rate — a clock that advances one tenth every four seconds reads as broken.
- *
- * `latency_ms` still carries the honest duration and `playback_ms` the demo's; the README states
- * the ratio. Only the demo number moved.
+ * THESE ARE `latency_ms` AND NOTHING SCALES THEM. There used to be a second number per step,
+ * `playback_ms`, and a multiplier on top of it, so a step that claimed to take four seconds sat on
+ * screen for twenty-eight while its clock crawled toward 4.0. Nabihah watched it for ten seconds
+ * and the clock moved three. It was correct arithmetic and it read as a lie, which for a clock is
+ * the same thing as being broken. Both went; the run now takes exactly as long as it says it does.
  */
 function childSteps(
   run: RunId,
@@ -466,8 +464,7 @@ function childSteps(
       type: 'thinking',
       label: 'Loading the slot',
       started_at: at(0),
-      latency_ms: 2200,
-      playback_ms: 5_300,
+      latency_ms: 9_000,
       model: 'claude-opus-5',
       model_snapshot: 'opus-5-2026-05-14',
       tokens_in: 2080,
@@ -486,8 +483,7 @@ function childSteps(
       type: 'tool_call',
       label: 'Looking for sources',
       started_at: at(3),
-      latency_ms: 1400,
-      playback_ms: 4_200,
+      latency_ms: 14_000,
       tool_name: 'search_sources',
       tool_input: { pillar_id: pillarId, channel, window_days: 30 },
     }),
@@ -498,8 +494,7 @@ function childSteps(
       type: 'tool_result',
       label: 'Found 3 candidate sources',
       started_at: at(5),
-      latency_ms: 260,
-      playback_ms: 1_800,
+      latency_ms: 2_500,
       tool_name: 'search_sources',
       outcome: 'ok',
       tool_output: { returned: 3, above_threshold: 2 },
@@ -511,8 +506,7 @@ function childSteps(
       type: 'tool_call',
       label: 'Reading the sources',
       started_at: at(6),
-      latency_ms: 4100,
-      playback_ms: 7_200,
+      latency_ms: 36_000,
       tool_name: 'fetch_source',
       tool_input: { count: 2 },
     }),
@@ -523,8 +517,7 @@ function childSteps(
       type: 'thinking',
       label: 'Screening the sources',
       started_at: at(11),
-      latency_ms: 2600,
-      playback_ms: 5_800,
+      latency_ms: 31_000,
       model: 'claude-sonnet-5',
       model_snapshot: 'sonnet-5-2026-04-02',
       tokens_in: 3120,
@@ -541,8 +534,7 @@ function childSteps(
       type: 'tool_call',
       label: 'Looking up posts that performed',
       started_at: at(14),
-      latency_ms: 880,
-      playback_ms: 3_400,
+      latency_ms: 12_000,
       tool_name: 'retrieve_examples',
       tool_input: { pillar_id: pillarId, channel, k: 3 },
     }),
@@ -553,8 +545,7 @@ function childSteps(
       type: 'tool_result',
       label: 'Found 2 past posts to draw on',
       started_at: at(16),
-      latency_ms: 140,
-      playback_ms: 1_300,
+      latency_ms: 2_500,
       tool_name: 'retrieve_examples',
       outcome: 'ok',
       tool_output: { returned: 2, cosine: [0.79, 0.74] },
@@ -566,8 +557,7 @@ function childSteps(
       type: 'action',
       label: 'Writing the draft',
       started_at: at(19),
-      latency_ms: 18_600,
-      playback_ms: 15_400,
+      latency_ms: 34_000,
       model: 'claude-opus-5',
       model_snapshot: 'opus-5-2026-05-14',
       tokens_in: 3740,
@@ -587,8 +577,7 @@ function childSteps(
       type: 'action',
       label: 'Scoring the draft',
       started_at: at(39),
-      latency_ms: 5400,
-      playback_ms: 8_300,
+      latency_ms: 27_000,
       model: 'claude-sonnet-5',
       model_snapshot: 'sonnet-5-2026-04-02',
       tokens_in: 1980,
@@ -602,8 +591,7 @@ function childSteps(
       type: 'guardrail',
       label: 'Checking the finished draft',
       started_at: at(45),
-      latency_ms: 3200,
-      playback_ms: 6_400,
+      latency_ms: 29_000,
       guardrail_event_id: eventId(`GE-${prefix.replace('RS-', '')}-01`),
     }),
     step({
@@ -613,8 +601,7 @@ function childSteps(
       type: 'interrupt',
       label: 'Waiting for a decision',
       started_at: at(49),
-      latency_ms: 0,
-      playback_ms: 900,
+      latency_ms: 2_000,
       interrupt: {
         gate: 'draft_approval',
         /**

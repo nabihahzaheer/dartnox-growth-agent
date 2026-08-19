@@ -319,9 +319,9 @@ section('Fixture invariants');
  * places. This assertion does.
  *
  * The budget measured is the VISIBLE one: the console attaches mid-run at
- * `LIVE_RUN_EMITTED_THROUGH_SEQ`, so the steps before that point are never played and their
- * `playback_ms` does not count. Tolerance is one step's worth of rounding, not an exact match —
- * the shares are rounded to the nearest 100ms per step.
+ * `LIVE_RUN_EMITTED_THROUGH_SEQ`, so the steps before that point are never played and do not count.
+ * It is measured in `latency_ms`, which since the playback clock was removed is the only duration a
+ * step has and is exactly the interval it occupies on screen.
  */
 {
   const { LIVE_RUN_EMITTED_THROUGH_SEQ } = await import('../fixtures/index.ts');
@@ -332,20 +332,32 @@ section('Fixture invariants');
     id: r.id as string,
     ms: fixtures.runSteps
       .filter((s) => s.run_id === r.id && s.seq > LIVE_RUN_EMITTED_THROUGH_SEQ)
-      .reduce((sum, s) => sum + s.playback_ms, 0),
+      .reduce((sum, s) => sum + s.latency_ms, 0),
   }));
 
-  const target = 50_500;
+  const target = 176_000;
   for (const b of budgets) {
     check(
-      `${b.id} plays for about three minutes from where the console attaches`,
-      Math.abs(b.ms - target) <= 1_000,
-      `${b.ms}ms of playback, wanted ${target}ms +/- 1000`,
+      `${b.id} runs for about three minutes from where the console attaches`,
+      Math.abs(b.ms - target) <= 4_000,
+      `${b.ms}ms, wanted ${target}ms +/- 4000`,
     );
   }
 
   const spread = Math.max(...budgets.map((b) => b.ms)) - Math.min(...budgets.map((b) => b.ms));
-  check('the four agree with each other to within a rounding step', spread <= 1_000, `${spread}ms apart`);
+  check('the four agree with each other to within one short step', spread <= 4_000, `${spread}ms apart`);
+
+  /**
+   * No step outstays its welcome. A card is a fixed-height window and a step holds it for its whole
+   * duration, so a two-minute step would be two minutes of a card that looks frozen. Thirty-six
+   * seconds is the longest thing the agent does here — fetching and parsing two source documents.
+   */
+  for (const r of running) {
+    const longest = Math.max(
+      ...fixtures.runSteps.filter((s) => s.run_id === r.id).map((s) => s.latency_ms),
+    );
+    check(`${r.id} has no step longer than 40s`, longest <= 40_000, `longest is ${longest}ms`);
+  }
 }
 
 /**

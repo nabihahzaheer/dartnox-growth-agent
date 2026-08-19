@@ -22,7 +22,7 @@ import type { ConsoleError, MinutesFromAnchor, QueueItem } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
 import { useWorldRead } from '@/lib/useWorldRead';
 import { EmptyState, LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
-import { CHANNEL_LABEL, ChannelMark } from '@/components/ChannelMark';
+import { ChannelMark } from '@/components/ChannelMark';
 import { formatDateTime } from '@/lib/time';
 
 /** `park_reason` is a code, not a sentence — rendering it raw would print `upstream_error` at an
@@ -215,28 +215,39 @@ function QueueRow({ item }: { item: QueueItem }) {
               : (item.run.park_reason ? PARK_LABEL[item.run.park_reason] : 'Waiting to resume.')}
           </p>
         </div>
-        <span className={`qcar${open ? ' is-open' : ''}`} aria-hidden>▶</span>
         </button>
 
         {open && (
           <div className="qrow-full qrun-full">
+            {/* Each fact is one line: label left, value right. It used to be a label row with the
+                value stacked underneath, which in a third-of-the-page column produced eight lines
+                of alternating grey and black with the same gap between every one of them, so
+                nothing looked like it belonged to anything. The last entry is a sentence rather
+                than a value, so it keeps its line break — and a tighter gap, which is what says it
+                belongs to the label above it. */}
             <dl className="qrun-kv">
-              <dt>Run</dt>
-              <dd className="mono">{item.run.id}</dd>
-              <dt>Stopped at</dt>
-              <dd>{formatDateTime(item.run.started_at)}</dd>
+              <div className="kvrow">
+                <dt>Run</dt>
+                <dd className="mono">{item.run.id}</dd>
+              </div>
+              <div className="kvrow">
+                <dt>Stopped at</dt>
+                <dd>{formatDateTime(item.run.started_at)}</dd>
+              </div>
               {item.run.park_reason && (
-                <>
+                <div className="kvrow">
                   <dt>Reason</dt>
                   <dd>{item.run.park_reason.replace(/_/g, ' ')}</dd>
-                </>
+                </div>
               )}
-              <dt>What happens next</dt>
-              <dd>
-                {quarantined
-                  ? 'Nothing automatically. The source is archived and this slot needs a person to clear it or drop it.'
-                  : 'The hourly sweep picks it up. No action needed unless it keeps failing.'}
-              </dd>
+              <div className="kvrow kv-stack">
+                <dt>What happens next</dt>
+                <dd>
+                  {quarantined
+                    ? 'Nothing automatically. The source is archived and this slot needs a person to clear it or drop it.'
+                    : 'The hourly sweep picks it up. No action needed unless it keeps failing.'}
+                </dd>
+              </div>
             </dl>
           </div>
         )}
@@ -257,20 +268,13 @@ function QueueRow({ item }: { item: QueueItem }) {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
+        {/* The mark carries the channel. It used to be followed by the channel's NAME in words,
+            which is the logo saying the same thing twice and cost the excerpt the room it needed. */}
         <ChannelMark channel={draft.channel} size={17} />
-        <span className="qrow-ch">{CHANNEL_LABEL[draft.channel]}</span>
         {/* The first sentence, not a character count. Slicing at 78 cut mid-word and mid-clause,
             which reads as broken rather than truncated. A post's opening sentence is also the thing
             it was written to be scanned by. */}
         <span className="qrow-excerpt">{firstSentence(version?.text ?? '')}</span>
-        {/* When it is due out. A queue of drafts with no dates gives no sense of what is urgent —
-            the one thing that actually orders this work. */}
-        {scheduledAt(item) !== null && (
-          <span className="qrow-when">{formatDateTime(scheduledAt(item)!)}</span>
-        )}
-        {/* The kind is the column now, so no pill. What stays is the one thing that is not
-            implied by position: whether this draft can be approved at all. */}
-        {blocked && <span className="pill pill-stop">blocked</span>}
         <Link
           href={`/approvals/${draft.id}`}
           className="btn btn-primary qrow-review"
@@ -278,7 +282,14 @@ function QueueRow({ item }: { item: QueueItem }) {
         >
           Review
         </Link>
-        <span className={`qcar${open ? ' is-open' : ''}`} aria-hidden>▶</span>
+        {/* When it goes out, on its own line. A queue of drafts with no dates gives no sense of
+            what is urgent — the one thing that actually orders this work. */}
+        {scheduledAt(item) !== null && (
+          <span className="qrow-when">Scheduled for {formatDateTime(scheduledAt(item)!)}</span>
+        )}
+        {/* The kind is the column now, so no pill. What stays is the one thing that is not
+            implied by position: whether this draft can be approved at all. */}
+        {blocked && <span className="pill pill-stop">blocked</span>}
       </button>
 
       {open && (

@@ -45,7 +45,7 @@ import { LiveRun } from '@/components/console/LiveRun';
 import { DecidedCard } from '@/components/console/DecidedCard';
 import { BudgetNotice } from '@/components/BudgetNotice';
 import { ChannelMark } from '@/components/ChannelMark';
-import { formatDateTime } from '@/lib/time';
+import { formatDate, formatDateTime, formatTime } from '@/lib/time';
 
 type Loaded = {
   batch: Batch;
@@ -135,13 +135,23 @@ export default function ConsolePage() {
   /** A landed run's draft belongs here, which is the whole point of the handoff: the run card stays
    *  as the record of what happened, and the decision it produced appears below. */
   const waiting = batch.children.filter((c) => c.draft && needsDecision(c.draft));
-  const blocked = waiting.filter((c) => c.draft?.state === 'blocked_guardrail');
   const drafting = batch.children.filter(
     (c) => c.run.state === 'running' || c.run.state === 'queued',
   );
   const settled = batch.children.filter(
     (c) => c.draft && !needsDecision(c.draft) && c.run.state !== 'running',
   );
+
+  /** The week this batch publishes into, read off the slots it targets rather than asserted. This
+   *  is the fact the console and the calendar were quietly disagreeing about. */
+  const publishAts = batch.children
+    .map((c) => c.slot?.publish_at)
+    .filter((p): p is NonNullable<typeof p> => p !== undefined)
+    .sort((a, b) => (a as number) - (b as number));
+  const publishingWeek =
+    publishAts.length === 0
+      ? null
+      : `${formatDate(publishAts[0])} – ${formatDate(publishAts[publishAts.length - 1])}`;
 
   return (
     <>
@@ -163,13 +173,19 @@ export default function ConsolePage() {
        * for occasionally rather than something an operator reads every morning.
        */}
       {/**
-       * MISSION CONTROL, NOT A ROW OF METADATA.
+       * THE BAND ACROSS THE TOP: WHAT THIS BATCH IS, AND THE FOUR FIGURES A MORNING TURNS ON.
        *
-       * This was a bar in the same type size as everything under it, so the batch — the thing the
-       * whole screen is about — read as one more label. It now leads: the run's name at hero size
-       * with its state beside it, and the count as a large figure on the right with the bar under
-       * it rather than stretched across the page. Provenance sits underneath in meta type, where a
-       * run id belongs.
+       * It emptied out when the agent's own sentence and the run id moved down into the section
+       * they are about, leaving a title and a count sitting in a lot of space. Rather than pad it,
+       * it now carries the things an operator would otherwise go and look up: how far the batch has
+       * got, how many decisions are queued behind it, WHICH WEEK it is publishing into — the
+       * question that made "drafting next week" and a calendar labelled "current week" read as a
+       * contradiction — and what it has cost against the cap. All four are read off `batch`; none
+       * is written independently of something else on the page.
+       *
+       * Full bleed, square corners, its own ground. It used to be plain page with a rule under it,
+       * so the heaviest thing on the screen was a horizontal line. A band needs no rule: the change
+       * of ground is the separation.
        */}
       <section className="hero">
         <div className="hero-left">
@@ -183,40 +199,83 @@ export default function ConsolePage() {
             )}
           </p>
           <h2 className="hero-title">Wednesday drafting batch</h2>
-          <AgentLine batch={batch} waitingCount={waiting.length} blockedCount={blocked.length} />
-          <p className="hero-meta">
-            <span className="mono">{batch.parent.id}</span>
-            <span className="mono">settings {settings.current_version_id}</span>
-          </p>
         </div>
-        <div className="hero-right">
-          <p className="hero-num">
-            {batch.drafted}
-            <span className="hero-of">/ {batch.total}</span>
-          </p>
-          <p className="hero-label">drafted</p>
-          <span className="hero-track" aria-hidden>
-            <i style={{ width: `${batch.total === 0 ? 0 : (batch.drafted / batch.total) * 100}%` }} />
-          </span>
-        </div>
+
+        <dl className="hero-stats">
+          <div className="hstat">
+            <dt>Drafted</dt>
+            <dd>
+              {batch.drafted}
+              <span className="hstat-of">/ {batch.total}</span>
+            </dd>
+            <span className="hero-track" aria-hidden>
+              <i
+                style={{ width: `${batch.total === 0 ? 0 : (batch.drafted / batch.total) * 100}%` }}
+              />
+            </span>
+          </div>
+          <div className="hstat">
+            <dt>Needs you</dt>
+            <dd className={waiting.length > 0 ? 'is-attend' : undefined}>{waiting.length}</dd>
+          </div>
+          <div className="hstat">
+            <dt>Publishing</dt>
+            <dd className="hstat-sm">{publishingWeek ?? 'not scheduled yet'}</dd>
+          </div>
+          <div className="hstat">
+            <dt>Spent this month</dt>
+            <dd className="hstat-sm">
+              ${batch.budget.spent.toFixed(2)}
+              <span className="hstat-of">of ${batch.budget.cap.toFixed(0)}</span>
+            </dd>
+          </div>
+        </dl>
       </section>
 
-      {/**
-       * ONE COLUMN. NOT TWO, AND NOT A TOGGLE BETWEEN TWO.
-       *
-       * This screen has now been three things. A split/stacked toggle, which asked the operator to
-       * choose a layout for a screen they open once a morning. Then one column with a rail of
-       * scheduled posts beside it, which filled the empty right side with the least urgent thing
-       * on the whole console. Now: one column of work, in the order the morning happens. The only
-       * thing that pairs up is the drafting cards, because four of them stacked is a scroll and
-       * two-by-two is a glance.
-       */}
       <div className="console-cols">
-        {/* THE LIVE RUNS COME FIRST IN THE MARKUP. They used to sit below the queue and the
-            decided list, so the only thing on the screen that moves was the last thing you could
-            reach. */}
-        <section className="console-live">
-          <h2 className="sec col-head">Agent activity</h2>
+        {/**
+         * THE AGENT'S OWN SPACE.
+         *
+         * This was a heading reading "Agent activity" with cards underneath, and the agent itself —
+         * the GA mark — was a badge up in the page header next to a sentence, two sections away
+         * from the work the sentence was about. Nothing on the screen said the cards belonged to
+         * anybody.
+         *
+         * It is now built like a message. The mark sits top left the way an avatar does, the
+         * sentence beside it is the agent saying what it is doing, and the cards below are what it
+         * is saying — all of it on its own ground so the boundary of the agent's space is visible.
+         * The run id and settings version moved down here too: they are provenance FOR THIS, and in
+         * the page header they were provenance for nothing in particular.
+         *
+         * The sentence is composed from `drafting`, `batch.total` and `waiting`, so it cannot drift
+         * from the cards underneath it. When nothing is in flight it says so, and the panel below
+         * changes with it.
+         */}
+        <section className="agent-env">
+          <header className="env-head">
+            <span className="agent-avatar" aria-hidden>
+              GA
+            </span>
+            <div className="env-say">
+              <h2 className="env-said">
+                {drafting.length > 0
+                  ? `Growth agent is drafting ${drafting.length} of next week's ${batch.total} posts`
+                  : 'Nothing being drafted right now'}
+              </h2>
+              <p className="env-sub">
+                {drafting.length > 0
+                  ? `Working since ${formatTime(batch.parent.started_at)}. Each post is researched, written, scored and checked before it reaches you.`
+                  : waiting.length > 0
+                    ? `Finished next week's ${batch.total} posts. ${waiting.length === 1 ? '1 needs' : `${waiting.length} need`} a decision from you.`
+                    : `Finished next week's ${batch.total} posts. Nothing left for you to decide.`}
+              </p>
+            </div>
+            <p className="env-meta">
+              <span className="mono">{batch.parent.id}</span>
+              <span className="mono">settings {settings.current_version_id}</span>
+            </p>
+          </header>
+
           {/* One drafting child gets the full measure; two or more pair up, because four cards
               stacked one under another is a page you have to scroll to see the batch at all. */}
           <div className={drafting.length > 1 ? 'live-grid' : 'stack'}>
@@ -233,19 +292,19 @@ export default function ConsolePage() {
                 />
               ))}
 
-            {/* Not an empty box. When nothing is drafting the agent is not idle — it is holding
-                approved posts until their slot time — and that is a record, not a caption. */}
+            {/* Not an empty box, and no longer repeating the headline above it. When nothing is
+                drafting the agent is not idle — it is holding approved posts until their slot time
+                — and that is a record, not a caption. */}
             {drafting.length === 0 && (
               <div className="idle">
-                <p className="idle-head">Nothing being drafted right now.</p>
                 {batch.upNext.length === 0 ? (
-                  <p className="idle-sub">Everything approved has gone out. Next batch Wednesday 06:00.</p>
+                  <p className="idle-head">Everything approved has gone out. Next batch Wednesday 06:00.</p>
                 ) : (
                   <>
                     {/* Scheduled, not waiting. These are decided — approved and given a slot — and
                         are simply being held until their time. "Waiting" is the queue's word for
                         waiting on a person, and nothing here is waiting on anyone. */}
-                    <p className="idle-sub">
+                    <p className="idle-head">
                       {batch.upNext.length} approved {batch.upNext.length === 1 ? 'post is' : 'posts are'} scheduled.
                     </p>
                     <ul className="idle-list">
@@ -339,38 +398,3 @@ function PageHead() {
   );
 }
 
-/**
- * WHAT THE AGENT WOULD SAY, COMPOSED FROM THE SAME FIELDS THE PANEL BELOW RENDERS.
- *
- * Not a chat box — there is nowhere to type back, and D-002's seam has no endpoint for a free-text
- * instruction to land on. What is worth keeping from the composer we cut is the register: the agent
- * reporting on itself in one sentence, the way Lindy's activity feed narrates a run rather than
- * captioning it. Every number here is `batch`, `waiting.length` or `blocked.length` — nothing is
- * written independently of what the panel underneath is about to show, so the two cannot disagree.
- */
-function AgentLine({
-  batch,
-  waitingCount,
-  blockedCount,
-}: {
-  batch: Batch;
-  waitingCount: number;
-  blockedCount: number;
-}) {
-  const said = batch.running
-    ? `Drafting next week now.`
-    : waitingCount === 0
-      ? `Finished next week's ${batch.total} posts. Nothing left for you to decide.`
-      : `Finished next week's ${batch.total} posts. ${
-          waitingCount === 1 ? '1 needs you' : `${waitingCount} need you`
-        }${blockedCount > 0 ? `, ${blockedCount === 1 ? 'one of them blocked' : `${blockedCount} of them blocked`}` : ''}.`;
-
-  return (
-    <div className="agent-line">
-      <span className="agent-avatar" aria-hidden>
-        GA
-      </span>
-      <p className="agent-said">{said}</p>
-    </div>
-  );
-}

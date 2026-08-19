@@ -210,7 +210,6 @@ export function step(
      * faked streaming the brief explicitly rejects. Two fields, and the README states the ratio
      * rather than leaving a reviewer to infer that the timings are invented.
      */
-    playback_ms: 700,
     model: null,
     model_snapshot: null,
     tokens_in: 0,
@@ -1223,8 +1222,7 @@ const cleanSteps: RunStep[] = [
     tokens_in: 2140,
     tokens_out: 180,
     cost_model_usd: 0.0384,
-    latency_ms: 3100,
-    playback_ms: 5_100,
+    latency_ms: 9_000,
     input_hash: 'sha256:6b1e…c904',
   }),
   step({
@@ -1241,8 +1239,7 @@ const cleanSteps: RunStep[] = [
       limit: 8,
       allowlist_only: true,
     },
-    latency_ms: 900,
-    playback_ms: 2_800,
+    latency_ms: 12_000,
   }),
   step({
     id: stepId('RS-0141-03'),
@@ -1262,8 +1259,7 @@ const cleanSteps: RunStep[] = [
         'https://www.nyserda.ny.gov/all-programs/clean-heat',
       ],
     },
-    latency_ms: 1240,
-    playback_ms: 3_200,
+    latency_ms: 2_500,
   }),
   step({
     id: stepId('RS-0141-04'),
@@ -1274,8 +1270,7 @@ const cleanSteps: RunStep[] = [
     started_at: t(CLEAN_START, 7),
     tool_name: 'fetch_source',
     tool_input: { url: 'https://www.nyc.gov/site/sustainablebuildings/ll97/local-law-97.page' },
-    latency_ms: 1800,
-    playback_ms: 3_900,
+    latency_ms: 22_000,
   }),
   step({
     id: stepId('RS-0141-05'),
@@ -1310,8 +1305,7 @@ const cleanSteps: RunStep[] = [
           'a citation, so a first-party page is worth more here than commentary.',
       },
     ],
-    latency_ms: 2400,
-    playback_ms: 4_500,
+    latency_ms: 3_000,
   }),
   step({
     id: stepId('RS-0141-06'),
@@ -1321,8 +1315,7 @@ const cleanSteps: RunStep[] = [
     label: 'Screening the sources',
     started_at: t(CLEAN_START, 14),
     guardrail_event_id: eventId('GE-0141-01'),
-    latency_ms: 260,
-    playback_ms: 1_500,
+    latency_ms: 19_000,
   }),
   step({
     id: stepId('RS-0141-07'),
@@ -1341,8 +1334,7 @@ const cleanSteps: RunStep[] = [
     tokens_in: 11840,
     tokens_out: 320,
     cost_model_usd: 0.0114,
-    latency_ms: 4200,
-    playback_ms: 6_000,
+    latency_ms: 24_000,
   }),
   step({
     id: stepId('RS-0141-08'),
@@ -1353,8 +1345,7 @@ const cleanSteps: RunStep[] = [
     started_at: t(CLEAN_START, 21),
     tool_name: 'retrieve_examples',
     tool_input: { pillar: 'The compliance clock', channel: 'linkedin', k: 2, min_maturity_days: 7 },
-    latency_ms: 480,
-    playback_ms: 2_000,
+    latency_ms: 13_000,
   }),
   step({
     id: stepId('RS-0141-09'),
@@ -1368,8 +1359,7 @@ const cleanSteps: RunStep[] = [
     /** Top performers only. No negative examples, ever — in-context examples get imitated, so
      *  showing the model what not to do shows it what to do (A-05). */
     tool_output: { returned: 2, pool: 24, percentile_floor: 75, negative_examples: 0 },
-    latency_ms: 520,
-    playback_ms: 2_100,
+    latency_ms: 2_500,
   }),
   step({
     id: stepId('RS-0141-10'),
@@ -1389,8 +1379,7 @@ const cleanSteps: RunStep[] = [
     tokens_out: 410,
     cost_model_usd: 0.0921,
     /** The honest number. Drafting really is the slow step. */
-    latency_ms: 19_400,
-    playback_ms: 12_800,
+    latency_ms: 32_000,
     /**
      * §6b's load-bearing requirement, and the field that closes the brief's two hardest loops.
      *
@@ -1426,8 +1415,7 @@ const cleanSteps: RunStep[] = [
     label: 'Checking format, length and links',
     started_at: t(CLEAN_START, 45),
     guardrail_event_id: eventId('GE-0141-02'),
-    latency_ms: 90,
-    playback_ms: 900,
+    latency_ms: 9_000,
   }),
   step({
     id: stepId('RS-0141-12'),
@@ -1447,8 +1435,7 @@ const cleanSteps: RunStep[] = [
     tokens_in: 3960,
     tokens_out: 240,
     cost_model_usd: 0.0198,
-    latency_ms: 6100,
-    playback_ms: 7_200,
+    latency_ms: 24_000,
   }),
   step({
     id: stepId('RS-0141-13'),
@@ -1458,8 +1445,7 @@ const cleanSteps: RunStep[] = [
     label: 'Checking the finished draft',
     started_at: t(CLEAN_START, 53),
     guardrail_event_id: eventId('GE-0141-03'),
-    latency_ms: 3400,
-    playback_ms: 5_400,
+    latency_ms: 23_000,
   }),
   step({
     id: stepId('RS-0141-14'),
@@ -1480,8 +1466,7 @@ const cleanSteps: RunStep[] = [
        *  as at-risk rather than quietly missing. */
       deadline: minutes(3 * DAY - 1 * HOUR),
     },
-    latency_ms: 40,
-    playback_ms: 900,
+    latency_ms: 2_000,
   }),
 ];
 
@@ -1503,7 +1488,6 @@ const warnedSteps: RunStep[] = [
     tokens_out: 140,
     cost_model_usd: 0.0331,
     latency_ms: 2700,
-    playback_ms: 1200,
   }),
   step({
     id: stepId('RS-0142-02'),
@@ -1515,7 +1499,6 @@ const warnedSteps: RunStep[] = [
     tool_name: 'fetch_source',
     tool_input: { url: 'https://www.nyserda.ny.gov/all-programs/clean-heat' },
     latency_ms: 1500,
-    playback_ms: 650,
   }),
   step({
     id: stepId('RS-0142-03'),
@@ -1543,7 +1526,6 @@ const warnedSteps: RunStep[] = [
       },
     ],
     latency_ms: 1900,
-    playback_ms: 800,
   }),
   step({
     id: stepId('RS-0142-04'),
@@ -1554,7 +1536,6 @@ const warnedSteps: RunStep[] = [
     started_at: t(WARNED_START, 9),
     guardrail_event_id: eventId('GE-0142-01'),
     latency_ms: 240,
-    playback_ms: 550,
   }),
   step({
     id: stepId('RS-0142-05'),
@@ -1569,7 +1550,6 @@ const warnedSteps: RunStep[] = [
     tokens_out: 120,
     cost_model_usd: 0.0604,
     latency_ms: 14_800,
-    playback_ms: 2200,
     applied_inputs: [
       { kind: 'setting', id: 'tone.register', label: 'plain, technical, first person plural' },
     ],
@@ -1593,7 +1573,6 @@ const warnedSteps: RunStep[] = [
     tokens_out: 210,
     cost_model_usd: 0.0142,
     latency_ms: 5400,
-    playback_ms: 1500,
   }),
   step({
     id: stepId('RS-0142-07'),
@@ -1610,7 +1589,6 @@ const warnedSteps: RunStep[] = [
       'and blocking would send a fixable post into a dead end.',
     guardrail_event_id: eventId('GE-0142-02'),
     latency_ms: 3900,
-    playback_ms: 1800,
   }),
   step({
     id: stepId('RS-0142-08'),
@@ -1630,7 +1608,6 @@ const warnedSteps: RunStep[] = [
       deadline: minutes(4 * DAY - 90),
     },
     latency_ms: 40,
-    playback_ms: 900,
   }),
 ];
 
@@ -1650,8 +1627,7 @@ const liveSteps: RunStep[] = [
     tokens_in: 2010,
     tokens_out: 160,
     cost_model_usd: 0.0348,
-    latency_ms: 2900,
-    playback_ms: 7_100,
+    latency_ms: 9_000,
   }),
   step({
     id: stepId('RS-0143-02'),
@@ -1668,8 +1644,7 @@ const liveSteps: RunStep[] = [
     tokens_in: 1240,
     tokens_out: 90,
     cost_model_usd: 0.0198,
-    latency_ms: 2100,
-    playback_ms: 6_100,
+    latency_ms: 18_000,
   }),
   step({
     id: stepId('RS-0143-03'),
@@ -1680,8 +1655,7 @@ const liveSteps: RunStep[] = [
     started_at: t(LIVE_START, 7),
     tool_name: 'retrieve_examples',
     tool_input: { pillar: 'Field notes', channel: 'x', k: 2, min_maturity_days: 7 },
-    latency_ms: 460,
-    playback_ms: 2_800,
+    latency_ms: 26_000,
   }),
   step({
     id: stepId('RS-0143-04'),
@@ -1693,8 +1667,7 @@ const liveSteps: RunStep[] = [
     tool_name: 'retrieve_examples',
     outcome: 'ok',
     tool_output: { returned: 2, pool: 11, percentile_floor: 75, negative_examples: 0 },
-    latency_ms: 510,
-    playback_ms: 3_000,
+    latency_ms: 3_000,
   }),
   step({
     id: stepId('RS-0143-05'),
@@ -1708,8 +1681,7 @@ const liveSteps: RunStep[] = [
     tokens_in: 3980,
     tokens_out: 190,
     cost_model_usd: 0.0742,
-    latency_ms: 17_200,
-    playback_ms: 17_400,
+    latency_ms: 34_000,
     applied_inputs: [
       { kind: 'reflection_rule', id: 'REF-003', label: 'Open on the building, not the technology' },
       { kind: 'reflection_rule', id: 'REF-002', label: 'Say owner, not landlord' },
@@ -1735,8 +1707,7 @@ const liveSteps: RunStep[] = [
     label: 'Checking format, length and links',
     started_at: t(LIVE_START, 30),
     guardrail_event_id: eventId('GE-0143-01'),
-    latency_ms: 80,
-    playback_ms: 1_300,
+    latency_ms: 16_000,
   }),
   /* ---- everything below this line has not happened yet. The run is here, right now. --------- */
   step({
@@ -1754,8 +1725,7 @@ const liveSteps: RunStep[] = [
     tokens_in: 3120,
     tokens_out: 220,
     cost_model_usd: 0.0156,
-    latency_ms: 5800,
-    playback_ms: 10_100,
+    latency_ms: 31_000,
   }),
   step({
     id: stepId('RS-0143-08'),
@@ -1768,8 +1738,7 @@ const liveSteps: RunStep[] = [
       'The draft names Sterling Place. That is a street, not an address, and no unit number or ' +
       'owner name appears. Passing, but this is the check most likely to fire on this pillar.',
     guardrail_event_id: eventId('GE-0143-02'),
-    latency_ms: 2900,
-    playback_ms: 7_100,
+    latency_ms: 30_000,
   }),
   step({
     id: stepId('RS-0143-09'),
@@ -1779,8 +1748,7 @@ const liveSteps: RunStep[] = [
     label: 'Checking the finished draft',
     started_at: t(LIVE_START, 42),
     guardrail_event_id: eventId('GE-0143-03'),
-    latency_ms: 3100,
-    playback_ms: 7_400,
+    latency_ms: 34_000,
   }),
   step({
     id: stepId('RS-0143-10'),
@@ -1795,8 +1763,7 @@ const liveSteps: RunStep[] = [
       options: ['approve', 'approve_with_edits', 'reject', 'escalate'],
       deadline: minutes(5 * DAY + 2 * HOUR),
     },
-    latency_ms: 40,
-    playback_ms: 1_300,
+    latency_ms: 2_000,
   }),
 ];
 
@@ -1827,7 +1794,6 @@ const toolFailureSteps: RunStep[] = [
     tokens_out: 150,
     cost_model_usd: 0.0334,
     latency_ms: 2800,
-    playback_ms: 1200,
   }),
   step({
     id: stepId('RS-0144-02'),
@@ -1840,7 +1806,6 @@ const toolFailureSteps: RunStep[] = [
     tool_input: { url: 'https://www.urbangreencouncil.org/reports/retrofit-sequencing' },
     attempt: 1,
     latency_ms: 20_000,
-    playback_ms: 1400,
   }),
   step({
     id: stepId('RS-0144-03'),
@@ -1857,7 +1822,6 @@ const toolFailureSteps: RunStep[] = [
     attempt: 1,
     backoff_ms: 1_180,
     latency_ms: 20_000,
-    playback_ms: 900,
   }),
   step({
     id: stepId('RS-0144-04'),
@@ -1874,7 +1838,6 @@ const toolFailureSteps: RunStep[] = [
      *  real jitter is what makes it read as a system. */
     backoff_ms: 2_430,
     latency_ms: 20_000,
-    playback_ms: 900,
   }),
   step({
     id: stepId('RS-0144-05'),
@@ -1889,7 +1852,6 @@ const toolFailureSteps: RunStep[] = [
     attempt: 3,
     backoff_ms: null,
     latency_ms: 20_000,
-    playback_ms: 1100,
   }),
   step({
     id: stepId('RS-0144-06'),
@@ -1904,7 +1866,6 @@ const toolFailureSteps: RunStep[] = [
       'hourly sweep retry, rather than dropping the slot. A permanent failure, like a revoked ' +
       'login, would park differently: no sweep, and it waits for the event that fixes it.',
     latency_ms: 120,
-    playback_ms: 1300,
   }),
   step({
     id: stepId('RS-0144-07'),
@@ -1915,7 +1876,6 @@ const toolFailureSteps: RunStep[] = [
     started_at: t(FAIL_START, 74),
     guardrail_event_id: eventId('GE-0144-01'),
     latency_ms: 60,
-    playback_ms: 700,
   }),
   step({
     id: stepId('RS-0144-08'),
@@ -1934,7 +1894,6 @@ const toolFailureSteps: RunStep[] = [
     tool_input: { event: 'run_parked', run_id: 'RUN-0144', idem_key: 'notify:0144:parked:1' },
     tool_output: { delivered: 'slack', at: 'immediately' },
     latency_ms: 340,
-    playback_ms: 1000,
   }),
 ];
 
@@ -1966,8 +1925,7 @@ function approvedChildSteps(
     step({
       id: id(1), run_id: run, seq: 1, type: 'thinking',
       label: 'Loading the slot',
-      started_at: t(APPROVED_START, 0), latency_ms: 2400, playback_ms: 620,
-      model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
+      started_at: t(APPROVED_START, 0), latency_ms: 2400,      model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
       tokens_in: 2140, tokens_out: 168, cost_model_usd: 0.0341,
       thinking_text:
         'Slot is a ' + (channel === 'linkedin' ? 'LinkedIn' : 'X') + ' post for next week. Pulling ' +
@@ -1976,15 +1934,13 @@ function approvedChildSteps(
     step({
       id: id(2), run_id: run, seq: 2, type: 'tool_call',
       label: 'Looking up posts that performed',
-      started_at: t(APPROVED_START, 6), latency_ms: 900, playback_ms: 480,
-      tool_name: 'retrieve_examples',
+      started_at: t(APPROVED_START, 6), latency_ms: 900,      tool_name: 'retrieve_examples',
       tool_input: { pillar_id: 'PIL-002', channel, k: 3 },
     }),
     step({
       id: id(3), run_id: run, seq: 3, type: 'tool_result',
       label: 'No past posts to draw on yet',
-      started_at: t(APPROVED_START, 8), latency_ms: 120, playback_ms: 460,
-      tool_name: 'retrieve_examples',
+      started_at: t(APPROVED_START, 8), latency_ms: 120,      tool_name: 'retrieve_examples',
       /** N7: retrieval stays off below twenty published posts, because under that there is nothing
        *  to rank. `skipped` is its own outcome for exactly this — it is not an error and it is not
        *  a success, and collapsing it into either would hide a live policy. */
@@ -1994,8 +1950,7 @@ function approvedChildSteps(
     step({
       id: id(4), run_id: run, seq: 4, type: 'action',
       label: 'Writing the draft',
-      started_at: t(APPROVED_START, 11), latency_ms: 19_400, playback_ms: 900,
-      model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
+      started_at: t(APPROVED_START, 11), latency_ms: 19_400,      model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
       tokens_in: 3860, tokens_out: 341, cost_model_usd: 0.0724,
       produced: { entity_type: 'draft', id: draft },
       applied_inputs: [
@@ -2006,22 +1961,19 @@ function approvedChildSteps(
     step({
       id: id(5), run_id: run, seq: 5, type: 'guardrail',
       label: 'Checking the finished draft',
-      started_at: t(APPROVED_START, 32), latency_ms: 3100, playback_ms: 700,
-      guardrail_event_id: eventId(`GE-${prefix.replace('RS-', '')}-01`),
+      started_at: t(APPROVED_START, 32), latency_ms: 3100,      guardrail_event_id: eventId(`GE-${prefix.replace('RS-', '')}-01`),
     }),
     step({
       id: id(6), run_id: run, seq: 6, type: 'action',
       label: 'Scoring the draft',
-      started_at: t(APPROVED_START, 37), latency_ms: 5400, playback_ms: 760,
-      model: 'claude-sonnet-5', model_snapshot: 'sonnet-5-2026-04-02',
+      started_at: t(APPROVED_START, 37), latency_ms: 5400,      model: 'claude-sonnet-5', model_snapshot: 'sonnet-5-2026-04-02',
       tokens_in: 2980, tokens_out: 214, cost_model_usd: 0.0168,
       cost_platform_usd: 0,
     }),
     step({
       id: id(7), run_id: run, seq: 7, type: 'interrupt',
       label: 'Waiting for a decision',
-      started_at: t(APPROVED_START, 44), latency_ms: 0, playback_ms: 600,
-      interrupt: {
+      started_at: t(APPROVED_START, 44), latency_ms: 0,      interrupt: {
         gate: 'draft_approval',
         awaiting: 'operator',
         options: ['approve', 'approve_with_edits', 'reject', 'escalate'],
@@ -2056,8 +2008,7 @@ const poisonedSteps: RunStep[] = [
   step({
     id: stepId('RS-0147-01'), run_id: RUN_POISONED, seq: 1, type: 'thinking',
     label: 'Loading the slot', started_at: t(POISONED_START, 0),
-    latency_ms: 2300, playback_ms: 600,
-    model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
+    latency_ms: 2300,    model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
     tokens_in: 2050, tokens_out: 151, cost_model_usd: 0.0327,
     thinking_text:
       'Compliance-clock slot for next week. The pillar leans on published guidance, so this one ' +
@@ -2066,13 +2017,13 @@ const poisonedSteps: RunStep[] = [
   step({
     id: stepId('RS-0147-02'), run_id: RUN_POISONED, seq: 2, type: 'tool_call',
     label: 'Looking for sources', started_at: t(POISONED_START, 5),
-    latency_ms: 1400, playback_ms: 520, tool_name: 'search_sources',
+    latency_ms: 1400, tool_name: 'search_sources',
     tool_input: { query: 'Local Law 97 2030 caps multifamily', allowlist_only: true, k: 4 },
   }),
   step({
     id: stepId('RS-0147-03'), run_id: RUN_POISONED, seq: 3, type: 'tool_result',
     label: 'Found 2 approved sources', started_at: t(POISONED_START, 8),
-    latency_ms: 900, playback_ms: 520, tool_name: 'search_sources', outcome: 'ok',
+    latency_ms: 900, tool_name: 'search_sources', outcome: 'ok',
     /** The domain allowlist has already done its job here: four results, two from domains the
      *  client approved. The two it dropped never reach the fetch. */
     tool_output: { returned: 2, dropped_not_allowlisted: 2 },
@@ -2080,13 +2031,13 @@ const poisonedSteps: RunStep[] = [
   step({
     id: stepId('RS-0147-04'), run_id: RUN_POISONED, seq: 4, type: 'tool_call',
     label: 'Reading a source', started_at: t(POISONED_START, 12),
-    latency_ms: 2600, playback_ms: 600, tool_name: 'fetch_source',
+    latency_ms: 2600, tool_name: 'fetch_source',
     tool_input: { url: 'https://buildingsnyenergy.example.com/newsletter/week-33' },
   }),
   step({
     id: stepId('RS-0147-05'), run_id: RUN_POISONED, seq: 5, type: 'tool_result',
     label: 'Read 1 document', started_at: t(POISONED_START, 17),
-    latency_ms: 1800, playback_ms: 640, tool_name: 'fetch_source', outcome: 'ok',
+    latency_ms: 1800, tool_name: 'fetch_source', outcome: 'ok',
     sources: [
       {
         url: 'https://buildingsnyenergy.example.com/newsletter/week-33',
@@ -2108,8 +2059,7 @@ const poisonedSteps: RunStep[] = [
   step({
     id: stepId('RS-0147-06'), run_id: RUN_POISONED, seq: 6, type: 'guardrail',
     label: 'Screening the sources', started_at: t(POISONED_START, 21),
-    latency_ms: 900, playback_ms: 900,
-    /** A cheap classifier, and it runs *before* the capable model. Ordering is the defence: a model
+    latency_ms: 900,    /** A cheap classifier, and it runs *before* the capable model. Ordering is the defence: a model
      *  that has already read the injected text cannot un-read it. */
     model: 'guard-class-sm', model_snapshot: 'guard-class-sm-2026-02-11',
     tokens_in: 1840, tokens_out: 12, cost_model_usd: 0.0009,
@@ -2118,8 +2068,7 @@ const poisonedSteps: RunStep[] = [
   step({
     id: stepId('RS-0147-07'), run_id: RUN_POISONED, seq: 7, type: 'action',
     label: 'Stopped the run and flagged the site', started_at: t(POISONED_START, 23),
-    latency_ms: 300, playback_ms: 760,
-    tool_name: 'notify_operator',
+    latency_ms: 300,    tool_name: 'notify_operator',
     tool_input: { event: 'injection_quarantine', domain: 'buildingsnyenergy.example.com' },
     /** No `produced`. The run halts before the drafting node, so there is no draft to point at —
      *  which is exactly why the queue holds a union and not an array of drafts (D-033). */
@@ -2132,20 +2081,19 @@ const hostileSteps: RunStep[] = [
   step({
     id: stepId('RS-0148-01'), run_id: RUN_HOSTILE, seq: 1, type: 'thinking',
     label: 'Checking replies on recent posts', started_at: t(HOSTILE_START, 0),
-    latency_ms: 400, playback_ms: 520,
-    thinking_text:
+    latency_ms: 400,    thinking_text:
       'Two posts are inside the reply window. Checking both for new replies since the last sweep.',
   }),
   step({
     id: stepId('RS-0148-02'), run_id: RUN_HOSTILE, seq: 2, type: 'tool_call',
     label: 'Reading replies', started_at: t(HOSTILE_START, 2),
-    latency_ms: 1600, playback_ms: 560, tool_name: 'get_engagement',
+    latency_ms: 1600, tool_name: 'get_engagement',
     tool_input: { post_id: HOSTILE_REPLY_POST_ID, since_minutes: 30 },
   }),
   step({
     id: stepId('RS-0148-03'), run_id: RUN_HOSTILE, seq: 3, type: 'tool_result',
     label: 'Found 4 replies, 3 hostile', started_at: t(HOSTILE_START, 5),
-    latency_ms: 2100, playback_ms: 700, tool_name: 'get_engagement', outcome: 'ok',
+    latency_ms: 2100, tool_name: 'get_engagement', outcome: 'ok',
     /**
      * R8, and this is the collision it exists to resolve. The tool output carries counts, sentiment
      * labels and reply *ids* — never the reply text. Inbound text from strangers has exactly one
@@ -2162,8 +2110,7 @@ const hostileSteps: RunStep[] = [
   step({
     id: stepId('RS-0148-04'), run_id: RUN_HOSTILE, seq: 4, type: 'action',
     label: 'Paused the pillar: What it actually costs', started_at: t(HOSTILE_START, 9),
-    latency_ms: 250, playback_ms: 860,
-    /**
+    latency_ms: 250,    /**
      * The pillar, not the account and not nothing. The theme is the likely cause, so pausing
      * everything overreacts and pausing nothing repeats the mistake. The other three pillars keep
      * publishing on schedule.
@@ -2173,16 +2120,14 @@ const hostileSteps: RunStep[] = [
   step({
     id: stepId('RS-0148-05'), run_id: RUN_HOSTILE, seq: 5, type: 'action',
     label: 'Told you, and will email in 30 minutes',
-    started_at: t(HOSTILE_START, 10), latency_ms: 700, playback_ms: 640,
-    tool_name: 'notify_operator', outcome: 'ok',
+    started_at: t(HOSTILE_START, 10), latency_ms: 700,    tool_name: 'notify_operator', outcome: 'ok',
     tool_input: { channel: 'slack', escalate_to_email_after_minutes: 30 },
     guardrail_event_id: eventId('GE-0148-01'),
   }),
   step({
     id: stepId('RS-0148-06'), run_id: RUN_HOSTILE, seq: 6, type: 'interrupt',
     label: 'Waiting for a decision',
-    started_at: t(HOSTILE_START, 11), latency_ms: 0, playback_ms: 700,
-    interrupt: {
+    started_at: t(HOSTILE_START, 11), latency_ms: 0,    interrupt: {
       gate: 'post_publish_intervention',
       awaiting: 'operator',
       /**
@@ -2214,13 +2159,12 @@ const reconcileSteps: RunStep[] = [
   step({
     id: stepId('RS-0149-01'), run_id: RUN_RECONCILE, seq: 1, type: 'guardrail',
     label: 'Final check before publishing', started_at: t(RECONCILE_START, 0),
-    latency_ms: 120, playback_ms: 560,
-    guardrail_event_id: eventId('GE-0149-01'),
+    latency_ms: 120,    guardrail_event_id: eventId('GE-0149-01'),
   }),
   step({
     id: stepId('RS-0149-02'), run_id: RUN_RECONCILE, seq: 2, type: 'tool_call',
     label: 'Publishing', started_at: t(RECONCILE_START, 2),
-    latency_ms: 30_000, playback_ms: 900, tool_name: 'publish_post',
+    latency_ms: 30_000, tool_name: 'publish_post',
     tool_input: {
       channel: 'linkedin',
       idempotency_key: 'pub:DRAFT-0116:DV-0116-2',
@@ -2230,7 +2174,7 @@ const reconcileSteps: RunStep[] = [
   step({
     id: stepId('RS-0149-03'), run_id: RUN_RECONCILE, seq: 3, type: 'tool_result',
     label: 'The platform did not answer', started_at: t(RECONCILE_START, 34),
-    latency_ms: 30_000, playback_ms: 820, tool_name: 'publish_post', outcome: 'error',
+    latency_ms: 30_000, tool_name: 'publish_post', outcome: 'error',
     /** Ambiguous, not failed. The request may have been received. This is the distinction the
      *  whole branch exists for. */
     error: { kind: 'timeout' },
@@ -2238,8 +2182,7 @@ const reconcileSteps: RunStep[] = [
   step({
     id: stepId('RS-0149-04'), run_id: RUN_RECONCILE, seq: 4, type: 'thinking',
     label: 'Checking whether it went out',
-    started_at: t(RECONCILE_START, 66), latency_ms: 200, playback_ms: 900,
-    thinking_text:
+    started_at: t(RECONCILE_START, 66), latency_ms: 200,    thinking_text:
       'A timeout is not a failure. The platform does not honour our idempotency key, so replaying ' +
       'could publish a second copy under the client’s name. Reading the channel back is the only ' +
       'safe next step.',
@@ -2247,14 +2190,13 @@ const reconcileSteps: RunStep[] = [
   step({
     id: stepId('RS-0149-05'), run_id: RUN_RECONCILE, seq: 5, type: 'tool_call',
     label: 'Reading the channel back', started_at: t(RECONCILE_START, 68),
-    latency_ms: 2400, playback_ms: 700, tool_name: 'reconcile_published',
+    latency_ms: 2400, tool_name: 'reconcile_published',
     tool_input: { channel: 'linkedin', window_minutes: 15, match_on: 'approved_hash' },
   }),
   step({
     id: stepId('RS-0149-06'), run_id: RUN_RECONCILE, seq: 6, type: 'tool_result',
     label: 'Two posts look alike, cannot tell them apart',
-    started_at: t(RECONCILE_START, 72), latency_ms: 1100, playback_ms: 900,
-    tool_name: 'reconcile_published', outcome: 'error',
+    started_at: t(RECONCILE_START, 72), latency_ms: 1100,    tool_name: 'reconcile_published', outcome: 'error',
     /**
      * Two posts in the window, neither an exact hash match — the platform normalises whitespace on
      * ingest, so a byte comparison cannot settle it. Guessing in either direction is worse than
@@ -2284,8 +2226,7 @@ const reconcileSteps: RunStep[] = [
   step({
     id: stepId('RS-0149-07'), run_id: RUN_RECONCILE, seq: 7, type: 'action',
     label: 'Paused for you: we cannot tell if this published',
-    started_at: t(RECONCILE_START, 75), latency_ms: 250, playback_ms: 820,
-    tool_name: 'notify_operator', outcome: 'ok',
+    started_at: t(RECONCILE_START, 75), latency_ms: 250,    tool_name: 'notify_operator', outcome: 'ok',
     tool_input: { event: 'awaiting_reconcile', candidates: 2, auto_retry: false },
     guardrail_event_id: eventId('GE-0149-02'),
   }),
@@ -2328,8 +2269,7 @@ const planningSteps: RunStep[] = [
   step({
     id: stepId('RS-0132-01'), run_id: RUN_PLANNING, seq: 1, type: 'thinking',
     label: 'Loading the pillars and last week', started_at: t(PLAN_START, 0),
-    latency_ms: 3100, playback_ms: 640,
-    model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
+    latency_ms: 3100,    model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
     tokens_in: 4820, tokens_out: 240, cost_model_usd: 0.0611,
     thinking_text:
       'Four active pillars, none paused. Cadence is 3 LinkedIn and 5 X. Checking which pillars ran ' +
@@ -2338,13 +2278,13 @@ const planningSteps: RunStep[] = [
   step({
     id: stepId('RS-0132-02'), run_id: RUN_PLANNING, seq: 2, type: 'tool_call',
     label: 'Reading last week’s numbers', started_at: t(PLAN_START, 6),
-    latency_ms: 1500, playback_ms: 500, tool_name: 'get_performance',
+    latency_ms: 1500, tool_name: 'get_performance',
     tool_input: { window_days: 28, group_by: ['pillar', 'channel'] },
   }),
   step({
     id: stepId('RS-0132-03'), run_id: RUN_PLANNING, seq: 3, type: 'tool_result',
     label: 'Read 4 pillars across 2 channels', started_at: t(PLAN_START, 9),
-    latency_ms: 1900, playback_ms: 560, tool_name: 'get_performance', outcome: 'ok',
+    latency_ms: 1900, tool_name: 'get_performance', outcome: 'ok',
     tool_output: {
       best: { pillar: 'Field notes', channel: 'linkedin', median_rate: 0.038 },
       worst: { pillar: 'The compliance clock', channel: 'x', median_rate: 0.011 },
@@ -2354,8 +2294,7 @@ const planningSteps: RunStep[] = [
   step({
     id: stepId('RS-0132-04'), run_id: RUN_PLANNING, seq: 4, type: 'action',
     label: 'Proposing next week', started_at: t(PLAN_START, 14),
-    latency_ms: 12_400, playback_ms: 1000,
-    model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
+    latency_ms: 12_400,    model: 'claude-opus-5', model_snapshot: 'opus-5-2026-05-14',
     tokens_in: 5240, tokens_out: 690, cost_model_usd: 0.0884,
     /** The field this run exists to fill. Rendered by `StepRow` as the week's schedule. */
     proposed_calendar: proposedWeek,
@@ -2363,8 +2302,7 @@ const planningSteps: RunStep[] = [
   step({
     id: stepId('RS-0132-05'), run_id: RUN_PLANNING, seq: 5, type: 'guardrail',
     label: 'Checking the plan', started_at: t(PLAN_START, 28),
-    latency_ms: 90, playback_ms: 700,
-    /**
+    latency_ms: 90,    /**
      * Deterministic on purpose. Pillar coverage, cadence totals, channel split and minimum spacing
      * are all counting — a model would be slower, dearer and less certain at it, and this check has
      * to be right every week rather than usually.
@@ -2380,8 +2318,7 @@ const planningSteps: RunStep[] = [
   step({
     id: stepId('RS-0132-06'), run_id: RUN_PLANNING, seq: 6, type: 'interrupt',
     label: 'Waiting for the owner to approve', started_at: t(PLAN_START, 29),
-    latency_ms: 0, playback_ms: 800,
-    interrupt: {
+    latency_ms: 0,    interrupt: {
       /** The first of A-08's four gates, and the only one that reaches the owner rather than the
        *  operator. They approve what the company will talk about, not individual posts. */
       gate: 'calendar_approval',
@@ -2395,8 +2332,7 @@ const planningSteps: RunStep[] = [
   step({
     id: stepId('RS-0132-07'), run_id: RUN_PLANNING, seq: 7, type: 'action',
     label: 'Owner approved the plan',
-    started_at: t(PLAN_START, 26 * HOUR), latency_ms: 400, playback_ms: 700,
-    outcome: 'ok',
+    started_at: t(PLAN_START, 26 * HOUR), latency_ms: 400,    outcome: 'ok',
     tool_input: { approved_by: 'Dana Roque — owner', via: 'signed expiring link', slots_created: 8 },
   }),
 ];

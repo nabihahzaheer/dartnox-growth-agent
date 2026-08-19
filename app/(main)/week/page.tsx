@@ -22,7 +22,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import Link from 'next/link';
 import { getWeek, initialWeekIndex, subscribeToWorld } from '@/lib/agentClient';
 import { WEEK_SLOT_LABEL, type Week } from '@/lib/week';
-import type { ConsoleError } from '@/lib/types';
+import type { ConsoleError, RunState } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
 import { LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 import { ChannelMark } from '@/components/ChannelMark';
@@ -264,19 +264,28 @@ export default function WeekPage() {
           </div>
 
           {week.otherRuns.length > 0 && (
-            <section>
+            /**
+             * THE WEEK'S RUNS THAT ARE NOT POSTS — planning, publishing, reconciliation.
+             *
+             * It was three spans on a flex row with `margin-left: auto` on the last, so the middle
+             * column started wherever the title happened to end and no two rows lined up. It is a
+             * grid now, which is what a table of four facts wants to be, and each row leads with a
+             * dot in its run's own state colour — the one thing the list was not saying at all. A
+             * completed publish and a run that produced nothing read identically before.
+             */
+            <section className="wk-runs">
               {/* Named from the week being viewed. It read "This week's other runs" above whatever
                   week you had stepped to, so browsing to July showed July's runs under a heading
                   claiming they were this week's. */}
               <h3 className="sec">Other runs · {week.label}</h3>
-              <ul className="settled">
+              <ul className="runlist">
                 {week.otherRuns.map((r) => (
                   <li key={r.run.id}>
-                    <span className="settled-title">{r.title}</span>
-                    <span className="settled-state">{r.detail}</span>
-                    <span className="settled-state mono" style={{ marginLeft: 'auto' }}>
-                      {r.run.id}
-                    </span>
+                    <span className={`run-dot ${RUN_TONE[r.run.state]}`} aria-hidden />
+                    <span className="run-title">{r.title}</span>
+                    <span className="run-detail">{r.detail}</span>
+                    <span className="run-state">{RUN_STATE_LABEL[r.run.state]}</span>
+                    <span className="run-id mono">{r.run.id}</span>
                   </li>
                 ))}
               </ul>
@@ -287,6 +296,33 @@ export default function WeekPage() {
     </>
   );
 }
+
+/**
+ * A run's state as a colour and as a word, in one place so the dot and the label cannot disagree.
+ * Three tones rather than eight colours: it either went through, it needs a person, or it is still
+ * moving. Eight hues on a list of four rows is a legend nobody asked for.
+ */
+const RUN_TONE: Record<RunState, string> = {
+  queued: 'tone-wait',
+  running: 'tone-live',
+  awaiting_human: 'tone-attend',
+  parked_transient: 'tone-wait',
+  parked_blocked: 'tone-attend',
+  quarantined: 'tone-stop',
+  completed: 'tone-done',
+  abandoned: 'tone-stop',
+};
+
+const RUN_STATE_LABEL: Record<RunState, string> = {
+  queued: 'Queued',
+  running: 'Running',
+  awaiting_human: 'Needs you',
+  parked_transient: 'Retrying',
+  parked_blocked: 'Blocked',
+  quarantined: 'Stopped',
+  completed: 'Done',
+  abandoned: 'Abandoned',
+};
 
 function OwnerGateBanner({ gate }: { gate: Week['ownerGate'] }) {
   if (gate.kind === 'none') return null;
