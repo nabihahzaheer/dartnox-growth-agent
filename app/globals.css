@@ -833,3 +833,39 @@ body {
   background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
   font-size: 10.5px; font-weight: 700; }
 .agent-said { font-size: 15.5px; line-height: 1.55; color: var(--text); margin: 2px 0 0; }
+
+/* ---- buttons: small variant ---- */
+.btn-sm { font-size: 12.5px; padding: 5px 11px; }
+
+/* ---- the week ---- */
+.wk-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 9px; margin-top: 4px; }
+.wk-day { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; min-height: 130px; display: flex; flex-direction: column; gap: 6px; }
+.wk-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.wk-daylabel { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-faint); margin: 0 0 2px; }
+.wk-empty { margin: 0; font-size: 12px; color: var(--text-faint); }
+.wk-entry { display: flex; flex-direction: column; gap: 3px; background: var(--surface-sunk);
+  border-radius: 6px; padding: 8px 9px; text-decoration: none; color: inherit; }
+a.wk-entry:hover { background: var(--accent-soft); }
+.wk-entry-static { opacity: 0.85; }
+.wk-row1 { display: flex; align-items: center; gap: 6px; }
+.wk-time { font-size: 11.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.wk-pill { margin-left: auto; font-size: 10.5px; padding: 1px 7px; }
+.wk-angle { font-size: 12.5px; font-weight: 550; color: var(--text); line-height: 1.35; }
+.wk-moved { font-size: 11px; color: var(--attend); }
+
+/* ---- the owner's calendar gate ---- */
+.gate-band { display: flex; gap: 11px; align-items: flex-start; padding: 12px 15px;
+  border-radius: var(--radius); margin: 14px 0 18px; font-size: 13.5px; line-height: 1.55; }
+.gate-band p { margin: 0; }
+.gate-pending { background: var(--attend-soft); color: #6b4507; }
+.gate-approved { background: var(--go-soft); color: #1d5238; }
+.gate-ic { width: 18px; height: 18px; border-radius: 50%; flex: none; margin-top: 1px;
+  background: var(--attend); color: #fff; font-size: 11px; font-weight: 700;
+  display: grid; place-items: center; }
+.gate-ic-go { background: var(--go); }
+
+@media (max-width: 900px) {
+  .wk-grid { grid-template-columns: repeat(2, 1fr); }
+}
