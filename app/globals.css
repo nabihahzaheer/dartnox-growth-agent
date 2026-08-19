@@ -632,8 +632,12 @@ body {
 }
 
 .shell-main {
-  padding: 24px 26px 80px;
-  max-width: 1020px;
+  padding: 26px 30px 80px;
+  /* Was a hard 1020px cap, which left the seven-column calendar squeezed into two thirds of a wide
+     screen while the page ran on past it. The content now uses the width it is given, with a cap
+     only where a long measure would hurt reading. */
+  max-width: 1440px;
+  width: 100%;
 }
 
 /* ---- page furniture ---- */
@@ -829,34 +833,48 @@ body {
 .vd-rat-text { margin: 8px 0 0; font-size: 13px; line-height: 1.55; color: var(--text-muted); }
 .vd-rat-note { margin: 7px 0 0; font-size: 11px; color: var(--text-faint); }
 .vd-norat { margin: 0; padding: 9px 13px 11px; border-top: 1px solid rgb(0 0 0 / 6%);
-  font-size: 11.5px; color: var(--text-faint); }
+  font-size: 12px; color: var(--text-faint); line-height: 1.5; }
+.vd-lede { margin: 0; padding: 0 13px 9px; font-size: 12.5px; color: var(--text-muted); }
+.vd-mark { background: var(--attend-soft); color: var(--text); padding: 1px 4px; border-radius: 3px;
+  box-decoration-break: clone; }
+.vd-stop .vd-mark { background: var(--stop-soft); }
 
 /* ---- step timeline ---- */
 .tl { list-style: none; margin: 0; padding: 0; }
 .tl-row { display: flex; gap: 11px; align-items: flex-start; position: relative; }
-.tl-row:not(.is-last) .tl-node::after { content: ''; position: absolute; left: 50%; top: 20px;
-  bottom: -8px; width: 1px; background: var(--border-strong); transform: translateX(-50%); }
-.tl-node { position: relative; width: 18px; height: 18px; border-radius: 50%; flex: none;
-  margin-top: 4px; display: grid; place-items: center; font-size: 9px; font-weight: 700; }
-.tl-ok { background: var(--accent); color: #fff; }
-.tl-warn { background: var(--attend); color: #fff; }
-.tl-bad { background: var(--stop); color: #fff; }
+/* Lindy/Gumloop-style: a quiet connector, small unfilled nodes, and each step as a soft row that
+   only gains a surface when you open it. The previous version filled every node with the accent at
+   full strength, so a fourteen-step trace was fourteen solid blue dots down the page and the two
+   that had actually failed did not stand out at all. */
+.tl-row:not(.is-last) .tl-node::after { content: ''; position: absolute; left: 50%; top: 19px;
+  bottom: -6px; width: 1.5px; background: var(--border); transform: translateX(-50%);
+  border-radius: 2px; }
+.tl-node { position: relative; width: 17px; height: 17px; border-radius: 50%; flex: none;
+  margin-top: 5px; display: grid; place-items: center; font-size: 8.5px; font-weight: 700;
+  border: 1.5px solid; }
+.tl-ok { background: var(--surface); border-color: var(--border-strong); color: var(--go); }
+.tl-warn { background: var(--attend-soft); border-color: var(--attend); color: var(--attend); }
+.tl-bad { background: var(--stop-soft); border-color: var(--stop); color: var(--stop); }
 .tl-body { flex: 1; min-width: 0; padding-bottom: 10px; }
 .tl-head { appearance: none; border: 0; background: none; font: inherit; width: 100%;
-  display: flex; align-items: center; gap: 9px; cursor: pointer; text-align: left; padding: 2px 0; }
-.tl-head:hover .tl-name { color: var(--accent-text); }
+  display: flex; align-items: center; gap: 9px; cursor: pointer; text-align: left;
+  padding: 5px 9px; border-radius: var(--radius-sm); margin-left: -9px; transition: background .12s; }
+.tl-head:hover { background: var(--surface-sunk); }
+.tl-row.is-open .tl-head { background: var(--surface-sunk); }
 .tl-car { color: var(--text-faint); font-size: 9px; width: 9px; flex: none;
   transition: transform 0.16s; display: inline-block; }
 .tl-row.is-open .tl-car { transform: rotate(90deg); }
-.tl-name { font-size: 14px; font-weight: 550; color: var(--text); }
+.tl-name { font-size: 13.5px; font-weight: 550; color: var(--text); }
 .tl-meta { margin-left: auto; display: flex; align-items: center; gap: 9px; flex: none; }
 .tl-lay { font-size: 11px; color: var(--text-faint); }
 .tl-dur { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
-.tl-detail { margin-top: 8px; background: var(--surface-sunk); border: 1px solid var(--border);
-  border-radius: 8px; padding: 10px 12px; }
+.tl-detail { margin-top: 6px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 11px 13px; box-shadow: var(--shadow); }
 .tl-think { margin: 9px 0 0; font-size: 13px; line-height: 1.55; color: var(--text-muted); }
-.kv { margin: 0; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.7; }
-.kv-pair { display: grid; grid-template-columns: 108px 1fr; gap: 12px; }
+.kv { margin: 0; font-size: 11.5px; line-height: 1.7; }
+.kv-pair { display: grid; grid-template-columns: 104px 1fr; gap: 12px; padding: 1px 0; }
+.kv dt { font-family: var(--font-mono); }
+.kv dd { font-family: var(--font-mono); }
 .kv dt { color: var(--text-faint); }
 .kv dd { margin: 0; color: var(--text-muted); overflow-wrap: anywhere; }
 
@@ -888,17 +906,37 @@ body {
 @keyframes shimmer { 50% { opacity: 0.45; } }
 
 /* ---- approvals: queue rows ---- */
-.qrow { display: flex; align-items: flex-start; gap: 11px; padding: 13px 15px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--shadow); text-decoration: none; color: inherit; }
-.qrow:hover { border-color: var(--border-strong); }
+/* ---- approvals rows ----
+   Two shapes, deliberately unalike. An actionable row is a raised white card with a chevron; a run
+   that needs no click is flat, greyed and has none — the old list gave both the same card and the
+   same amber pill, so a quarantined run that opens nothing looked exactly like a decidable draft. */
+.qrow { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); overflow: hidden; }
 .qrow-stop { border-color: #e8c4bd; }
-.qrow-static { cursor: default; }
-.qrow-glyph { font-size: 15px; flex: none; margin-top: 1px; }
+.qrow-run { display: flex; align-items: flex-start; gap: 11px; padding: 12px 15px;
+  background: var(--surface-sunk); box-shadow: none; border-style: dashed; }
+.qico { width: 17px; height: 17px; flex: none; margin-top: 1px; }
+.qico svg { width: 100%; height: 100%; display: block; }
+.qico-stop { color: var(--stop); }
+.qico-wait { color: var(--text-faint); }
 .qrow-body { flex: 1; min-width: 0; }
-.qrow-title { margin: 0; font-size: 14.5px; font-weight: 600; color: var(--text); }
-.qrow-excerpt { font-weight: 400; color: var(--text-muted); }
-.qrow-sub { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.qrow-title { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--text); }
+.qrow-sub { margin: 3px 0 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+.qrow-run .pill { flex: none; align-self: center; }
+
+.qrow-head { appearance: none; border: 0; background: none; font: inherit; width: 100%;
+  display: flex; align-items: center; gap: 10px; padding: 12px 15px; cursor: pointer;
+  text-align: left; }
+.qrow-head:hover { background: var(--surface-sunk); }
+.qrow-ch { font-size: 12.5px; font-weight: 600; color: var(--text); flex: none; }
+.qrow-excerpt { font-size: 13px; color: var(--text-muted); flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qcar { font-size: 8px; color: var(--text-faint); transition: transform .16s; flex: none; }
+.qcar.is-open { transform: rotate(90deg); }
+.qrow-full { padding: 0 15px 15px; border-top: 1px solid var(--border); }
+.qrow-full .post { margin-top: 13px; font-size: 14.5px; }
+.qrow-why { margin: 11px 0 0; font-size: 12.5px; color: var(--attend); }
+.qrow-go { display: inline-block; margin-top: 13px; text-decoration: none; }
 
 /* ---- detail page ---- */
 .crumb { font-size: 13px; color: var(--text-faint); margin: 0 0 4px; }
@@ -938,7 +976,10 @@ body {
    No positioning, no focus trap, no inert-background rules and no z-index here — `showModal()`
    gives all four correctly, which is the whole reason D-025's refusal of a component library is
    affordable. What is left is what a dialog actually needs styling for: a box and its backdrop. */
-.dlg { border: 1px solid var(--border-strong); border-radius: var(--radius);
+.dlg { /* `<dialog>` defaults to the top of the block axis, so it opened pinned near the top-left
+     rather than as a dialog. `margin:auto` inside the fixed inset is what actually centres it. */
+  position: fixed; inset: 0; margin: auto;
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
   background: var(--surface); color: var(--text); padding: 20px 22px; width: min(92vw, 460px);
   box-shadow: 0 12px 40px rgb(21 26 30 / 18%); }
 .dlg-wide { width: min(94vw, 620px); }
@@ -987,22 +1028,35 @@ body {
 .l1 { display: flex; align-items: center; gap: 11px; }
 .l1 h2 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.015em; }
 
-.wk-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 9px; margin-top: 4px; }
-.wk-day { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-  padding: 10px; min-height: 130px; display: flex; flex-direction: column; gap: 6px; }
-.wk-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.wk-daylabel { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--text-faint); margin: 0 0 2px; }
-.wk-empty { margin: 0; font-size: 12px; color: var(--text-faint); }
-.wk-entry { display: flex; flex-direction: column; gap: 3px; background: var(--surface-sunk);
-  border-radius: 6px; padding: 8px 9px; text-decoration: none; color: inherit; }
-a.wk-entry:hover { background: var(--accent-soft); }
-.wk-entry-static { opacity: 0.85; }
-.wk-row1 { display: flex; align-items: center; gap: 6px; }
+.wk-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+  background: var(--surface); box-shadow: var(--shadow); margin-top: 10px; }
+/* Hairline cells rather than floating boxes with gaps. A calendar reads as one grid; seven detached
+   rounded cards read as seven lists that happen to sit in a row. */
+.wk-day { border-right: 1px solid var(--border); padding: 0 0 12px; min-height: 190px;
+  display: flex; flex-direction: column; gap: 7px; }
+.wk-day:last-child { border-right: 0; }
+.wk-today { background: var(--accent-soft); }
+.wk-daylabel { display: flex; align-items: baseline; gap: 7px; margin: 0;
+  padding: 11px 12px 9px; border-bottom: 1px solid var(--border); }
+.wk-dow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-faint); }
+.wk-dom { font-size: 15px; font-weight: 640; color: var(--text); font-variant-numeric: tabular-nums;
+  margin-left: auto; }
+.wk-today .wk-dom { color: var(--accent-text); }
+.wk-empty { margin: 0; flex: 1; }
+.wk-entry { display: flex; flex-direction: column; gap: 4px; background: var(--surface);
+  border: 1px solid var(--border); border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm); padding: 9px 10px; margin: 0 8px; text-decoration: none;
+  color: inherit; transition: border-color .14s, box-shadow .14s; }
+a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); }
+.wk-entry-static { background: var(--surface-sunk); border-left-color: var(--border); }
+.wk-row1 { display: flex; align-items: center; gap: 7px; }
 .wk-time { font-size: 11.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
-.wk-pill { margin-left: auto; font-size: 10.5px; padding: 1px 7px; }
-.wk-angle { font-size: 12.5px; font-weight: 550; color: var(--text); line-height: 1.35; }
+.wk-pill { margin-left: auto; font-size: 10px; padding: 1px 7px; }
+.wk-angle { font-size: 12.5px; font-weight: 560; color: var(--text); line-height: 1.4; }
 .wk-moved { font-size: 11px; color: var(--attend); }
+.wk-range { font-size: 13px; color: var(--text-faint); }
 
 /* ---- the owner's calendar gate ---- */
 .gate-band { display: flex; gap: 11px; align-items: flex-start; padding: 12px 15px;
@@ -1030,8 +1084,9 @@ a.wk-entry:hover { background: var(--accent-soft); }
 .bud-track i.bud-over { background: var(--stop); }
 .bud-pct { font-size: 12.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
-@media (max-width: 900px) {
-  .wk-grid { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 1000px) {
+  .wk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wk-day { border-bottom: 1px solid var(--border); }
 }
 
 /* ---- results: tiles ---- */
@@ -1108,6 +1163,13 @@ a.wk-entry:hover { background: var(--accent-soft); }
   border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(21 26 30 / 25%);
   transition: transform 0.15s; }
 .tgl-on { background: var(--go); }
+/* A locked control reads as locked before it is pressed: a padlock in a flat, unfilled track, and
+   the cursor says it is not an ordinary switch. Still clickable — D-047's refusal has to be
+   reachable, because a disabled input cannot answer "why". */
+.tgl-locked { background: var(--surface-sunk); border: 1px solid var(--border-strong);
+  color: var(--text-faint); display: grid; place-items: center; cursor: help; }
+.tgl-locked.tgl-on { background: var(--surface-sunk); }
+.tgl-lock { width: 11px; height: 11px; }
 .tgl-on .tgl-knob { transform: translateX(14px); }
 
 .rule-row { display: flex; align-items: center; gap: 12px; padding: 10px 0;
@@ -1311,3 +1373,34 @@ a.wk-entry:hover { background: var(--accent-soft); }
 .stack > * { animation: card-in 300ms ease-out; }
 @keyframes card-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .stack > * { animation: none; } }
+
+/* ================================================================================================
+ * METRICS — grouped surfaces rather than tiles floating on the page
+ * ==============================================================================================*/
+.mgroup { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden; }
+.mgroup-head { padding: 14px 18px 12px; border-bottom: 1px solid var(--border); }
+.mgroup-title { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+.mgroup-detail { margin: 3px 0 0; font-size: 13px; color: var(--text-muted); }
+.mgroup-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+.mgroup-grid > * { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+/* Hairlines only between cells, never on the outer edge — the card's own border is the outline. */
+.mgroup-grid > *:nth-child(3n) { border-right: 0; }
+.mgroup-grid > *:nth-last-child(-n+3):nth-child(3n+1),
+.mgroup-grid > *:nth-last-child(-n+3):nth-child(3n+1) ~ * { border-bottom: 0; }
+@media (max-width: 900px) { .mgroup-grid { grid-template-columns: 1fr; }
+  .mgroup-grid > * { border-right: 0; } }
+
+.tile { background: var(--surface); border: 0; border-radius: 0; padding: 15px 18px 16px;
+  box-shadow: none; display: flex; flex-direction: column; gap: 4px; }
+.tl2 { font-size: 12.5px; color: var(--text-muted); font-weight: 500; margin: 0; }
+.tb { font-size: 30px; font-weight: 660; letter-spacing: -.03em; line-height: 1.05;
+  font-variant-numeric: tabular-nums; }
+.tb-muted { font-size: 19px; font-weight: 620; color: var(--text-faint); letter-spacing: -.01em; }
+.tfoot { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 2px; }
+.vpill { font-size: 11px; font-weight: 640; padding: 1px 8px; border-radius: 99px; }
+.v-go { background: var(--go-soft); color: var(--go); }
+.v-at { background: var(--attend-soft); color: var(--attend); }
+.tband { font-size: 11.5px; color: var(--text-faint); }
+.tn { font-size: 11px; color: var(--text-faint); }
+.tv.nd { font-size: 12px; color: var(--text-faint); font-weight: 400; }

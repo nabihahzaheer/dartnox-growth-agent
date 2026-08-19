@@ -129,18 +129,56 @@ function Tile({ d, result }: { d: Row; result: MetricResult<number> }) {
 
   const v = verdict(result.value, d.healthy_range.min, d.healthy_range.max);
   return (
-    <div className="tile">
+    <div className="tile" title={d.definition}>
       <div className="tl2">{d.label}</div>
       <div className="tb">{formatValue(d.unit, result.value)}</div>
-      {/* The verdict is a word as well as a colour. A healthy tile and an out-of-band tile rendered
-          identical text and differed only in green vs amber, on the one screen whose job is
-          reporting — invisible to a colour-blind reader and absent from the accessible name. */}
-      <div className={`tv ${v === 'go' ? 'go' : v === 'attend' ? 'at' : 'nd'}`}>
-        {v && <b>{v === 'go' ? 'In band' : 'Outside band'} · </b>}
-        {band ?? `n = ${result.sample_n}`}
-        {band && <span className="mono tv-n"> · n={result.sample_n}</span>}
+      {/* The verdict is a word and a shape as well as a colour — a healthy tile and an out-of-band
+          tile used to render identical text and differ only in green versus amber. */}
+      <div className="tfoot">
+        {v && (
+          <span className={`vpill ${v === 'go' ? 'v-go' : 'v-at'}`}>
+            {v === 'go' ? 'In band' : 'Needs a look'}
+          </span>
+        )}
+        <span className="tband">{band ?? `over ${result.sample_n}`}</span>
+        <span className="tn mono">n={result.sample_n}</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * A named group of tiles inside one bounded surface.
+ *
+ * The screen used to be three bare `grid3` blocks under small uppercase labels, floating directly
+ * on the page background. Nothing bounded a group, so the eye had no way to tell where one ended
+ * and the next began — Nabihah's read was "ugly tabs just thrown about". A card per group, one
+ * heading, one optional line of context, and the tiles as rows inside it.
+ */
+function MetricGroup({
+  title,
+  detail,
+  rows,
+  results,
+}: {
+  title: string;
+  detail?: string;
+  rows: Row[];
+  results: Map<string, MetricResult<number>>;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <section className="mgroup">
+      <div className="mgroup-head">
+        <h2 className="mgroup-title">{title}</h2>
+        {detail && <p className="mgroup-detail">{detail}</p>}
+      </div>
+      <div className="mgroup-grid">
+        {rows.map((d) => (
+          <Tile key={d.id} d={d} result={results.get(d.id)!} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -176,7 +214,7 @@ export default function ResultsPage() {
   return (
     <>
       <header className="page-head">
-        <h1 className="page-title">Results</h1>
+        <h1 className="page-title">Metrics</h1>
       </header>
 
       {error && !world && <LoadError error={error} onRetry={() => void load()} />}
@@ -241,33 +279,24 @@ function Loaded({
 
   return (
     <>
-      <p className="page-sub" style={{ margin: '-6px 0 20px' }}>
-        Rolling four weeks for agent-quality figures, the monthly period for business figures — each
-        tile carries its own window because a weekly denominator of eight is too thin to gate on.
+      {/* Was a wrapped paragraph of reasoning about denominators. A dashboard's intro line should
+          say what you are looking at and over what period, not argue with you about statistics. */}
+      <p className="page-sub">
+        Live figures for Brightsill. Quality metrics run over the last four weeks, business metrics
+        over the current month.
       </p>
 
-      <h2 className="sec">
-        Alarms <span className="sec-n">the three the architecture names</span>
-      </h2>
-      <div className="grid3">
-        {alarms.map((d) => (
-          <Tile key={d.id} d={d} result={results.get(d.id)!} />
-        ))}
-      </div>
-
-      <h2 className="sec">For the business</h2>
-      <div className="grid3">
-        {business.map((d) => (
-          <Tile key={d.id} d={d} result={results.get(d.id)!} />
-        ))}
-      </div>
-
-      <h2 className="sec">On quality</h2>
-      <div className="grid3">
-        {quality.map((d) => (
-          <Tile key={d.id} d={d} result={results.get(d.id)!} />
-        ))}
-      </div>
+      {/* Three named groups, each in its own bounded card rather than a bare grid under a small
+          uppercase label. The old screen was tiles floating on the page background with nothing
+          holding them together, which is why it read as parts rather than a dashboard. */}
+      <MetricGroup
+        title="Watch these"
+        detail="The three signals that the system has failed quietly."
+        rows={alarms}
+        results={results}
+      />
+      <MetricGroup title="For the business" rows={business} results={results} />
+      <MetricGroup title="On quality" rows={quality} results={results} />
 
       {/**
        * THE DRILL-DOWN THE ARCHITECTURE ACTUALLY NOMINATES, WHICH WAS NOT ON THIS SCREEN.

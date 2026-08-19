@@ -117,8 +117,16 @@ const diagramText =
  */
 const knobText =
   'Knob and tube found mid-retrofit is a stop-work, not a line item.\n\n' +
+  'We opened a ceiling in a Prospect Heights walk-up last month expecting to run new circuits for ' +
+  'the heat pump and found cloth-wrapped conductors threaded through the joists. The drawings said ' +
+  'the building had been rewired in 1994. Half of it had.\n\n' +
   'Guaranteed savings on the job disappear the moment an electrician has to re-run the branch ' +
-  'circuits, and the schedule goes with them. Price the survey before you price the scope.';
+  'circuits, because that work is not additive. It stops everything else. The mechanical crew ' +
+  'stands down, the equipment sits in the basement accruing storage, and the compliance deadline ' +
+  'does not move to accommodate any of it.\n\n' +
+  'What we do now: an invasive survey before the scope is priced, on any building where the ' +
+  'rewiring date is claimed rather than documented. It costs a day and it has never once been the ' +
+  'expensive part of the job.';
 
 const BANNED_SPAN_START = knobText.indexOf('Guaranteed savings');
 const BANNED_SPAN_END = BANNED_SPAN_START + 'Guaranteed savings'.length;

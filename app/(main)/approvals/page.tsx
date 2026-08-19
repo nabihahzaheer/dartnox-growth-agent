@@ -21,6 +21,7 @@ import { getQueue, subscribeToWorld } from '@/lib/agentClient';
 import type { ConsoleError, QueueItem } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
 import { EmptyState, LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
+import { ChannelMark } from '@/components/ChannelMark';
 
 const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
 
@@ -63,18 +64,9 @@ export default function ApprovalsPage() {
     <>
       <header className="page-head">
         <h1 className="page-title">My approvals</h1>
-        {/**
-         * "in the order it started waiting" was false, and falsifiable on screen: `getQueue` sorts
-         * by priority band first — invalidated posts, then flagged items and runs, then everything
-         * else — and only orders by waiting time *within* a band. A draft that had waited 27 hours
-         * rendered seventh, below three runs that started three hours earlier. Operator-facing copy
-         * disagreeing with the data it describes is the exact defect the compose-from-values rule
-         * exists to prevent, and this was a sentence typed next to a sort it did not describe.
-         */}
-        <p className="page-sub">
-          Everything waiting on a person: posts sent back by a settings change first, then flagged
-          items and stopped runs, then the rest — oldest first within each group.
-        </p>
+        {/* Says what the list is and how it is ordered, in one line. The earlier version claimed
+            "in the order it started waiting", which the priority sort makes false. */}
+        <p className="page-sub">Most urgent first, then oldest.</p>
       </header>
 
       {error && !items && <LoadError error={error} onRetry={() => void load()} />}
@@ -107,67 +99,81 @@ function rowKey(item: QueueItem): string {
 }
 
 function QueueRow({ item }: { item: QueueItem }) {
-  if (item.kind === 'draft') {
-    const version = item.draft.versions.find((v) => v.id === item.draft.current_version_id);
-    const blocked = item.draft.state === 'blocked_guardrail';
-    return (
-      <Link href={`/approvals/${item.draft.id}`} className={`qrow${blocked ? ' qrow-stop' : ''}`}>
-        <span
-          className="ch-dot"
-          style={{ background: `var(--ch-${item.draft.channel})` }}
-          aria-hidden
-        />
-        <div className="qrow-body">
-          <p className="qrow-title">
-            {CHANNEL_LABEL[item.draft.channel]}
-            <span aria-hidden> · </span>
-            <span className="qrow-excerpt">{version?.text.slice(0, 90)}…</span>
-          </p>
-        </div>
-        <span className={`pill ${blocked ? 'pill-stop' : 'pill-attend'}`}>
-          {blocked ? 'blocked' : 'needs you'}
-        </span>
-      </Link>
-    );
-  }
+  const [open, setOpen] = useState(false);
 
+  /**
+   * A RUN IS NOT A DRAFT, AND THE LIST HAS TO SHOW THAT BEFORE IT IS CLICKED.
+   *
+   * Every row used to render the same white card with the same amber pill, so a quarantined run —
+   * which opens nothing, because no draft exists behind it — looked exactly like a draft you could
+   * decide. Runs are now flat and greyed with no chevron; drafts and posts are raised, expandable,
+   * and carry a channel mark with its name beside it rather than a bare coloured dot.
+   */
   if (item.kind === 'run') {
     const quarantined = item.run.state === 'quarantined';
     return (
-      <div className={`qrow qrow-static${quarantined ? ' qrow-stop' : ''}`}>
-        <span className="qrow-glyph" aria-hidden>
-          {quarantined ? '⚠' : '⏸'}
+      <div className="qrow qrow-run">
+        <span className={`qico ${quarantined ? 'qico-stop' : 'qico-wait'}`} aria-hidden>
+          {quarantined ? (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+              strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3.5L21 19H3z" /><path d="M12 10v4M12 16.5v.01" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+              strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" />
+            </svg>
+          )}
         </span>
         <div className="qrow-body">
-          <p className="qrow-title mono">{item.run.id}</p>
+          <p className="qrow-title">
+            {quarantined ? 'Stopped before drafting' : 'Paused, waiting to resume'}
+          </p>
           <p className="qrow-sub">
             {quarantined
-              ? 'Quarantined before drafting; no draft was produced. The source and its instructions are not shown — you may be their target.'
-              : (item.run.park_reason ? PARK_LABEL[item.run.park_reason] : 'Parked, waiting to resume.')}
+              ? 'A source carried instructions aimed at the agent, so no draft was produced.'
+              : (item.run.park_reason ? PARK_LABEL[item.run.park_reason] : 'Waiting to resume.')}
           </p>
         </div>
-        <span className="pill pill-attend">{quarantined ? 'quarantined' : 'parked'}</span>
+        <span className={`pill ${quarantined ? 'pill-stop' : 'pill-calm'}`}>
+          {quarantined ? 'stopped' : 'retrying'}
+        </span>
       </div>
     );
   }
 
-  const version = item.draft.versions.find((v) => v.id === item.draft.current_version_id);
+  const draft = item.draft;
+  const version = draft.versions.find((v) => v.id === draft.current_version_id);
+  const isPost = item.kind === 'post';
+  const blocked = draft.state === 'blocked_guardrail';
+
   return (
-    <Link href={`/approvals/${item.draft.id}`} className="qrow">
-      <span
-        className="ch-dot"
-        style={{ background: `var(--ch-${item.post.channel})` }}
-        aria-hidden
-      />
-      <div className="qrow-body">
-        <p className="qrow-title">
-          Sent back — settings changed after this was approved
-          <span aria-hidden> · </span>
-          <span className="qrow-excerpt">{version?.text.slice(0, 70)}…</span>
-        </p>
-        <p className="qrow-sub">{item.post.invalidated_reason}</p>
-      </div>
-      <span className="pill pill-attend">needs re-approval</span>
-    </Link>
+    <div className={`qrow qrow-open${blocked ? ' qrow-stop' : ''}`}>
+      <button
+        type="button"
+        className="qrow-head"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <ChannelMark channel={draft.channel} size={17} />
+        <span className="qrow-ch">{CHANNEL_LABEL[draft.channel]}</span>
+        <span className="qrow-excerpt">{version?.text.slice(0, 78)}…</span>
+        <span className={`pill ${blocked ? 'pill-stop' : isPost ? 'pill-attend' : 'pill-go'}`}>
+          {blocked ? 'blocked' : isPost ? 'sent back' : 'needs you'}
+        </span>
+        <span className={`qcar${open ? ' is-open' : ''}`} aria-hidden>▶</span>
+      </button>
+
+      {open && (
+        <div className="qrow-full">
+          {isPost && <p className="qrow-why">{item.post.invalidated_reason}</p>}
+          <p className="post">{version?.text}</p>
+          <Link href={`/approvals/${draft.id}`} className="btn btn-primary qrow-go">
+            Open and decide
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }

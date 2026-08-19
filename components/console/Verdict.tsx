@@ -59,12 +59,16 @@ export function Verdict({
 
   return (
     <div className={`vd ${blocked ? 'vd-stop' : 'vd-attend'}`}>
+      {/* No em dashes, and each line says one thing. The old copy read "Blocked — this cannot be
+          approved", which states the same fact twice and then contradicts the buttons underneath,
+          since Edit and Send back are both still offered. */}
       <p className="vd-head">
+        {blocked ? 'This one cannot be approved' : belowBar ? 'Scored below your bar' : 'Flagged for a look'}
+      </p>
+      <p className="vd-lede">
         {blocked
-          ? 'Blocked — this cannot be approved'
-          : belowBar
-            ? 'Below the bar — you can still approve it'
-            : 'Flagged — you can still approve it'}
+          ? 'Fix it with Edit, or send it back for a redraft.'
+          : 'You can still approve it.'}
       </p>
 
       <dl className="vd-grid">
@@ -98,7 +102,12 @@ export function Verdict({
         {span && !event?.span_withheld && (
           <>
             <dt>sentence</dt>
-            <dd className="vd-quote">{span.text}</dd>
+            {/* Was a white block with a heavy grey left border, which is the generic
+                pull-quote treatment. A highlight reads as "this exact span is the problem",
+                which is what the offsets on `OffendingSpan` actually mean. */}
+            <dd>
+              <mark className="vd-mark">{span.text}</mark>
+            </dd>
           </>
         )}
 
@@ -127,8 +136,13 @@ export function Verdict({
         </details>
       ) : (
         event && (
-          <p className="vd-norat mono">
-            no explanation · {rule?.mechanism === 'lookup' ? 'a list matched' : 'a measured distance'}
+          /* Was "no explanation · a list matched", which is two fragments and a bullet, and reads as
+             a failure. It is not: a lookup has nothing to explain *because* it is certain, and
+             saying so is the honest version of why some checks reason and others do not. */
+          <p className="vd-norat">
+            {rule?.mechanism === 'lookup'
+              ? 'No explanation needed. This phrase is on your banned list, so the check is a direct match rather than a judgement.'
+              : 'No explanation needed. This is a measured distance against your published posts, not a judgement.'}
           </p>
         )
       )}

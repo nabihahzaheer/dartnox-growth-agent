@@ -25,7 +25,7 @@ import type { Week } from '@/lib/week';
 import type { ConsoleError } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
 import { LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
-import { formatDateTime, formatRelative, formatTime } from '@/lib/time';
+import { formatDate, formatDateTime, formatDayNumber, formatRelative, formatTime } from '@/lib/time';
 /**
  * The label map only, not the `Badge` component — `Badge` renders through v1's Tailwind classes and
  * CSS tokens scoped to `[data-ui='v1']`, which do not exist at `:root`. `WEEK_SLOT_LABEL` is a plain
@@ -48,6 +48,13 @@ function pillClass(state: string): string {
   if (state === 'published' || state === 'approved' || state === 'scheduled') return 'pill-go';
   if (state === 'planned') return 'pill-calm';
   return 'pill-stop'; // blocked · rejected · failed · quarantined · dropped · slipped · pulled
+}
+
+/** "Mon 3 – Sun 9 Feb", from the week's own first and last day. */
+function weekRangeLabel(week: Week): string {
+  const first = week.days[0];
+  const last = week.days[week.days.length - 1];
+  return `${formatDate(first.start)} – ${formatDate(last.start)}`;
 }
 
 export default function WeekPage() {
@@ -98,7 +105,7 @@ export default function WeekPage() {
   return (
     <>
       <header className="page-head">
-        <h1 className="page-title">The week</h1>
+        <h1 className="page-title">Content calendar</h1>
       </header>
 
       {error && !week && <LoadError error={error} onRetry={() => void load(index)} />}
@@ -111,6 +118,7 @@ export default function WeekPage() {
           <div className="rh">
             <div className="l1">
               <h2>{week.label}</h2>
+              <span className="wk-range">{weekRangeLabel(week)}</span>
               {week.waitingOnYou > 0 && (
                 <span className="pill pill-attend">{week.waitingOnYou} need you</span>
               )}
@@ -153,8 +161,14 @@ export default function WeekPage() {
           <div className="wk-grid">
             {week.days.map((day) => (
               <div key={day.index} className={`wk-day${day.isToday ? ' wk-today' : ''}`}>
-                <p className="wk-daylabel">{day.label}</p>
-                {day.entries.length === 0 && <p className="wk-empty">—</p>}
+                {/* Weekday and date number, the way every calendar shows a day. The grid used to
+                    print only "Mon", so nothing on the screen said which Monday you were looking
+                    at except the week label above it. */}
+                <p className="wk-daylabel">
+                  <span className="wk-dow">{day.label}</span>
+                  <span className="wk-dom">{formatDayNumber(day.start)}</span>
+                </p>
+                {day.entries.length === 0 && <p className="wk-empty" aria-hidden />}
                 {day.entries.map((entry) => {
                   const body = (
                     <>

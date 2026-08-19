@@ -56,7 +56,6 @@ import type {
   EffectTiming,
   EscalationRuleEntry,
   EscalationTrigger,
-  GuardrailLayer,
   GuardrailRule,
   Settings,
 } from '@/lib/types';
@@ -90,8 +89,6 @@ const PREREQ_LABEL: Record<string, string> = {
   channel_enabled: 'Channels connected',
   no_recent_pillar_rejection: 'No recent pillar rejection',
 };
-
-const LAYERS: GuardrailLayer[] = ['L1', 'L2', 'L3', 'L4'];
 
 /**
  * A-16 requires every settings row to say when a change takes effect, and this screen said it
@@ -138,11 +135,14 @@ function Toggle({
   on,
   busy,
   label,
+  locked = false,
   onToggle,
 }: {
   on: boolean;
   busy: boolean;
   label: string;
+  /** Renders as a locked control rather than being labelled "locked" beside a normal one. */
+  locked?: boolean;
   onToggle: () => void;
 }) {
   return (
@@ -150,12 +150,37 @@ function Toggle({
       type="button"
       role="switch"
       aria-checked={on}
-      aria-label={label}
-      className={`tgl${on ? ' tgl-on' : ''}`}
+      aria-label={locked ? `${label} (locked)` : label}
+      className={`tgl${on ? ' tgl-on' : ''}${locked ? ' tgl-locked' : ''}`}
       disabled={busy}
       onClick={onToggle}
     >
-      <span className="tgl-knob" aria-hidden />
+      {/**
+       * A padlock inside the track, not a pill beside it.
+       *
+       * The row used to say "locked" in a grey pill next to a switch that looked entirely ordinary,
+       * which is the interface describing its own state in words because the control failed to show
+       * it. Nabihah: "if it means we cant change it, then the toggle itself should look like a
+       * locked state rather than needing to state it."
+       *
+       * Still clickable, still asks the server, still gets the refusal with its reason — D-047's
+       * whole argument is that a disabled input fires no events and so cannot answer "why". What
+       * changes is that the control now looks like what it is before you press it.
+       */}
+      {locked ? (
+        <svg className="tgl-lock" viewBox="0 0 24 24" aria-hidden>
+          <path
+            d="M7 10V7.5a5 5 0 0110 0V10M5.5 10h13v10h-13z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <span className="tgl-knob" aria-hidden />
+      )}
     </button>
   );
 }
@@ -651,14 +676,13 @@ function RuleSection({
           <div key={row.trigger} className="rule-row">
             <div className="rule-body">
               <p className="rule-title">{TRIGGER_LABEL[row.trigger]}</p>
-              <p className="rule-sub mono">
-                {row.tier}
-                {row.is_fixed && ' · locked'}
+              <p className="rule-sub">
+                {row.tier === 'stakeholder' ? 'Goes to the client owner' : 'Goes to you'}
               </p>
             </div>
-            {row.is_fixed && <span className="pill pill-lock">locked</span>}
             <Toggle
               on={row.enabled}
+              locked={row.is_fixed}
               busy={busy === row.trigger}
               label={TRIGGER_LABEL[row.trigger]}
               onToggle={() => void flip(row)}
@@ -702,35 +726,39 @@ function GuardrailSection({
     <section className="section">
       <h2 className="t-section">Guardrail rules</h2>
       <div className="panel" style={{ padding: '4px 18px 8px' }}>
-        {LAYERS.map((layer) => {
-          const inLayer = rules.filter((r) => r.layer === layer);
-          if (inLayer.length === 0) return null;
-          return (
-            <div key={layer} className="layer-group">
-              <p className="layer-head">
-                <span className="layer-name">{layer}</span>
-              </p>
-              {inLayer.map((rule) => (
-                <div key={rule.id} className="rule-row">
-                  <div className="rule-body">
-                    <p className="rule-title">{rule.display_name}</p>
-                    <p className="rule-sub mono">
-                      {rule.mechanism} · {rule.severity} · {rule.effect_timing.replace(/_/g, ' ')}
-                      {!rule.is_enabled && rule.disabled_at && ` · off ${formatDate(rule.disabled_at)}`}
-                    </p>
-                  </div>
-                  {rule.is_fixed && <span className="pill pill-lock">locked</span>}
-                  <Toggle
-                    on={rule.is_enabled}
-                    busy={busy === rule.id}
-                    label={rule.display_name}
-                    onToggle={() => void flip(rule)}
-                  />
-                </div>
-              ))}
+        {/**
+         * ONE FLAT LIST, NOT FOUR LAYERS.
+         *
+         * The rules were grouped under L1/L2/L3/L4 headings, which is the architecture's own
+         * vocabulary for *where in the pipeline* a check runs — input, generation, output, action.
+         * That distinction matters when you are designing the pipeline and means nothing to the
+         * person deciding whether to switch a check off. Nabihah: "the user does not know what that
+         * means." The layer is still on the record and still drives the Metrics drill-down, which is
+         * where it is genuinely informative.
+         *
+         * Ordered by what a check protects rather than by pipeline position: content rules first,
+         * because those are the ones an operator has an opinion about.
+         */}
+        {[...rules]
+          .sort((a, b) => Number(a.is_fixed) - Number(b.is_fixed))
+          .map((rule) => (
+            <div key={rule.id} className="rule-row">
+              <div className="rule-body">
+                <p className="rule-title">{rule.display_name}</p>
+                <p className="rule-sub">
+                  {rule.description}
+                  {!rule.is_enabled && rule.disabled_at && ` Switched off ${formatDate(rule.disabled_at)}.`}
+                </p>
+              </div>
+              <Toggle
+                on={rule.is_enabled}
+                locked={rule.is_fixed}
+                busy={busy === rule.id}
+                label={rule.display_name}
+                onToggle={() => void flip(rule)}
+              />
             </div>
-          );
-        })}
+          ))}
       </div>
     </section>
   );
@@ -774,8 +802,7 @@ function AutoApproveSection({
               {met} of {auto.prereqs.length} met
             </p>
           </div>
-          <span className="pill pill-lock">locked</span>
-          <Toggle on={auto.enabled} busy={busy} label="Auto-approve" onToggle={() => void attempt()} />
+          <Toggle on={auto.enabled} locked busy={busy} label="Auto-approve" onToggle={() => void attempt()} />
         </div>
 
         <ul className="prereq-list">

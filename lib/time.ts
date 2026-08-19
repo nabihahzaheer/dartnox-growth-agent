@@ -233,6 +233,12 @@ export function weekStart(index: number): MinutesFromAnchor {
   return (index * 7 * MINUTES_PER_DAY - intoWeek) as MinutesFromAnchor;
 }
 
+/** `03` — the day of the month, for a calendar column head. Zero-padded so the seven columns line
+ *  up rather than jittering between one and two digits. */
+export function formatDayNumber(offset: MinutesFromAnchor): string {
+  return pad(clockAt(offset).day);
+}
+
 /** `Mon` — the day name alone, for a column head or a schedule row. */
 export function weekdayShort(offset: MinutesFromAnchor): string {
   return WEEKDAY_LABELS[clockAt(offset).weekday];
