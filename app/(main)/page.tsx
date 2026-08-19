@@ -44,6 +44,8 @@ import { DraftCard } from '@/components/console/DraftCard';
 import { LiveRun } from '@/components/console/LiveRun';
 import { DecidedCard } from '@/components/console/DecidedCard';
 import { BudgetNotice } from '@/components/BudgetNotice';
+import { ChannelMark } from '@/components/ChannelMark';
+import { formatDateTime } from '@/lib/time';
 
 type Loaded = {
   batch: Batch;
@@ -56,7 +58,19 @@ type Loaded = {
 export default function ConsolePage() {
   const [state, setState] = useState<Loaded | null>(null);
   const [error, setError] = useState<ConsoleError | null>(null);
-  const [layout, setLayout] = useState<'split' | 'stacked'>('split');
+  /** Stacked by default: it is the layout that suits the screen once drafting is done, which is
+   *  most of the time, and it gives the posts the full column. */
+  const [layout, setLayout] = useState<'split' | 'stacked'>('stacked');
+  /**
+   * Runs this session watched land.
+   *
+   * A run left the activity column the instant it finished, because landing moves it out of
+   * `running` and the filter below only looked for running children. So the thing the operator was
+   * watching announced its result and then vanished, which is the opposite of what a result is for.
+   * Keeping the id here holds the card in place — already ended, not re-streaming — until the page
+   * is left. It is view state about what *this viewer* saw, which is why it is not in the seam.
+   */
+  const [landed, setLanded] = useState<Set<string>>(new Set());
 
   /**
    * Nothing here sets state before the first `await`. That is deliberate rather than incidental:
@@ -131,11 +145,15 @@ export default function ConsolePage() {
   const { batch, settings, rules, steps } = state;
   const threshold = settings.score_threshold;
 
+  /** A landed run's draft belongs here, which is the whole point of the handoff: the run card stays
+   *  as the record of what happened, and the decision it produced appears below. */
   const waiting = batch.children.filter((c) => c.draft && needsDecision(c.draft));
   const blocked = waiting.filter((c) => c.draft?.state === 'blocked_guardrail');
-  const drafting = batch.children.filter((c) => c.run.state === 'running' || c.run.state === 'queued');
+  const drafting = batch.children.filter(
+    (c) => c.run.state === 'running' || c.run.state === 'queued' || landed.has(c.run.id),
+  );
   const settled = batch.children.filter(
-    (c) => c.draft && !needsDecision(c.draft) && c.run.state !== 'running',
+    (c) => c.draft && !needsDecision(c.draft) && c.run.state !== 'running' && !landed.has(c.run.id),
   );
 
   return (
@@ -150,9 +168,20 @@ export default function ConsolePage() {
 
       <BudgetNotice budget={batch.budget} />
 
-      <section className="batch panel">
-        <div className="batch-top">
-          <h2 className="batch-title">Wednesday drafting batch</h2>
+      {/**
+       * THE BATCH, AS A STATUS BAR RATHER THAN A CARD.
+       *
+       * It was a bordered panel with a shadow — the same treatment as a draft card — carrying an id,
+       * a slot count, a settings version and a progress bar. So the container of the work looked
+       * like a piece of the work, and the heaviest visual element on the screen was metadata.
+       *
+       * Now it is a bar: the name, the state, and the count as a thin rule underneath. The run id
+       * and settings version move behind the count, because they are provenance an engineer asks
+       * for occasionally rather than something an operator reads every morning.
+       */}
+      <section className="batchbar">
+        <div className="batchbar-top">
+          <h2 className="batchbar-title">Wednesday drafting batch</h2>
           {batch.running ? (
             <span className="pill pill-live">
               <i className="pulse" aria-hidden /> running
@@ -160,68 +189,65 @@ export default function ConsolePage() {
           ) : (
             <span className="pill pill-go">complete</span>
           )}
-
-          {/**
-           * TWO LAYOUTS, BECAUSE THEY SUIT DIFFERENT MOMENTS.
-           *
-           * Split puts the live run beside the queue, which is right while a batch is running and
-           * you want to watch it land. Stacked gives the posts the full column, which is right once
-           * drafting is done and the screen is only a review surface. Neither is correct all the
-           * time, so it is a control rather than a decision taken for the operator.
-           *
-           * The choice is component state and resets on reload. It is a view preference, not a
-           * fact about the world, so it does not belong in `agentClient` — putting it there would
-           * make the seam carry something a real backend would never store.
-           */}
-          <span className="lay-toggle" role="group" aria-label="Layout">
-            <button
-              type="button"
-              className={layout === 'split' ? 'is-on' : undefined}
-              aria-pressed={layout === 'split'}
-              onClick={() => setLayout('split')}
-            >
-              Split
-            </button>
-            <button
-              type="button"
-              className={layout === 'stacked' ? 'is-on' : undefined}
-              aria-pressed={layout === 'stacked'}
-              onClick={() => setLayout('stacked')}
-            >
-              Stacked
-            </button>
+          <span className="batchbar-count">
+            {batch.drafted} of {batch.total} drafted
           </span>
         </div>
-
-        <p className="chips">
-          <span className="chip mono">{batch.parent.id}</span>
-          <span className="chip mono">
-            slots <b>{batch.total}</b>
-          </span>
-          <span className="chip mono">
-            settings <b>{settings.current_version_id}</b>
-          </span>
+        <span className="batchbar-track" aria-hidden>
+          <i style={{ width: `${batch.total === 0 ? 0 : (batch.drafted / batch.total) * 100}%` }} />
+        </span>
+        <p className="batchbar-meta">
+          <span className="mono">{batch.parent.id}</span>
+          <span className="mono">settings {settings.current_version_id}</span>
         </p>
-
-        <div className="batch-prog">
-          <span className="prog">
-            <i style={{ width: `${batch.total === 0 ? 0 : (batch.drafted / batch.total) * 100}%` }} />
-          </span>
-          <span className="prog-num">
-            {batch.drafted} / {batch.total} drafted
-          </span>
-        </div>
       </section>
+
+      <div className="work-head">
+        <h2 className="sec">
+          Waiting on you <span className="sec-n">{waiting.length}</span>
+        </h2>
+        {/* Sits with the work it arranges, not inside the batch bar. Icons rather than words: two
+            columns and two rows are the shapes themselves, and the labels were doing nothing a
+            picture could not. */}
+        <span className="lay-toggle" role="group" aria-label="Layout">
+          <button
+            type="button"
+            className={layout === 'stacked' ? 'is-on' : undefined}
+            aria-pressed={layout === 'stacked'}
+            aria-label="Stacked layout"
+            title="Stacked"
+            onClick={() => setLayout('stacked')}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden>
+              <rect x="1.5" y="2" width="13" height="4.5" rx="1.2" />
+              <rect x="1.5" y="9.5" width="13" height="4.5" rx="1.2" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={layout === 'split' ? 'is-on' : undefined}
+            aria-pressed={layout === 'split'}
+            aria-label="Split layout"
+            title="Split"
+            onClick={() => setLayout('split')}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden>
+              <rect x="1.5" y="2" width="5.5" height="12" rx="1.2" />
+              <rect x="9" y="2" width="5.5" height="12" rx="1.2" />
+            </svg>
+          </button>
+        </span>
+      </div>
 
       <div className={`console-grid console-${layout}`}>
         {/* THE LIVE RUN COMES FIRST IN THE MARKUP in both layouts. It used to sit below the queue
             and the decided list, so the only thing on the screen that moves was the last thing you
             could reach. In `split` it is a sticky column; in `stacked` it is simply the first card. */}
-        {drafting.length > 0 && (
-          <section className="console-live">
-            <h2 className="sec">Drafting now</h2>
-            <div className="stack">
-              {drafting.map((c) => (
+        <section className="console-live">
+          <h2 className="sec">Agent activity</h2>
+          <div className="stack">
+            {drafting.length > 0 &&
+              drafting.map((c) => (
                 <LiveRun
                   key={c.run.id}
                   runId={c.run.id}
@@ -229,19 +255,44 @@ export default function ConsolePage() {
                   angle={c.slot?.angle ?? 'Next post'}
                   events={c.events}
                   rules={rules}
-                  onEnded={() => void load()}
+                  onEnded={() => {
+                    setLanded((prev) => new Set(prev).add(c.run.id));
+                    void load();
+                  }}
                 />
               ))}
-            </div>
-          </section>
-        )}
+
+            {/* Not an empty box. When nothing is drafting the agent is not idle — it is holding
+                approved posts until their slot time — and that is a record, not a caption. */}
+            {drafting.length === 0 && (
+              <div className="idle">
+                <p className="idle-head">Nothing being drafted right now.</p>
+                {batch.upNext.length === 0 ? (
+                  <p className="idle-sub">Everything approved has gone out. Next batch Wednesday 06:00.</p>
+                ) : (
+                  <>
+                    <p className="idle-sub">
+                      {batch.upNext.length} approved {batch.upNext.length === 1 ? 'post is' : 'posts are'} waiting to publish.
+                    </p>
+                    <ul className="idle-list">
+                      {batch.upNext.map((u) => (
+                        <li key={u.run.id}>
+                          <ChannelMark channel={u.post.channel} size={14} />
+                          <span className="idle-angle">{u.slot?.angle ?? 'Scheduled post'}</span>
+                          <span className="idle-when">{formatDateTime(u.post.scheduled_at)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
 
         <section className="console-work">
           {waiting.length > 0 && (
             <>
-              <h2 className="sec">
-                Waiting on you <span className="sec-n">{waiting.length}</span>
-              </h2>
               <div className="stack">
                 {waiting.map((c) => (
                   <DraftCard

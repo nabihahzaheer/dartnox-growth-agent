@@ -32,7 +32,7 @@ type Dest = { href: string; label: string; icon: string };
  *  outcome report rather than the instrument panel it is. */
 const DESTINATIONS: Dest[] = [
   { href: '/', label: 'Console', icon: 'console' },
-  { href: '/approvals', label: 'Approvals', icon: 'approvals' },
+  { href: '/approvals', label: 'Queue', icon: 'approvals' },
   { href: '/week', label: 'Content calendar', icon: 'calendar' },
   { href: '/results', label: 'Metrics', icon: 'metrics' },
   { href: '/settings', label: 'Settings', icon: 'settings' },

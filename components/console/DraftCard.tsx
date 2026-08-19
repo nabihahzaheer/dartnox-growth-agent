@@ -81,7 +81,7 @@ export function DraftCard({
           <i aria-hidden />
           {version?.author === 'human'
             ? 'Edited by you · not yet approved'
-            : 'Agent draft · nobody has read it yet'}
+            : 'Agent draft'}
         </p>
         <p className="post">{version?.text}</p>
         <Verdict draft={draft} events={child.events} rules={rules} threshold={threshold} />

@@ -273,12 +273,14 @@ function Loaded({
       {/* Three named groups, each in its own bounded card rather than a bare grid under a small
           uppercase label. The old screen was tiles floating on the page background with nothing
           holding them together, which is why it read as parts rather than a dashboard. */}
-      <MetricGroup
-        title="Watch these"
-        detail="The three signals that the system has failed quietly."
-        rows={alarms}
-        results={results}
-      />
+      <div className="metrics-top">
+        <MetricGroup
+          title="Watch these"
+          detail="The three signals that the system has failed quietly."
+          rows={alarms}
+          results={results}
+        />
+      </div>
       <MetricGroup title="For the business" rows={business} results={results} />
       <MetricGroup title="On quality" rows={quality} results={results} />
 

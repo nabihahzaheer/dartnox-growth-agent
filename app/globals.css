@@ -158,6 +158,33 @@
   --ch-linkedin: #0a66c2;
   --ch-x: #151a1e;
 
+  /**
+   * TYPE AND SPACE, AS A CLOSED SET.
+   *
+   * The rebuilt screens had grown five different section-header treatments — an 11.5px uppercase
+   * eyebrow, a 14px semibold, a 15px card title, a 16px batch title and a `<summary>` at 13px — and
+   * 41 separate declarations at 10 or 11px. Nothing named the roles, so each screen invented its
+   * own and they drifted, which is the same failure D-053 fixed once for v1 and which came back on
+   * this side of the fork.
+   *
+   * Six sizes, and the floor is 12px. 11px was carrying effect timings, sample counts and helper
+   * text — the small print you actually squint at, and the wrong place to be economical.
+   */
+  --fs-page: 26px;   /* the screen, once */
+  --fs-head: 15px;   /* every section and card header, everywhere */
+  --fs-lede: 14.5px; /* the line under a page title */
+  --fs-body: 14px;   /* rows, controls, values */
+  --fs-sub: 13px;    /* secondary detail, descriptions */
+  --fs-meta: 12px;   /* timings, counts, ids — the floor */
+
+  /* One rhythm. Sections breathe at --sp-6, groups at --sp-4, rows at --sp-2. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 28px;
+
   --radius: 10px;
   --radius-sm: 6px;
   --shadow: 0 1px 2px rgb(21 26 30 / 4%), 0 3px 12px rgb(21 26 30 / 5%);
@@ -300,7 +327,7 @@ body {
 }
 
 .t-label {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.45;
   color: var(--text-muted);
 }
@@ -614,20 +641,20 @@ body {
 
 /* ---- page furniture ---- */
 .page-head {
-  margin-bottom: 22px;
+  margin-bottom: var(--sp-6);
 }
 .page-title {
-  font-size: 26px;
+  font-size: var(--fs-page);
   line-height: 1.2;
   font-weight: 700;
   letter-spacing: -0.022em;
   margin: 0;
 }
 .page-sub {
-  font-size: 15px;
+  font-size: var(--fs-lede);
   color: var(--text-muted);
-  margin: 6px 0 0;
-  max-width: 62ch;
+  margin: var(--sp-2) 0 0;
+  max-width: 70ch;
 }
 .panel {
   background: var(--surface);
@@ -713,7 +740,7 @@ body {
 /* ---- console: batch header ---- */
 .batch { padding: 16px 18px; margin-bottom: 22px; }
 .batch-top { display: flex; align-items: center; gap: 11px; margin-bottom: 10px; }
-.batch-title { font-size: 20px; font-weight: 680; letter-spacing: -0.015em; margin: 0; }
+.batch-title { font-size: var(--fs-head); font-weight: 600; letter-spacing: -0.01em; margin: 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
 .chip { background: var(--surface-sunk); color: var(--text-muted); border-radius: 4px;
   padding: 2px 7px; font-size: 11.5px; }
@@ -737,10 +764,19 @@ body {
   70% { box-shadow: 0 0 0 8px rgb(44 90 168 / 0%); }
 }
 
-.sec { font-size: 11.5px; font-weight: 700; letter-spacing: 0.075em; text-transform: uppercase;
-  color: var(--text-faint); margin: 26px 0 12px; display: flex; align-items: center; gap: 8px; }
+/**
+ * THE section header. One treatment, every screen.
+ *
+ * Was an 11.5px uppercase eyebrow in --text-faint, which is smaller and fainter than the rows it
+ * introduced — the inverted hierarchy D-053 removed from v1, rebuilt here by accident. Now it
+ * outranks its content by weight and contrast rather than by letter-spacing.
+ */
+.sec { font-size: var(--fs-head); font-weight: 600; letter-spacing: -0.01em;
+  color: var(--text); margin: var(--sp-6) 0 var(--sp-3); display: flex; align-items: center;
+  gap: var(--sp-2); }
+.sec:first-child { margin-top: 0; }
 .sec-n { background: var(--surface-sunk); color: var(--text-muted); border-radius: 99px;
-  padding: 1px 8px; font-size: 11px; letter-spacing: 0; }
+  padding: 1px 8px; font-size: var(--fs-meta); font-weight: 600; letter-spacing: 0; }
 .stack { display: flex; flex-direction: column; gap: 12px; }
 
 /* ---- console: a draft card ---- */
@@ -837,8 +873,11 @@ body {
   transition: transform 0.16s; display: inline-block; }
 .tl-row.is-open .tl-car { transform: rotate(90deg); }
 .tl-name { font-size: 13.5px; font-weight: 550; color: var(--text); }
+/* Matches the live card's sub-line treatment so a finished trace and a running one read as the
+   same object. */
+.tl-dur { font-variant-numeric: tabular-nums; }
 .tl-meta { margin-left: auto; display: flex; align-items: center; gap: 9px; flex: none; }
-.tl-lay { font-size: 11px; color: var(--text-faint); }
+.tl-tok { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .tl-dur { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .tl-detail { margin-top: 6px; background: var(--surface); border: 1px solid var(--border);
   border-radius: 8px; padding: 11px 13px; box-shadow: var(--shadow); }
@@ -1002,30 +1041,34 @@ body {
   background: var(--surface); box-shadow: var(--shadow); margin-top: 10px; }
 /* Hairline cells rather than floating boxes with gaps. A calendar reads as one grid; seven detached
    rounded cards read as seven lists that happen to sit in a row. */
-.wk-day { border-right: 1px solid var(--border); padding: 0 0 12px; min-height: 190px;
-  display: flex; flex-direction: column; gap: 7px; }
+/* 3b: the columns were 190px tall with a couple of entries floating at the top, so most of the
+   grid was empty. Rows are now sized to their content with a modest floor, entries are denser, and
+   the day head is lighter — the grid should look like a schedule, not a set of empty boxes. */
+.wk-day { border-right: 1px solid var(--border); padding: 0 0 var(--sp-2); min-height: 108px;
+  display: flex; flex-direction: column; gap: var(--sp-1); }
 .wk-day:last-child { border-right: 0; }
 .wk-today { background: var(--accent-soft); }
 .wk-daylabel { display: flex; align-items: baseline; gap: 7px; margin: 0;
-  padding: 11px 12px 9px; border-bottom: 1px solid var(--border); }
+  padding: var(--sp-2) var(--sp-3) var(--sp-2); border-bottom: 1px solid var(--border); }
 .wk-dow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--text-faint); }
-.wk-dom { font-size: 15px; font-weight: 640; color: var(--text); font-variant-numeric: tabular-nums;
-  margin-left: auto; }
+.wk-dom { font-size: var(--fs-body); font-weight: 640; color: var(--text);
+  font-variant-numeric: tabular-nums; margin-left: auto; }
 .wk-today .wk-dom { color: var(--accent-text); }
 .wk-empty { margin: 0; flex: 1; }
-.wk-entry { display: flex; flex-direction: column; gap: 4px; background: var(--surface);
+.wk-entry { display: flex; flex-direction: column; gap: 3px; background: var(--surface);
   border: 1px solid var(--border); border-left: 3px solid var(--border-strong);
-  border-radius: var(--radius-sm); padding: 9px 10px; margin: 0 8px; text-decoration: none;
-  color: inherit; transition: border-color .14s, box-shadow .14s; }
+  border-radius: var(--radius-sm); padding: var(--sp-2); margin: 0 var(--sp-2);
+  text-decoration: none; color: inherit; transition: border-color .14s, box-shadow .14s; }
 a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); }
 .wk-entry-static { background: var(--surface-sunk); border-left-color: var(--border); }
 .wk-row1 { display: flex; align-items: center; gap: 7px; }
 .wk-time { font-size: 11.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .wk-pill { margin-left: auto; font-size: 10px; padding: 1px 7px; }
-.wk-angle { font-size: 12.5px; font-weight: 560; color: var(--text); line-height: 1.4; }
+.wk-angle { font-size: var(--fs-meta); font-weight: 560; color: var(--text); line-height: 1.4; }
 .wk-moved { font-size: 11px; color: var(--attend); }
-.wk-range { font-size: 13px; color: var(--text-faint); }
+.wk-now { font-size: var(--fs-meta); font-weight: 600; color: var(--accent-text);
+  background: var(--accent-soft); border-radius: 99px; padding: 2px 9px; }
 
 /* ---- the owner's calendar gate ---- */
 .gate-band { display: flex; gap: 11px; align-items: flex-start; padding: 12px 15px;
@@ -1143,8 +1186,8 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
   border-bottom: 1px solid var(--border); }
 .rule-row:last-child { border-bottom: none; }
 .rule-body { flex: 1; min-width: 0; }
-.rule-title { margin: 0; font-size: 13.5px; font-weight: 550; color: var(--text); }
-.rule-sub { margin: 2px 0 0; font-size: 11.5px; color: var(--text-faint); }
+.rule-title { margin: 0; font-size: var(--fs-body); font-weight: 550; color: var(--text); }
+.rule-sub { margin: var(--sp-1) 0 0; font-size: var(--fs-sub); color: var(--text-faint); }
 .pill-calm { background: var(--surface-sunk); color: var(--text-muted); }
 
 
@@ -1152,7 +1195,7 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .phrase-chip { font-size: 12.5px; background: var(--surface-sunk); color: var(--text-muted);
   border-radius: 99px; padding: 3px 10px; }
 
-.preview-line { margin: 0; font-size: 12px; color: var(--text-faint); }
+.preview-line { margin: 0; font-size: var(--fs-meta); color: var(--text-faint); }
 .preview-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex;
   flex-direction: column; gap: 5px; }
 .preview-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px;
@@ -1225,7 +1268,7 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .esc-act { display: flex; align-items: center; gap: 7px; }
 
 /* ---- settings: when a change takes effect (A-16) ---- */
-.timing { margin: 5px 0 0; font-size: 11px; color: var(--text-faint); }
+.timing { margin: var(--sp-1) 0 0; font-size: var(--fs-meta); color: var(--text-faint); }
 
 /* ================================================================================================
  * CONSOLE, REBUILT — the live run is no longer the last thing on the page
@@ -1342,8 +1385,8 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .mgroup { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden; }
 .mgroup-head { padding: 14px 18px 12px; border-bottom: 1px solid var(--border); }
-.mgroup-title { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
-.mgroup-detail { margin: 3px 0 0; font-size: 13px; color: var(--text-muted); }
+.mgroup-title { margin: 0; font-size: var(--fs-head); font-weight: 600; letter-spacing: -.01em; }
+.mgroup-detail { margin: var(--sp-1) 0 0; font-size: var(--fs-sub); color: var(--text-muted); }
 .mgroup-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
 .mgroup-grid > * { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 /* Hairlines only between cells, never on the outer edge — the card's own border is the outline. */
@@ -1355,23 +1398,24 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 
 .tile { background: var(--surface); border: 0; border-radius: 0; padding: 15px 18px 16px;
   box-shadow: none; display: flex; flex-direction: column; gap: 4px; }
-.tl2 { font-size: 12.5px; color: var(--text-muted); font-weight: 500; margin: 0; }
+.tl2 { font-size: var(--fs-sub); color: var(--text-muted); font-weight: 500; margin: 0; }
 .tb { font-size: 30px; font-weight: 660; letter-spacing: -.03em; line-height: 1.05;
   font-variant-numeric: tabular-nums; }
 .tb-muted { font-size: 19px; font-weight: 620; color: var(--text-faint); letter-spacing: -.01em; }
 .tfoot { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 2px; }
-.vpill { font-size: 11px; font-weight: 640; padding: 1px 8px; border-radius: 99px; }
+.vpill { font-size: var(--fs-meta); font-weight: 640; padding: 1px 8px; border-radius: 99px; }
 .v-go { background: var(--go-soft); color: var(--go); }
 .v-at { background: var(--attend-soft); color: var(--attend); }
-.tband { font-size: 11.5px; color: var(--text-faint); }
-.tn { font-size: 11px; color: var(--text-faint); }
+.tband { font-size: var(--fs-meta); color: var(--text-faint); }
+.tn { font-size: var(--fs-meta); color: var(--text-faint); }
 .tv.nd { font-size: 12px; color: var(--text-faint); font-weight: 400; }
 
 /* ---- settings: things you see but rarely change ---- */
 .adv { margin-top: 14px; }
 .adv-flush { margin-top: 0; }
-.adv > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
-  font-size: 13px; font-weight: 600; color: var(--text-muted); padding: 8px 0; }
+.adv > summary { cursor: pointer; list-style: none; display: flex; align-items: center;
+  gap: var(--sp-2); font-size: var(--fs-head); font-weight: 600; color: var(--text);
+  padding: var(--sp-2) 0; }
 .adv > summary::-webkit-details-marker { display: none; }
 .adv > summary::before { content: '›'; font-size: 15px; display: inline-block; transition: transform .15s;
   color: var(--text-faint); }
@@ -1379,4 +1423,108 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .adv > summary:hover { color: var(--text); }
 .adv-n { background: var(--surface-sunk); color: var(--text-faint); border-radius: 99px;
   padding: 0 7px; font-size: 11px; font-weight: 600; }
-.adv-note { margin: 0 0 10px; font-size: 12.5px; color: var(--text-faint); max-width: 62ch; }
+.adv-note { margin: 0 0 var(--sp-3); font-size: var(--fs-sub); color: var(--text-faint); max-width: 62ch; }
+
+/* ================================================================================================
+ * SETTINGS — one row shape, one rhythm
+ *
+ * The screen had grown a different layout per section: some rows were a label above a full-width
+ * control, some were a title and a switch, the threshold was a full-width slider with a 60px
+ * readout, and the collapsible sections carried headers in a different size and weight from the
+ * ones that were not collapsible. Nothing was wrong individually; together it read as five screens
+ * stacked.
+ *
+ * One shape from here: a label column that describes the control in a name and a line of help, and
+ * a control column pinned right. Every row on the screen is that, whether the control is a switch,
+ * a slider or a field.
+ * ==============================================================================================*/
+.set-row { display: flex; align-items: flex-start; gap: var(--sp-5); padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--border); }
+.set-row:last-child { border-bottom: 0; }
+.set-label { flex: 1; min-width: 0; }
+.set-name { margin: 0; font-size: var(--fs-body); font-weight: 550; color: var(--text); }
+.set-help { margin: var(--sp-1) 0 0; font-size: var(--fs-sub); color: var(--text-muted);
+  line-height: 1.5; max-width: 58ch; }
+.set-control { display: flex; align-items: center; gap: var(--sp-2); flex: none; padding-top: 2px; }
+.set-value { font-size: var(--fs-body); font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--text); min-width: 34px; text-align: right; }
+.rng-sm { width: 132px; flex: none; }
+
+/* The panel that holds a group of rows. Padding once, here, rather than an inline style per
+   section — five sections carried five different inline paddings. */
+.set-panel { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: var(--sp-2) var(--sp-5); }
+
+.section { margin-bottom: var(--sp-6); }
+.section > .t-section,
+.section > .sec { margin-top: 0; }
+
+/* ---- metrics: the same rhythm as everywhere else ----
+   The groups sat flush under the page subtitle with no breathing room, and the tiles were packed
+   to their cell edges. Spacing now comes off the same scale the rest of the app uses. */
+.mgroup { margin-bottom: var(--sp-4); }
+.mgroup-head { padding: var(--sp-4) var(--sp-5) var(--sp-3); }
+.tile { padding: var(--sp-4) var(--sp-5) var(--sp-5); gap: var(--sp-1); }
+.tb { font-size: 30px; font-weight: 660; letter-spacing: -.03em; line-height: 1.05;
+  font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tfoot { margin-top: var(--sp-2); }
+/* The first group needs air under the page head, and the drill-downs need it under the groups. */
+.metrics-top { margin-top: var(--sp-5); }
+
+/* ---- console: the batch as a bar, not a card ---- */
+.batchbar { margin-bottom: var(--sp-5); }
+.batchbar-top { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.batchbar-title { margin: 0; font-size: var(--fs-head); font-weight: 600; letter-spacing: -.01em; }
+.batchbar-count { margin-left: auto; font-size: var(--fs-sub); color: var(--text-muted);
+  font-variant-numeric: tabular-nums; }
+.batchbar-track { display: block; height: 4px; border-radius: 99px; background: var(--surface-sunk);
+  overflow: hidden; }
+.batchbar-track i { display: block; height: 100%; background: var(--go); transition: width .4s; }
+.batchbar-meta { display: flex; gap: var(--sp-3); margin: var(--sp-2) 0 0; font-size: var(--fs-meta);
+  color: var(--text-faint); }
+
+/* ---- the work heading row, with the layout control ---- */
+.work-head { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.work-head .sec { margin: 0; }
+.lay-toggle { margin-left: auto; display: inline-flex; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
+.lay-toggle button { appearance: none; border: 0; background: none; padding: 5px 9px;
+  cursor: pointer; color: var(--text-faint); display: grid; place-items: center; }
+.lay-toggle button svg { width: 15px; height: 15px; fill: currentColor; display: block; }
+.lay-toggle button.is-on { background: var(--accent-soft); color: var(--accent-text); }
+.lay-toggle button + button { border-left: 1px solid var(--border); }
+
+/* ---- the activity column when nothing is drafting ---- */
+.idle { background: var(--surface); border: 1px dashed var(--border-strong);
+  border-radius: var(--radius); padding: var(--sp-4) var(--sp-4) var(--sp-4); }
+.idle-head { margin: 0; font-size: var(--fs-body); font-weight: 550; }
+.idle-sub { margin: var(--sp-1) 0 0; font-size: var(--fs-sub); color: var(--text-muted); }
+.idle-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0; display: flex;
+  flex-direction: column; gap: var(--sp-2); }
+.idle-list li { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sub); }
+.idle-angle { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.idle-when { margin-left: auto; color: var(--text-faint); font-variant-numeric: tabular-nums;
+  flex: none; font-size: var(--fs-meta); }
+
+/* ---- queue rows: a run opens onto its reason, a draft onto its post ---- */
+.qrun-head { appearance: none; border: 0; background: none; font: inherit; width: 100%;
+  display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4);
+  cursor: pointer; text-align: left; }
+.qrun-head:hover { background: var(--surface); }
+.qrow-run { padding: 0; }
+.qrow-run .pill { align-self: center; flex: none; }
+.qrow-run .qcar { align-self: center; }
+.qrun-full { padding-top: var(--sp-3); }
+.qrun-kv { display: grid; grid-template-columns: 128px 1fr; gap: var(--sp-1) var(--sp-3);
+  margin: 0; font-size: var(--fs-sub); }
+.qrun-kv dt { color: var(--text-faint); }
+.qrun-kv dd { margin: 0; color: var(--text-muted); }
+
+/* 1c: the icons were 17px next to 14px text, which read as oversized clip-art. */
+.qico { width: 15px; height: 15px; margin-top: 2px; }
+
+/* 1f: the expanded post was capped at 72ch inside a row that is far wider, so it wrapped into a
+   narrow column with a large empty gutter. Inside a row the measure can run wider. */
+.qrow-full .post { max-width: 88ch; }
+.lv-tok { font-size: var(--fs-meta); font-weight: 400; color: var(--text-faint);
+  margin-left: var(--sp-2); font-variant-numeric: tabular-nums; }

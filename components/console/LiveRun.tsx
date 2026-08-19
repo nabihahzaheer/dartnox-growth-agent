@@ -65,7 +65,6 @@ function subLinesFor(
     lines.push(`read ${step.sources.length} source${step.sources.length === 1 ? '' : 's'}`);
   for (const input of step.applied_inputs.slice(0, 3)) lines.push(input.label.toLowerCase());
   if (step.model) lines.push(`asking ${step.model}`);
-  if (step.tokens_in > 0) lines.push(`${step.tokens_in.toLocaleString()} tokens in`);
 
   /** A guardrail step carries none of the above — no model, no tool, no inputs — so without this it
    *  was an open step with nothing under it. What it does carry is the rule it ran, which is the
@@ -101,7 +100,17 @@ export function LiveRun({
   const [halting, setHalting] = useState(false);
   /** How many sub-lines of the running step are visible, and how long it has been running. */
   const [revealed, setRevealed] = useState(0);
-  const [elapsed, setElapsed] = useState(0);
+  /**
+   * Elapsed is computed from when the step started, not accumulated a tick at a time.
+   *
+   * The first version did `setElapsed(e => e + 0.1)` on a 100ms interval, and measured about one
+   * increment per second in the browser — the effect was being torn down and rebuilt often enough
+   * that most ticks never landed, so the clock ran at a tenth of real speed and quietly lied. A
+   * timestamp cannot drift: however often this re-renders, `now - startedAt` is the truth.
+   */
+  const [startedAt, setStartedAt] = useState(0);
+  const [now, setNow] = useState(0);
+  const elapsed = startedAt === 0 ? 0 : (now - startedAt) / 1000;
 
   useEffect(() => {
     let stop: (() => void) | undefined;
@@ -114,7 +123,9 @@ export function LiveRun({
         else if (event.type === 'step') {
           setSteps((prev) => [...prev, event.step]);
           setRevealed(0);
-          setElapsed(0);
+          const at = Date.now();
+          setStartedAt(at);
+          setNow(at);
         } else if (event.type === 'settled') setSettled((prev) => new Set(prev).add(event.id));
         else {
           setEnded(event.reason);
@@ -151,18 +162,31 @@ export function LiveRun({
   /** Reveal one sub-line at a time and tick the clock, only while a step is actually open. */
   useEffect(() => {
     if (!working) return;
-    const tick = setInterval(() => setElapsed((e) => e + 0.1), 100);
-    const reveal = setInterval(() => setRevealed((r) => Math.min(r + 1, subLines.length)), 700);
+    const tick = setInterval(() => setNow(Date.now()), 100);
+    /** Paced against the step's own playback length rather than a fixed 700ms, so a long drafting
+     *  call fills its time instead of showing everything in the first two seconds and then sitting
+     *  on "working…" for the rest. */
+    const per = Math.max(500, (newest.playback_ms * 4.2) / (subLines.length + 1));
+    const reveal = setInterval(() => setRevealed((r) => Math.min(r + 1, subLines.length)), per);
     return () => {
       clearInterval(tick);
       clearInterval(reveal);
     };
-  }, [working, newest?.id, subLines.length]);
+  }, [working, newest?.id, newest?.playback_ms, subLines.length]);
 
   async function halt() {
     setHalting(true);
     try {
       await haltRun(runId);
+      /**
+       * Set the ending locally before telling the parent.
+       *
+       * Pressing Stop used to call `haltRun` and then `onEnded`, which refetched, dropped the run
+       * out of the drafting filter, and unmounted this card — so the operator pressed a button and
+       * the thing they stopped disappeared, with no confirmation that stopping was what happened.
+       * The card now says it was stopped and stays put; the parent is told after.
+       */
+      setEnded('halted');
       onEnded();
     } finally {
       setHalting(false);
@@ -206,7 +230,17 @@ export function LiveRun({
                 <i className="lv-spin" />
               </span>
               <div className="lv-body">
-                <p className="lv-label lv-strong">{newest.label}</p>
+                <p className="lv-label lv-strong">
+                  {newest.label}
+                  {/* Rounded, and only where a step actually spends any. `RunStep` carries
+                      `tokens_in`/`tokens_out` and A-04 specifies a per-step token cap, so this is
+                      modelled rather than invented — but the exact figure is noise while a step is
+                      still running, so the header shows the scale and the expanded trace keeps the
+                      precise number. */}
+                  {newest.tokens_in > 0 && (
+                    <span className="lv-tok">~{Math.round(newest.tokens_in / 100) / 10}k tokens</span>
+                  )}
+                </p>
                 <ul className="lv-sub">
                   {subLines.slice(0, revealed).map((line) => (
                     <li key={line}>
@@ -247,7 +281,7 @@ export function LiveRun({
           {/* C6's operator halt — the one producer of `abandoned` a person can reach, and the
               architecture named that state before anything could create one. */}
           <button type="button" className="btn btn-sm" disabled={halting} onClick={() => void halt()}>
-            {halting ? '…' : 'Stop this run'}
+            {halting ? 'Stopping…' : 'Stop'}
           </button>
         </footer>
       )}

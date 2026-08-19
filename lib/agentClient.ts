@@ -79,6 +79,7 @@ import type {
   GuardrailRule,
   GuardrailRuleId,
   Pillar,
+  Post,
   QueueItem,
   ReflectionRule,
   RejectionReasonCode,
@@ -588,6 +589,16 @@ export type BatchChild = {
   events: GuardrailEvent[];
 };
 
+/** An approved post waiting for its slot time. This is what the agent does next when nothing is
+ *  being drafted, and it is the honest answer to an empty activity column — the alternative was a
+ *  hardcoded "nothing planned", which would have been the one thing on the screen not read off a
+ *  record. */
+export type UpNext = {
+  run: Run;
+  post: Post;
+  slot: CalendarSlot | null;
+};
+
 export type Batch = {
   parent: Run;
   children: BatchChild[];
@@ -596,6 +607,8 @@ export type Batch = {
   total: number;
   /** True while any child is still executing. The console's liveness is this, not a timer. */
   running: boolean;
+  /** Queued publish runs, soonest first. Empty once everything has gone out. */
+  upNext: UpNext[];
   budget: BudgetPosture;
 };
 
@@ -666,6 +679,21 @@ export async function getBatch(): Promise<Batch> {
       drafted: children.filter((c) => c.draft !== null && c.draft.state !== 'drafting').length,
       total: children.length,
       running: children.some((c) => c.run.state === 'running' || c.run.state === 'queued'),
+      upNext: world.runs
+        .filter((r) => r.state === 'queued' && r.type === 'publish' && r.target_post_id)
+        .map((run) => {
+          const post = world.posts.find((p) => p.id === run.target_post_id)!;
+          const draft = world.drafts.find((d) =>
+            d.versions.some((v) => v.id === post?.draft_version_id),
+          );
+          return {
+            run,
+            post,
+            slot: draft ? (world.calendarSlots.find((sl) => sl.id === draft.slot_id) ?? null) : null,
+          };
+        })
+        .filter((u) => u.post !== undefined)
+        .sort((a, b) => a.post.scheduled_at - b.post.scheduled_at),
       budget: budgetPosture(world),
     };
   });
@@ -1132,13 +1160,15 @@ export type StreamHandle = {
  * One multiplier here rather than eighty edited fixture values: the ratio to `latency_ms` is a
  * property of the playback, not of any step, and it is the number the README quotes.
  *
- * RAISED 1.7 → 2.8. At 1.7 a ten-step run was over in about twenty seconds, and with each step
- * arriving finished the screen read as a ticker rather than as work. Now a step stays open long
+ * RAISED 1.7 → 2.8 → 4.2. At 1.7 a ten-step run was over in about twenty seconds; at 2.8 it was
+ * still gone before anyone had read it. At 4.2 the eight streamed steps run about fifty seconds,
+ * which is long enough to watch and short enough that no single step reads as stuck — the sub-lines
+ * inside a step are what fill that time, and they are paced against the step's own duration. Now a step stays open long
  * enough for its own sub-lines to appear one at a time underneath it, which is where the sense of
  * work actually comes from — see `LiveRun`. Slower is not automatically better; what changed is that
  * there is now something to watch during a step rather than only between steps.
  */
-const PLAYBACK_SCALE = 2.8;
+const PLAYBACK_SCALE = 4.2;
 
 export function streamRun(
   runId: RunId,

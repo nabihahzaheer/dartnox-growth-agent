@@ -144,7 +144,7 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
         <div className="card-body">
           <p className="prov">
             <i aria-hidden />
-            {version?.author === 'human' ? 'Last edited by the operator' : 'Agent draft · nobody has read it yet'}
+            {version?.author === 'human' ? 'Edited by you' : 'Agent draft'}
           </p>
           <p className="post">{version?.text}</p>
           <Verdict draft={draft} events={events} rules={rules} threshold={detail.threshold} />

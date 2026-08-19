@@ -135,6 +135,7 @@ function Toggle({
   busy,
   label,
   locked = false,
+  lockReason,
   onToggle,
 }: {
   on: boolean;
@@ -142,6 +143,9 @@ function Toggle({
   label: string;
   /** Renders as a locked control rather than being labelled "locked" beside a normal one. */
   locked?: boolean;
+  /** Shown on hover. The row already knows why — `fixed_reason` on a rule, `lock_reason` on
+   *  auto-approve — so the control says it instead of making the operator find out by pressing. */
+  lockReason?: string;
   onToggle: () => void;
 }) {
   return (
@@ -152,6 +156,10 @@ function Toggle({
       aria-label={locked ? `${label} (locked)` : label}
       className={`tgl${on ? ' tgl-on' : ''}${locked ? ' tgl-locked' : ''}`}
       disabled={busy}
+      /** The reason, on hover and on focus, rather than only after a click. D-047 keeps the click
+       *  working — the refusal has to be reachable — but making the operator press a control to
+       *  learn they cannot press it is a poor first answer. */
+      title={locked ? lockReason : undefined}
       onClick={onToggle}
     >
       {/**
@@ -346,8 +354,8 @@ function VoiceSection({
 
   return (
     <section className="section">
-      <h2 className="t-section">Voice</h2>
-      <div className="panel" style={{ padding: '16px 18px' }}>
+      <h2 className="sec">Voice</h2>
+      <div className="set-panel">
         <div className="field">
           <label className="t-label" htmlFor="register">
             Register
@@ -468,30 +476,37 @@ function ThresholdSection({
 
   return (
     <section className="section">
-      <h2 className="t-section">Review threshold</h2>
-      <div className="panel" style={{ padding: '16px 18px' }}>
-        <div className="field-row">
-          <input
-            type="range"
-            className="rng"
-            min={range.min}
-            max={range.max}
-            step={0.01}
-            value={value}
-            aria-label="Review threshold"
-            onChange={(e) => setValue(Number(e.target.value))}
-          />
-          <span className="t-metric" style={{ width: 60 }}>
-            {value.toFixed(2)}
-          </span>
-          <button
-            type="button"
-            className="btn"
-            disabled={saving || value === settings.score_threshold}
-            onClick={() => void save()}
-          >
-            {saving ? '…' : 'Save'}
-          </button>
+      <h2 className="sec">Review threshold</h2>
+      <div className="set-panel">
+        {/* A 60px readout and a full-width track was a giant control for one two-digit number. The
+            slider is now the width it needs, the value sits with it, and both sit right of the
+            label like every other row on this screen. */}
+        <div className="set-row">
+          <div className="set-label">
+            <p className="set-name">Score a draft must reach</p>
+            <p className="set-help">Anything below this arrives flagged and sorted to the top.</p>
+          </div>
+          <div className="set-control">
+            <input
+              type="range"
+              className="rng rng-sm"
+              min={range.min}
+              max={range.max}
+              step={0.01}
+              value={value}
+              aria-label="Review threshold"
+              onChange={(e) => setValue(Number(e.target.value))}
+            />
+            <output className="set-value">{value.toFixed(2)}</output>
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={saving || value === settings.score_threshold}
+              onClick={() => void save()}
+            >
+              {saving ? '…' : 'Save'}
+            </button>
+          </div>
         </div>
         <Timing settings={settings} path="score_threshold" />
         <p className="preview-line" style={{ marginTop: 10 }}>
@@ -580,8 +595,8 @@ function BudgetSection({
 
   return (
     <section className="section">
-      <h2 className="t-section">Monthly budget</h2>
-      <div className="panel" style={{ padding: '16px 18px' }}>
+      <h2 className="sec">Monthly budget</h2>
+      <div className="set-panel">
         <BudgetLine budget={pending} />
 
         <div className="field-row" style={{ marginTop: 14 }}>
@@ -670,7 +685,7 @@ function RuleSection({
           {title} <span className="adv-n">{rows.length}</span>
         </summary>
         <p className="adv-note">Set at onboarding. Changing one changes when the agent stops for a person.</p>
-        <div className="panel" style={{ padding: '4px 18px' }}>
+        <div className="set-panel">
         {rows.map((row) => (
           <div key={row.trigger} className="rule-row">
             <div className="rule-body">
@@ -682,6 +697,7 @@ function RuleSection({
             <Toggle
               on={row.enabled}
               locked={row.is_fixed}
+              lockReason="This rule cannot be loosened. Relaxing it on the evidence of its own false positives is only safe where a false negative is recoverable, and this one is not."
               busy={busy === row.trigger}
               label={TRIGGER_LABEL[row.trigger]}
               onToggle={() => void flip(row)}
@@ -764,6 +780,7 @@ function GuardrailSection({
       <Toggle
         on={rule.is_enabled}
         locked={rule.is_fixed}
+        lockReason={rule.fixed_reason}
         busy={busy === rule.id}
         label={rule.display_name}
         onToggle={() => void flip(rule)}
@@ -773,8 +790,8 @@ function GuardrailSection({
 
   return (
     <section className="section">
-      <h2 className="t-section">What the agent checks</h2>
-      <div className="panel" style={{ padding: '4px 18px 8px' }}>
+      <h2 className="sec">What the agent checks</h2>
+      <div className="set-panel">
         {/**
          * ONE FLAT LIST, NOT FOUR LAYERS.
          *
@@ -800,7 +817,7 @@ function GuardrailSection({
           These keep the agent honest rather than shaping what it writes. They are set once and
           rarely changed.
         </p>
-        <div className="panel" style={{ padding: '4px 18px 8px' }}>
+        <div className="set-panel">
           {system.map(row)}
         </div>
       </details>
@@ -837,8 +854,8 @@ function AutoApproveSection({
 
   return (
     <section className="section">
-      <h2 className="t-section">Auto-approve</h2>
-      <div className="panel" style={{ padding: '16px 18px' }}>
+      <h2 className="sec">Auto-approve</h2>
+      <div className="set-panel">
         <div className="rule-row" style={{ paddingTop: 0 }}>
           <div className="rule-body">
             <p className="rule-title">Skip human review when every prerequisite is met</p>
@@ -846,7 +863,14 @@ function AutoApproveSection({
               {met} of {auto.prereqs.length} met
             </p>
           </div>
-          <Toggle on={auto.enabled} locked busy={busy} label="Auto-approve" onToggle={() => void attempt()} />
+          <Toggle
+            on={auto.enabled}
+            locked
+            lockReason={auto.lock_reason}
+            busy={busy}
+            label="Auto-approve"
+            onToggle={() => void attempt()}
+          />
         </div>
 
         <ul className="prereq-list">

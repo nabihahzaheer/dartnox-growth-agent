@@ -115,8 +115,12 @@ export default function WeekPage() {
         <>
           <div className="rh">
             <div className="l1">
-              <h2>{week.label}</h2>
-              <span className="wk-range">{weekRangeLabel(week)}</span>
+              {/* The range, not "This week" / "Next week". Those told you where you were relative
+                  to today and not which days you were looking at, which is the thing a calendar is
+                  for. The button between the arrows still says "This week", because that is a
+                  destination rather than a description. */}
+              <h2>{weekRangeLabel(week)}</h2>
+              {week.index === 0 && <span className="wk-now">Current week</span>}
               {week.waitingOnYou > 0 && (
                 <span className="pill pill-attend">{week.waitingOnYou} need you</span>
               )}

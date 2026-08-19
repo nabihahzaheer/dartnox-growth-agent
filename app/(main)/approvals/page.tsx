@@ -23,6 +23,7 @@ import { asConsoleError } from '@/lib/errorCopy';
 import { useWorldRead } from '@/lib/useWorldRead';
 import { EmptyState, LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 import { CHANNEL_LABEL, ChannelMark } from '@/components/ChannelMark';
+import { formatDateTime } from '@/lib/time';
 
 /** `park_reason` is a code, not a sentence — rendering it raw would print `upstream_error` at an
  *  operator. This is the plain-language side of the same taxonomy `StepTimeline`'s detail rows
@@ -55,10 +56,14 @@ export default function ApprovalsPage() {
   return (
     <>
       <header className="page-head">
-        <h1 className="page-title">My approvals</h1>
-        {/* Says what the list is and how it is ordered, in one line. The earlier version claimed
-            "in the order it started waiting", which the priority sort makes false. */}
-        <p className="page-sub">Most urgent first, then oldest.</p>
+        <h1 className="page-title">Queue</h1>
+        {/* Says what the list holds. It said "Most urgent first, then oldest", which describes a
+            sort nobody asked about and skips the useful part: this list is wider than approvals —
+            it also carries runs that produced nothing and posts a settings change pulled back. */}
+        <p className="page-sub">
+          Everything this week that has stopped somewhere: drafts to decide, runs that produced
+          nothing, and posts sent back by a settings change.
+        </p>
       </header>
 
       {error && !items && <LoadError error={error} onRetry={() => void load()} />}
@@ -90,6 +95,15 @@ function rowKey(item: QueueItem): string {
   return `post-${item.post.id}`;
 }
 
+/** The opening sentence, capped. Falls back to a hard cut only if the text has no sentence break
+ *  inside a reasonable length. */
+function firstSentence(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const stop = flat.search(/[.!?](\s|$)/);
+  if (stop > 0 && stop < 110) return flat.slice(0, stop + 1);
+  return flat.length > 110 ? `${flat.slice(0, 108).trimEnd()}…` : flat;
+}
+
 function QueueRow({ item }: { item: QueueItem }) {
   const [open, setOpen] = useState(false);
 
@@ -103,8 +117,17 @@ function QueueRow({ item }: { item: QueueItem }) {
    */
   if (item.kind === 'run') {
     const quarantined = item.run.state === 'quarantined';
+    /**
+     * A run opens too, and it opens onto something different from a draft.
+     *
+     * Leaving these inert was worse — an operator cannot tell a row that has nothing behind it from
+     * one that is simply not clickable. But making them open onto a decision would turn this screen
+     * into the console. So a run expands to *why it stopped*: the reason, the rule where there is
+     * one, and what happens next. No buttons, because there is nothing here to decide.
+     */
     return (
-      <div className="qrow qrow-run">
+      <div className={`qrow qrow-run${open ? ' is-open' : ''}`}>
+        <button type="button" className="qrun-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span className={`qico ${quarantined ? 'qico-stop' : 'qico-wait'}`} aria-hidden>
           {quarantined ? (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
@@ -131,6 +154,31 @@ function QueueRow({ item }: { item: QueueItem }) {
         <span className={`pill ${quarantined ? 'pill-stop' : 'pill-calm'}`}>
           {quarantined ? 'stopped' : 'retrying'}
         </span>
+        <span className={`qcar${open ? ' is-open' : ''}`} aria-hidden>▶</span>
+        </button>
+
+        {open && (
+          <div className="qrow-full qrun-full">
+            <dl className="qrun-kv">
+              <dt>Run</dt>
+              <dd className="mono">{item.run.id}</dd>
+              <dt>Stopped at</dt>
+              <dd>{formatDateTime(item.run.started_at)}</dd>
+              {item.run.park_reason && (
+                <>
+                  <dt>Reason</dt>
+                  <dd>{item.run.park_reason.replace(/_/g, ' ')}</dd>
+                </>
+              )}
+              <dt>What happens next</dt>
+              <dd>
+                {quarantined
+                  ? 'Nothing automatically. The source is archived and this slot needs a person to clear it or drop it.'
+                  : 'The hourly sweep picks it up. No action needed unless it keeps failing.'}
+              </dd>
+            </dl>
+          </div>
+        )}
       </div>
     );
   }
@@ -150,7 +198,10 @@ function QueueRow({ item }: { item: QueueItem }) {
       >
         <ChannelMark channel={draft.channel} size={17} />
         <span className="qrow-ch">{CHANNEL_LABEL[draft.channel]}</span>
-        <span className="qrow-excerpt">{version?.text.slice(0, 78)}…</span>
+        {/* The first sentence, not a character count. Slicing at 78 cut mid-word and mid-clause,
+            which reads as broken rather than truncated. A post's opening sentence is also the thing
+            it was written to be scanned by. */}
+        <span className="qrow-excerpt">{firstSentence(version?.text ?? '')}</span>
         <span className={`pill ${blocked ? 'pill-stop' : isPost ? 'pill-attend' : 'pill-go'}`}>
           {blocked ? 'blocked' : isPost ? 'sent back' : 'needs you'}
         </span>
@@ -162,7 +213,7 @@ function QueueRow({ item }: { item: QueueItem }) {
           {isPost && <p className="qrow-why">{item.post.invalidated_reason}</p>}
           <p className="post">{version?.text}</p>
           <Link href={`/approvals/${draft.id}`} className="btn btn-primary qrow-go">
-            Open and decide
+            Review
           </Link>
         </div>
       )}

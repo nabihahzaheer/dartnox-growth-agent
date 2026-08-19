@@ -51,6 +51,7 @@ function detailRows(step: RunStep, events: GuardrailEvent[], rules: GuardrailRul
   if (step.model) rows.push(['model', step.model_snapshot ?? step.model]);
   if (step.tokens_in || step.tokens_out)
     rows.push(['tokens', `${step.tokens_in.toLocaleString()} in / ${step.tokens_out} out`]);
+  // (the header carries a rounded figure; this is the exact one, for someone auditing a cost)
   if (step.cost_model_usd) rows.push(['cost', `$${step.cost_model_usd.toFixed(4)}`]);
   rows.push(['latency', `${(step.latency_ms / 1000).toFixed(1)}s`]);
   if (step.attempt > 1) rows.push(['attempt', `${step.attempt} of ${step.max_attempts}`]);
@@ -93,12 +94,14 @@ function Row({
 }) {
   const [open, setOpen] = useState(false);
   const tone = toneFor(step, events);
-  const event = events.find((e) => e.id === step.guardrail_event_id);
-  const rule = event?.rule_id ? rules.find((r) => r.id === event.rule_id) : undefined;
   const rows = detailRows(step, events, rules);
 
   return (
     <li className={`tl-row${open ? ' is-open' : ''}${last ? ' is-last' : ''}`}>
+      {/* Same node shapes as the live card: a small ring, filled only when a step warned or failed.
+          A finished run and a running one are the same kind of thing seen at different moments, and
+          they were rendering in two different visual languages — the live card in soft rows with
+          light rings, this one in hard blue discs with a Courier layer chip. */}
       <span className={`tl-node tl-${tone}`} aria-hidden>
         {GLYPH[tone]}
       </span>
@@ -115,7 +118,13 @@ function Row({
           <span className="tl-name">{step.label}</span>
           <span className="sr-only">{TONE_LABEL[tone]}</span>
           <span className="tl-meta">
-            {rule && <span className="mono tl-lay">{rule.layer}</span>}
+            {/* A rough token figure, right-aligned, only on steps that spent any. `RunStep` carries
+                `tokens_in`/`tokens_out` and A-04 specifies a per-step token cap and a per-run
+                ceiling, so this is a modelled number rather than an invented one. Rounded to the
+                nearest hundred because the exact figure is noise at this altitude. */}
+            {step.tokens_in > 0 && (
+              <span className="tl-tok">{Math.round(step.tokens_in / 100) / 10}k tok</span>
+            )}
             <span className="tl-dur">{(step.latency_ms / 1000).toFixed(1)}s</span>
           </span>
         </button>
