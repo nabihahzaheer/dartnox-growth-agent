@@ -123,6 +123,7 @@ export default function ConsolePage() {
   const threshold = settings.score_threshold;
 
   const waiting = batch.children.filter((c) => c.draft && NEEDS_DECISION.has(c.draft.state));
+  const blocked = waiting.filter((c) => c.draft?.state === 'blocked_guardrail');
   const drafting = batch.children.filter((c) => c.run.state === 'running' || c.run.state === 'queued');
   const settled = batch.children.filter(
     (c) => c.draft && !NEEDS_DECISION.has(c.draft.state) && c.run.state !== 'running',
@@ -130,7 +131,9 @@ export default function ConsolePage() {
 
   return (
     <>
-      <PageHead />
+      <PageHead>
+        <AgentLine batch={batch} waitingCount={waiting.length} blockedCount={blocked.length} />
+      </PageHead>
 
       <section className="batch panel">
         <div className="batch-top">
@@ -253,14 +256,53 @@ export default function ConsolePage() {
   );
 }
 
-function PageHead() {
+/**
+ * `Console` stays a plain heading — h1 is not the place for a composed sentence. What sits below it
+ * is `children`, and it is empty until there is real batch data to compose from: a narrator line
+ * cannot say anything true before the first read returns, and a placeholder sentence would be
+ * exactly the kind of prose this rebuild has spent five steps replacing with values.
+ */
+function PageHead({ children }: { children?: React.ReactNode }) {
   return (
     <header className="page-head">
       <h1 className="page-title">Console</h1>
-      <p className="page-sub">
-        Next week&rsquo;s posts, drafted overnight. Everything here is waiting on you or already
-        settled.
-      </p>
+      {children}
     </header>
+  );
+}
+
+/**
+ * WHAT THE AGENT WOULD SAY, COMPOSED FROM THE SAME FIELDS THE PANEL BELOW RENDERS.
+ *
+ * Not a chat box — there is nowhere to type back, and D-002's seam has no endpoint for a free-text
+ * instruction to land on. What is worth keeping from the composer we cut is the register: the agent
+ * reporting on itself in one sentence, the way Lindy's activity feed narrates a run rather than
+ * captioning it. Every number here is `batch`, `waiting.length` or `blocked.length` — nothing is
+ * written independently of what the panel underneath is about to show, so the two cannot disagree.
+ */
+function AgentLine({
+  batch,
+  waitingCount,
+  blockedCount,
+}: {
+  batch: Batch;
+  waitingCount: number;
+  blockedCount: number;
+}) {
+  const said = batch.running
+    ? `Drafting next week now — ${batch.drafted} of ${batch.total} done so far.`
+    : waitingCount === 0
+      ? `Finished next week's ${batch.total} posts. Nothing left for you to decide.`
+      : `Finished next week's ${batch.total} posts. ${
+          waitingCount === 1 ? '1 needs you' : `${waitingCount} need you`
+        }${blockedCount > 0 ? `, ${blockedCount === 1 ? 'one of them blocked' : `${blockedCount} of them blocked`}` : ''}.`;
+
+  return (
+    <div className="agent-line">
+      <span className="agent-avatar" aria-hidden>
+        GA
+      </span>
+      <p className="agent-said">{said}</p>
+    </div>
   );
 }

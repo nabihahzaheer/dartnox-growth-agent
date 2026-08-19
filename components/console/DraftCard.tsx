@@ -22,7 +22,7 @@ import Link from 'next/link';
 import type { BatchChild } from '@/lib/agentClient';
 import { submitReview } from '@/lib/agentClient';
 import type { GuardrailRule, InterruptOption, RunStep } from '@/lib/types';
-import { StepTimeline } from './StepTimeline';
+import { StepTimeline, runDurationSeconds } from './StepTimeline';
 import { Verdict } from './Verdict';
 
 const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
@@ -33,6 +33,11 @@ const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
  *  itself a pure function of its props. */
 function elapsedSeconds(since: number): number {
   return Math.round((Date.now() - since) / 1000);
+}
+
+function formatSpan(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 const ACTION_LABEL: Partial<Record<InterruptOption, string>> = {
@@ -161,16 +166,41 @@ export function DraftCard({
             </button>
           );
         })}
-        <button type="button" className="trace-link" onClick={() => setShowTrace((v) => !v)}>
+      </footer>
+
+      <div className="step-foldrow">
+        {/**
+         * THE LINDY FOLD.
+         *
+         * While a run is live, its steps appear one at a time in the console's "Still drafting"
+         * region — nothing folds there, because there is nothing finished yet to summarise. Once a
+         * run has reached a person, showing the same step-by-step list by default would put the
+         * process ahead of the thing it produced. This is the fold: a single line stating what
+         * happened and how long it took, computed rather than written, that opens back into the full
+         * `StepTimeline` on click. The order stays post-first either way — this sits below the
+         * verdict, not above the draft, because "post first" is the correction the whole rebuild is
+         * for and a folded step count does not earn front billing over it.
+         */}
+        <button
+          type="button"
+          className="step-fold"
+          onClick={() => setShowTrace((v) => !v)}
+          aria-expanded={showTrace}
+        >
+          <span className="step-fold-tick" aria-hidden>
+            ✓
+          </span>
+          <span>
+            {steps.length} steps · done in {formatSpan(runDurationSeconds(steps))}
+          </span>
           <span className={`trace-car${showTrace ? ' is-open' : ''}`} aria-hidden>
             ▶
           </span>
-          {steps.length} steps
         </button>
         <Link href={`/approvals/${draft.id}`} className="trace-link">
           Open in full →
         </Link>
-      </footer>
+      </div>
 
       {error && <p className="card-err">{error}</p>}
 

@@ -131,6 +131,23 @@ function Row({
   );
 }
 
+/**
+ * THE FOLDED FORM — wall-clock span, computed rather than stored.
+ *
+ * `latency_ms` sums to the honest cost of the work; it does not answer "how long did this take",
+ * because steps queue behind each other and the gaps between them are real. This is the span from
+ * the first step's start to the last step's end, which is the number a reviewer means by "done in
+ * 21s" — nothing on `RunStep` states it directly, so it has to be derived the same way `Verdict`
+ * derives the weakest score dimension rather than trusting a written figure.
+ */
+export function runDurationSeconds(steps: RunStep[]): number {
+  if (steps.length === 0) return 0;
+  const first = steps[0];
+  const last = steps[steps.length - 1];
+  const lastEndsAt = last.started_at + last.latency_ms / 60_000;
+  return Math.max(0, Math.round((lastEndsAt - first.started_at) * 60));
+}
+
 export function StepTimeline({
   steps,
   events,
