@@ -909,3 +909,79 @@ a.wk-entry:hover { background: var(--accent-soft); }
 @media (max-width: 900px) {
   .grid3 { grid-template-columns: 1fr; }
 }
+
+/**
+ * ---- settings ----
+ *
+ * The first screen with real form controls — every prior write in this rebuild is a button
+ * (approve/reject/toggle a chart bar). Four new primitives, used everywhere below rather than
+ * once each: `.txt` for a text field, `.rng` for the native range slider, `.tgl` for a switch
+ * built as a button (this app has no checkboxes anywhere else, and `role="switch"` on a button
+ * keeps that true), and `.rule-row` for the repeated shape a control/label/lock pattern takes
+ * across guardrails, escalation triggers and approval rules.
+ *
+ * FIXED CONTROLS STAY LIVE (D-047). A row with `is_fixed` still renders its switch as clickable —
+ * never `disabled` — because a disabled input fires no event and an operator wanting to know why
+ * has nothing to click. It asks the server, the server refuses with a reason, and `.note-stop`
+ * shows that reason. The `.pill-lock` badge is a hint before the click, not the enforcement.
+ */
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.field:last-child { margin-bottom: 0; }
+.field-row { display: flex; align-items: center; gap: 10px; }
+.txt { font: inherit; font-size: 13.5px; padding: 7px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  width: 100%; }
+.txt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.txt-flex { flex: 1; min-width: 0; }
+
+.rng { flex: 1; accent-color: var(--accent); height: 4px; cursor: pointer; }
+
+.tgl { appearance: none; border: 0; padding: 0; cursor: pointer; flex: none;
+  width: 34px; height: 20px; border-radius: 99px; background: var(--border-strong);
+  position: relative; transition: background 0.15s; }
+.tgl:disabled { opacity: 0.5; cursor: not-allowed; }
+.tgl-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(21 26 30 / 25%);
+  transition: transform 0.15s; }
+.tgl-on { background: var(--go); }
+.tgl-on .tgl-knob { transform: translateX(14px); }
+
+.rule-row { display: flex; align-items: center; gap: 12px; padding: 10px 0;
+  border-bottom: 1px solid var(--border); }
+.rule-row:last-child { border-bottom: none; }
+.rule-body { flex: 1; min-width: 0; }
+.rule-title { margin: 0; font-size: 13.5px; font-weight: 550; color: var(--text); }
+.rule-sub { margin: 2px 0 0; font-size: 11.5px; color: var(--text-faint); }
+.pill-lock { background: var(--surface-sunk); color: var(--text-faint); }
+.pill-calm { background: var(--surface-sunk); color: var(--text-muted); }
+
+.layer-group + .layer-group { margin-top: 18px; }
+.layer-head { display: flex; align-items: center; gap: 8px; margin: 0 0 2px; }
+.layer-name { font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  color: var(--text-faint); letter-spacing: 0.04em; }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.phrase-chip { font-size: 12.5px; background: var(--surface-sunk); color: var(--text-muted);
+  border-radius: 99px; padding: 3px 10px; }
+
+.preview-line { margin: 0; font-size: 12px; color: var(--text-faint); }
+.preview-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex;
+  flex-direction: column; gap: 5px; }
+.preview-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px;
+  color: var(--text-muted); }
+.preview-score { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600;
+  width: 40px; }
+
+.note { margin: 0 0 16px; padding: 9px 13px; border-radius: var(--radius-sm); font-size: 13px;
+  background: var(--go-soft); color: #1d5238; }
+.note-stop { background: var(--stop-soft); color: var(--stop); }
+
+.prereq-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex;
+  flex-direction: column; gap: 1px; }
+.prereq-row { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; font-size: 13px; }
+.prereq-ic { width: 16px; height: 16px; border-radius: 50%; flex: none; margin-top: 1px;
+  display: grid; place-items: center; font-size: 9px; font-weight: 700; }
+.prereq-met { background: var(--go-soft); color: var(--go); }
+.prereq-unmet { background: var(--surface-sunk); color: var(--text-faint); }
+.prereq-body p { margin: 0; }
+.prereq-detail { color: var(--text-faint); font-size: 12px; margin-top: 1px; }
