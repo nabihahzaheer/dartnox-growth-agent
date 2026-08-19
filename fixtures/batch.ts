@@ -249,8 +249,10 @@ export const batchDrafts: Draft[] = [
     pillar_id: PILLAR_FIELD_NOTES,
     channel: 'x',
     run_id: RUN_BEDSTUY,
-    state: 'awaiting_approval',
-    queued_at: minutes(-28 * HOUR + 47),
+    /** Still being written — its run is in flight. `queued_at` is null because this draft has not
+     *  entered review yet; `landRun` stamps it when the run reaches its gate. */
+    state: 'drafting',
+    queued_at: null,
     current_version_id: V_BEDSTUY,
     versions: [
       version(
@@ -284,8 +286,8 @@ export const batchDrafts: Draft[] = [
     pillar_id: PILLAR_OLD_BUILDINGS,
     channel: 'x',
     run_id: RUN_DIAGRAM,
-    state: 'awaiting_approval',
-    queued_at: minutes(-28 * HOUR + 52),
+    state: 'drafting',
+    queued_at: null,
     current_version_id: V_DIAGRAM,
     versions: [
       version(
@@ -368,14 +370,18 @@ const childRun = (
   target: DraftId,
   startedAt: MinutesFromAnchor,
   checkpoint: string,
+  /** In flight rather than stopped at its gate. Four of the eight children are mid-draft when the
+   *  console opens — see the note on `batchRuns` below. */
+  live = false,
 ): Run => ({
   id,
   client_id: CLIENT_ID,
   type: 'draft',
   parent_run_id: RUN_PARENT,
-  /** Halted at its gate. This state is what the review queue is a view of. */
-  state: 'awaiting_human',
-  checkpoint_ref: checkpoint,
+  /** Halted at its gate, unless still drafting. The stopped state is what the review queue is a
+   *  view of; the running one is what the console's activity column is a view of. */
+  state: live ? 'running' : 'awaiting_human',
+  checkpoint_ref: live ? '' : checkpoint,
   trigger: 'schedule.weekly_draft',
   park_reason: null,
   end_reason: null,
@@ -390,9 +396,21 @@ const childRun = (
   variant: 'nominal',
 });
 
+/**
+ * FOUR OF THE EIGHT ARE STILL DRAFTING WHEN THE CONSOLE OPENS.
+ *
+ * The batch previously arrived with one child running and five already stopped at their gates,
+ * which made the activity column a single card that finished within a minute and then had nothing
+ * to show. The architecture fans one batch into eight independent runs; a console opened partway
+ * through that fan-out should show several of them in flight, finishing at different times because
+ * they are drafting different posts against different sources.
+ *
+ * Four running, two waiting on a decision (one of them blocked), two already approved. The four
+ * carry different step counts — 7, 7, 8 and 10 — so they land in sequence rather than together.
+ */
 export const batchRuns: Run[] = [
-  childRun(RUN_BEDSTUY, DRAFT_BEDSTUY, BATCH_START, 'ckpt:0150:interrupt:draft_approval'),
-  childRun(RUN_DIAGRAM, DRAFT_DIAGRAM, BATCH_START, 'ckpt:0151:interrupt:draft_approval'),
+  childRun(RUN_BEDSTUY, DRAFT_BEDSTUY, BATCH_START, 'ckpt:0150:interrupt:draft_approval', true),
+  childRun(RUN_DIAGRAM, DRAFT_DIAGRAM, BATCH_START, 'ckpt:0151:interrupt:draft_approval', true),
   /**
    * A blocked draft still waits on a person — the board routes it to the operator with the rule and
    * the offending sentence marked, and the operator decides whether to rewrite or drop the slot. So

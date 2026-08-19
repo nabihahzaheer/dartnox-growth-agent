@@ -526,7 +526,8 @@ export const drafts: Draft[] = [
     pillar_id: PILLAR_COMPLIANCE,
     channel: 'linkedin',
     run_id: RUN_CLEAN,
-    state: 'awaiting_approval',
+    /** Still being written. `landRun` stamps `queued_at` when the run reaches its gate. */
+    state: 'drafting',
     /** When the draft first entered review. Distinct from `Approval.queued_at`, which records when
      *  *this* review began — they differ for a redraft, and the queue's p95 measures the second. */
     queued_at: minutes(-28 * HOUR + 44),
@@ -918,8 +919,11 @@ export const runs: Run[] = [
      *  week. That independence is why RUN-0144 can park without touching these. */
     parent_run_id: RUN_PARENT,
     /** Halted at the approval interrupt. This state *is* the work queue. */
-    state: 'awaiting_human',
-    checkpoint_ref: 'ckpt:0141:interrupt:draft_approval',
+    /** One of the four still in flight when the console opens — see `batchRuns` in
+     *  `fixtures/batch.ts`. The two left waiting are the warned draft and the blocked one, which is
+     *  the more useful pair to land on anyway: both need a person, for different reasons. */
+    state: 'running',
+    checkpoint_ref: '',
     trigger: 'schedule.weekly_draft',
     park_reason: null,
     end_reason: null,

@@ -409,14 +409,25 @@ for (const e of warned) {
   }
 }
 
-/** The legibility claim itself, asserted rather than assumed: one warned and one clean draft, both
- *  waiting, so the difference is visible on screen rather than only in the data. */
-const waiting = fixtures.drafts.filter((d) => d.state === 'awaiting_approval');
+/**
+ * The legibility claim, asserted rather than assumed: the items waiting on a person differ in kind,
+ * so the difference is visible on screen rather than only in the data.
+ *
+ * REWRITTEN with the four-in-flight batch. It used to require one warned and one clean draft both
+ * sitting in `awaiting_approval`, which held while five of the eight children arrived already
+ * stopped. Now four are still drafting on open and the two waiting are the warned draft and the
+ * blocked one — a sharper contrast than warned-versus-clean, because one can be approved and the
+ * other cannot, which is the distinction the gate exists to make.
+ */
+const waiting = fixtures.drafts.filter(
+  (d) => d.state === 'awaiting_approval' || d.state === 'blocked_guardrail',
+);
 const waitingWarned = waiting.filter((d) =>
   fixtures.guardrailEvents.some((e) => e.draft_id === d.id && e.result === 'warn'),
 );
-check('a warned draft and a clean draft are both awaiting review',
-  waitingWarned.length > 0 && waiting.length > waitingWarned.length);
+const waitingBlocked = waiting.filter((d) => d.state === 'blocked_guardrail');
+check('a warned draft and a blocked draft are both waiting on a person',
+  waitingWarned.length > 0 && waitingBlocked.length > 0);
 
 /** `escalation_trigger` is non-null exactly when something was escalated. The two fields overlap
  *  deliberately and answer different questions; this keeps them consistent. */
@@ -522,13 +533,20 @@ if (liveRun) {
 check(
   'a draft sits below the score threshold',
   fixtures.drafts.some(
-    (d) => d.state === 'awaiting_approval' && d.composite_score < fixtures.settings.score_threshold,
+    (d) =>
+      (d.state === 'awaiting_approval' || d.state === 'blocked_guardrail') &&
+      d.composite_score < fixtures.settings.score_threshold,
   ),
 );
+/** Both sides of the bar have to be represented among the items a person is looking at, or moving
+ *  the threshold slider re-flags nothing and the control demonstrates nothing. Reads the same
+ *  population the Settings preview does — see `awaitingDecision` in `agentClient.ts`. */
 check(
   'a draft sits above the score threshold',
   fixtures.drafts.some(
-    (d) => d.state === 'awaiting_approval' && d.composite_score >= fixtures.settings.score_threshold,
+    (d) =>
+      (d.state === 'awaiting_approval' || d.state === 'blocked_guardrail') &&
+      d.composite_score >= fixtures.settings.score_threshold,
   ),
 );
 

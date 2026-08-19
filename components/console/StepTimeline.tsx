@@ -123,7 +123,7 @@ function Row({
                 ceiling, so this is a modelled number rather than an invented one. Rounded to the
                 nearest hundred because the exact figure is noise at this altitude. */}
             {step.tokens_in > 0 && (
-              <span className="tl-tok">{Math.round(step.tokens_in / 100) / 10}k tok</span>
+              <span className="tl-tok">{Math.round(step.tokens_in / 100) / 10}k tokens</span>
             )}
             <span className="tl-dur">{(step.latency_ms / 1000).toFixed(1)}s</span>
           </span>

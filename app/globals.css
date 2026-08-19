@@ -654,7 +654,9 @@ body {
   font-size: var(--fs-lede);
   color: var(--text-muted);
   margin: var(--sp-2) 0 0;
-  max-width: 70ch;
+  /* No cap. These are one-line orientation sentences, not running prose — a 70ch limit broke them
+     onto a second line well short of the content width beside them, which reads as a mistake
+     rather than as a measure. Any that genuinely run long get shortened instead. */
 }
 .panel {
   background: var(--surface);
@@ -849,21 +851,24 @@ body {
 
 /* ---- step timeline ---- */
 .tl { list-style: none; margin: 0; padding: 0; }
-.tl-row { display: flex; gap: 11px; align-items: flex-start; position: relative; }
+.tl-row { display: flex; gap: 10px; align-items: flex-start; position: relative; }
 /* Lindy/Gumloop-style: a quiet connector, small unfilled nodes, and each step as a soft row that
    only gains a surface when you open it. The previous version filled every node with the accent at
    full strength, so a fourteen-step trace was fourteen solid blue dots down the page and the two
    that had actually failed did not stand out at all. */
-.tl-row:not(.is-last) .tl-node::after { content: ''; position: absolute; left: 50%; top: 19px;
-  bottom: -6px; width: 1.5px; background: var(--border); transform: translateX(-50%);
+.tl-row:not(.is-last) .tl-node::after { content: ''; position: absolute; left: 50%; top: 20px;
+  bottom: -4px; width: 1.5px; background: var(--border); transform: translateX(-50%);
   border-radius: 2px; }
-.tl-node { position: relative; width: 17px; height: 17px; border-radius: 50%; flex: none;
-  margin-top: 5px; display: grid; place-items: center; font-size: 8.5px; font-weight: 700;
+/* Identical to `.lv-node`. A finished trace and a running one are the same object seen at
+   different moments; they were rendering in two vocabularies, so the list of steps under a draft
+   awaiting approval looked nothing like the list unfolding in the activity column beside it. */
+.tl-node { position: relative; width: 18px; height: 18px; border-radius: 50%; flex: none;
+  margin-top: 4px; display: grid; place-items: center; font-size: 9px; font-weight: 700;
   border: 1.5px solid; }
-.tl-ok { background: var(--surface); border-color: var(--border-strong); color: var(--go); }
+.tl-ok { background: transparent; border-color: var(--border-strong); color: var(--text-faint); }
 .tl-warn { background: var(--attend-soft); border-color: var(--attend); color: var(--attend); }
 .tl-bad { background: var(--stop-soft); border-color: var(--stop); color: var(--stop); }
-.tl-body { flex: 1; min-width: 0; padding-bottom: 10px; }
+.tl-body { flex: 1; min-width: 0; padding-bottom: var(--sp-1); }
 .tl-head { appearance: none; border: 0; background: none; font: inherit; width: 100%;
   display: flex; align-items: center; gap: 9px; cursor: pointer; text-align: left;
   padding: 5px 9px; border-radius: var(--radius-sm); margin-left: -9px; transition: background .12s; }
@@ -872,7 +877,8 @@ body {
 .tl-car { color: var(--text-faint); font-size: 9px; width: 9px; flex: none;
   transition: transform 0.16s; display: inline-block; }
 .tl-row.is-open .tl-car { transform: rotate(90deg); }
-.tl-name { font-size: 13.5px; font-weight: 550; color: var(--text); }
+.tl-name { font-size: var(--fs-body); font-weight: 400; color: var(--text-muted); }
+.tl-row.is-open .tl-name { color: var(--text); font-weight: 550; }
 /* Matches the live card's sub-line treatment so a finished trace and a running one read as the
    same object. */
 .tl-dur { font-variant-numeric: tabular-nums; }
@@ -1563,3 +1569,73 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .mgroup-foot { margin: 0; padding: var(--sp-3) var(--sp-5) var(--sp-4); font-size: var(--fs-sub);
   color: var(--text-muted); line-height: 1.55; border-top: 1px solid var(--border);
   max-width: 88ch; }
+
+/* ================================================================================================
+ * CONSOLE HERO — the batch leads the screen
+ * ==============================================================================================*/
+.hero { display: flex; align-items: flex-start; gap: var(--sp-6); padding: 0 0 var(--sp-5);
+  margin-bottom: var(--sp-5); border-bottom: 1px solid var(--border); }
+.hero-left { flex: 1; min-width: 0; }
+.hero-eyebrow { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-2);
+  font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent-text); }
+.hero-title { margin: 0; font-size: 30px; font-weight: 640; letter-spacing: -.028em;
+  line-height: 1.12; }
+.hero-meta { display: flex; gap: var(--sp-3); margin: var(--sp-3) 0 0; font-size: var(--fs-meta);
+  color: var(--text-faint); }
+/* Right-aligned and only as wide as it needs to be. The bar used to stretch the full page, which
+   made a count of eight look like a loading screen. */
+.hero-right { flex: none; width: 170px; text-align: right; }
+.hero-num { margin: 0; font-size: 38px; font-weight: 640; letter-spacing: -.035em; line-height: 1;
+  font-variant-numeric: tabular-nums; }
+.hero-of { font-size: 20px; color: var(--text-faint); margin-left: 4px; font-weight: 500; }
+.hero-label { margin: var(--sp-1) 0 var(--sp-2); font-size: 10.5px; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--text-faint); }
+.hero-track { display: block; height: 4px; border-radius: 99px; background: var(--surface-sunk);
+  overflow: hidden; }
+.hero-track i { display: block; height: 100%; background: var(--go); transition: width .4s; }
+@media (max-width: 720px) {
+  .hero { flex-direction: column; gap: var(--sp-4); }
+  .hero-right { width: 100%; text-align: left; }
+}
+
+/* ---- column headings align, and only the toggle sits above the grid ---- */
+.work-head { display: flex; align-items: center; min-height: 0; margin-bottom: 0; }
+.work-head-spacer { flex: 1; }
+.col-head { margin-top: 0; margin-bottom: var(--sp-3); min-height: 26px; display: flex;
+  align-items: center; }
+
+/* ---- 3: the live task list was set below body size on the busiest surface ---- */
+.lv-row { font-size: var(--fs-body); }
+.lv-sub { font-size: var(--fs-sub); }
+.lv-dur { font-size: var(--fs-meta); }
+
+/* ---- 12: narrow the column, do not grow the type ----
+   Smashing Magazine's rule for a container wider than the optimal measure is to narrow the column
+   rather than enlarge the text ("keeping the font size smaller and easier to read"). A stacked
+   console gave each card the full 1157px while the post inside was capped at 72ch, leaving a wide
+   dead gutter and text that looked arbitrarily wrapped. The card is now sized to its content. */
+.console-stacked .console-work { max-width: 780px; }
+.console-stacked .console-live { max-width: 780px; }
+
+/* ================================================================================================
+ * QUEUE — three columns by what the item needs from you
+ * ==============================================================================================*/
+.qcols { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: var(--sp-5); align-items: start; }
+.qcol { min-width: 0; }
+.qcol-head { display: flex; align-items: center; gap: var(--sp-2); margin: 0;
+  font-size: var(--fs-head); font-weight: 600; letter-spacing: -.01em; }
+.qcol-sub { margin: var(--sp-1) 0 var(--sp-3); font-size: var(--fs-sub); color: var(--text-muted);
+  line-height: 1.45; }
+.qcol-empty { margin: 0; padding: var(--sp-4); font-size: var(--fs-sub); color: var(--text-faint);
+  border: 1px dashed var(--border); border-radius: var(--radius); text-align: center; }
+@media (max-width: 1100px) { .qcols { grid-template-columns: 1fr; } }
+
+/* The Review button sits where the pill was: top right of the row, and it stays there when the row
+   is expanded rather than moving to the bottom of the post. */
+.qrow-review { flex: none; text-decoration: none; font-size: var(--fs-meta); padding: 3px 11px; }
+.qrow-when { flex: none; font-size: var(--fs-meta); color: var(--text-faint);
+  font-variant-numeric: tabular-nums; }
+.card-when { margin-left: auto; font-size: var(--fs-meta); color: var(--text-faint);
+  font-variant-numeric: tabular-nums; }
+.card-head .card-state { margin-left: var(--sp-2); }

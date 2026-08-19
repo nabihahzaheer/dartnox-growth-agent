@@ -61,16 +61,6 @@ export default function ConsolePage() {
   /** Stacked by default: it is the layout that suits the screen once drafting is done, which is
    *  most of the time, and it gives the posts the full column. */
   const [layout, setLayout] = useState<'split' | 'stacked'>('stacked');
-  /**
-   * Runs this session watched land.
-   *
-   * A run left the activity column the instant it finished, because landing moves it out of
-   * `running` and the filter below only looked for running children. So the thing the operator was
-   * watching announced its result and then vanished, which is the opposite of what a result is for.
-   * Keeping the id here holds the card in place — already ended, not re-streaming — until the page
-   * is left. It is view state about what *this viewer* saw, which is why it is not in the seam.
-   */
-  const [landed, setLanded] = useState<Set<string>>(new Set());
 
   /**
    * Nothing here sets state before the first `await`. That is deliberate rather than incidental:
@@ -150,10 +140,10 @@ export default function ConsolePage() {
   const waiting = batch.children.filter((c) => c.draft && needsDecision(c.draft));
   const blocked = waiting.filter((c) => c.draft?.state === 'blocked_guardrail');
   const drafting = batch.children.filter(
-    (c) => c.run.state === 'running' || c.run.state === 'queued' || landed.has(c.run.id),
+    (c) => c.run.state === 'running' || c.run.state === 'queued',
   );
   const settled = batch.children.filter(
-    (c) => c.draft && !needsDecision(c.draft) && c.run.state !== 'running' && !landed.has(c.run.id),
+    (c) => c.draft && !needsDecision(c.draft) && c.run.state !== 'running',
   );
 
   return (
@@ -179,33 +169,50 @@ export default function ConsolePage() {
        * and settings version move behind the count, because they are provenance an engineer asks
        * for occasionally rather than something an operator reads every morning.
        */}
-      <section className="batchbar">
-        <div className="batchbar-top">
-          <h2 className="batchbar-title">Wednesday drafting batch</h2>
-          {batch.running ? (
-            <span className="pill pill-live">
-              <i className="pulse" aria-hidden /> running
-            </span>
-          ) : (
-            <span className="pill pill-go">complete</span>
-          )}
-          <span className="batchbar-count">
-            {batch.drafted} of {batch.total} drafted
+      {/**
+       * MISSION CONTROL, NOT A ROW OF METADATA.
+       *
+       * This was a bar in the same type size as everything under it, so the batch — the thing the
+       * whole screen is about — read as one more label. It now leads: the run's name at hero size
+       * with its state beside it, and the count as a large figure on the right with the bar under
+       * it rather than stretched across the page. Provenance sits underneath in meta type, where a
+       * run id belongs.
+       */}
+      <section className="hero">
+        <div className="hero-left">
+          <p className="hero-eyebrow">
+            {batch.running ? (
+              <>
+                <i className="pulse" aria-hidden /> Running now
+              </>
+            ) : (
+              'Complete'
+            )}
+          </p>
+          <h2 className="hero-title">Wednesday drafting batch</h2>
+          <p className="hero-meta">
+            <span className="mono">{batch.parent.id}</span>
+            <span className="mono">settings {settings.current_version_id}</span>
+          </p>
+        </div>
+        <div className="hero-right">
+          <p className="hero-num">
+            {batch.drafted}
+            <span className="hero-of">/ {batch.total}</span>
+          </p>
+          <p className="hero-label">drafted</p>
+          <span className="hero-track" aria-hidden>
+            <i style={{ width: `${batch.total === 0 ? 0 : (batch.drafted / batch.total) * 100}%` }} />
           </span>
         </div>
-        <span className="batchbar-track" aria-hidden>
-          <i style={{ width: `${batch.total === 0 ? 0 : (batch.drafted / batch.total) * 100}%` }} />
-        </span>
-        <p className="batchbar-meta">
-          <span className="mono">{batch.parent.id}</span>
-          <span className="mono">settings {settings.current_version_id}</span>
-        </p>
       </section>
 
       <div className="work-head">
-        <h2 className="sec">
-          Waiting on you <span className="sec-n">{waiting.length}</span>
-        </h2>
+        {/* Only the layout control lives above the grid now. The "Waiting on you" heading used to
+            sit here too, which meant that in stacked view it rendered above BOTH columns — so the
+            order read: heading, Agent activity, then the cards the heading was introducing. Each
+            column now carries its own heading, which also makes the two line up in split view. */}
+        <span className="work-head-spacer" />
         {/* Sits with the work it arranges, not inside the batch bar. Icons rather than words: two
             columns and two rows are the shapes themselves, and the labels were doing nothing a
             picture could not. */}
@@ -244,7 +251,7 @@ export default function ConsolePage() {
             and the decided list, so the only thing on the screen that moves was the last thing you
             could reach. In `split` it is a sticky column; in `stacked` it is simply the first card. */}
         <section className="console-live">
-          <h2 className="sec">Agent activity</h2>
+          <h2 className="sec col-head">Agent activity</h2>
           <div className="stack">
             {drafting.length > 0 &&
               drafting.map((c) => (
@@ -255,10 +262,7 @@ export default function ConsolePage() {
                   angle={c.slot?.angle ?? 'Next post'}
                   events={c.events}
                   rules={rules}
-                  onEnded={() => {
-                    setLanded((prev) => new Set(prev).add(c.run.id));
-                    void load();
-                  }}
+                  onEnded={() => void load()}
                 />
               ))}
 
@@ -291,6 +295,9 @@ export default function ConsolePage() {
         </section>
 
         <section className="console-work">
+          <h2 className="sec col-head">
+            Waiting on you <span className="sec-n">{waiting.length}</span>
+          </h2>
           {waiting.length > 0 && (
             <>
               <div className="stack">

@@ -34,7 +34,14 @@
  */
 
 import { useEffect, useState } from 'react';
-import { haltRun, landRunAtInterrupt, openRun, streamRun, type StreamEndReason } from '@/lib/agentClient';
+import {
+  PLAYBACK_SCALE,
+  haltRun,
+  landRunAtInterrupt,
+  openRun,
+  streamRun,
+  type StreamEndReason,
+} from '@/lib/agentClient';
 import type { GuardrailEvent, GuardrailRule, RunId, RunStep, RunStepId } from '@/lib/types';
 import { ChannelMark } from '@/components/ChannelMark';
 
@@ -110,7 +117,6 @@ export function LiveRun({
    */
   const [startedAt, setStartedAt] = useState(0);
   const [now, setNow] = useState(0);
-  const elapsed = startedAt === 0 ? 0 : (now - startedAt) / 1000;
 
   useEffect(() => {
     let stop: (() => void) | undefined;
@@ -139,8 +145,17 @@ export function LiveRun({
            * of the drafting filter — and without the pause the run simply vanished at the moment it
            * finished. The operator saw a card disappear rather than a run hand its work over.
            */
+          /**
+           * Land, then hand back after a beat.
+           *
+           * The card used to stay put with a line saying the draft had "moved to Waiting on you
+           * below", which is the interface narrating its own plumbing. With four runs in flight
+           * there is no need for it: something else is always still working, so the column never
+           * empties on you, and a run that finishes simply gives up its place. The short pause is
+           * so the ending is seen rather than skipped.
+           */
           void landRunAtInterrupt(runId).then(() => {
-            window.setTimeout(onEnded, 2600);
+            window.setTimeout(onEnded, 1400);
           });
         }
       });
@@ -155,7 +170,25 @@ export function LiveRun({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 
-  const newest = steps.at(-1);
+  const newestStep = steps.at(-1);
+  const newest = newestStep;
+
+  /**
+   * The clock counts toward the step's OWN duration, not wall-clock playback time.
+   *
+   * It used to show real seconds elapsed while the step played, then the finished row showed
+   * `latency_ms` — so a step counted up to 5s and then settled reading 3.1s. Two numbers for one
+   * step, and neither obviously wrong, which is the worst kind of inconsistency.
+   *
+   * The step is a compressed replay of something that really took `latency_ms`, so the honest
+   * reading is the agent's own clock: run it from zero to `latency_ms` across the playback window
+   * and it lands exactly on the figure the finished row keeps.
+   */
+  const playbackMs = (newestStep?.playback_ms ?? 0) * PLAYBACK_SCALE;
+  const realMs = startedAt === 0 ? 0 : now - startedAt;
+  const progress = playbackMs === 0 ? 1 : Math.min(1, realMs / playbackMs);
+  const elapsed = ((newestStep?.latency_ms ?? 0) / 1000) * progress;
+
   const working = newest !== undefined && !settled.has(newest.id) && ended === null;
   const subLines = newest ? subLinesFor(newest, events, rules) : [];
 
@@ -269,11 +302,6 @@ export function LiveRun({
           )}
         </ol>
 
-        {ended === 'interrupt' && (
-          <p className="lv-handoff" aria-live="polite">
-            This draft has moved to <b>Waiting on you</b> below.
-          </p>
-        )}
       </div>
 
       {!ended && (

@@ -18,7 +18,7 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { getQueue } from '@/lib/agentClient';
-import type { ConsoleError, QueueItem } from '@/lib/types';
+import type { ConsoleError, MinutesFromAnchor, QueueItem } from '@/lib/types';
 import { asConsoleError } from '@/lib/errorCopy';
 import { useWorldRead } from '@/lib/useWorldRead';
 import { EmptyState, LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
@@ -78,16 +78,74 @@ export default function ApprovalsPage() {
         />
       )}
 
+      {/**
+       * THREE COLUMNS BY WHAT THE ITEM NEEDS FROM YOU.
+       *
+       * One flat list meant every row had to carry a pill saying which kind it was, and the reader
+       * had to scan nine pills to find the two things needing a decision. The kind is now the
+       * column, so the pills come off the rows entirely — and the items that can be acted on carry
+       * a Review button in the space the pill used to occupy.
+       *
+       * Named for the operator's question rather than the record's state: "Needs your decision",
+       * not `awaiting_approval`; "Stopped, needs clearing", not `quarantined`; "Recovering on its
+       * own", not `parked_transient`.
+       */}
       {!error && items && items.length > 0 && (
-        <div className="stack">
-          {items.map((item) => (
-            <QueueRow key={rowKey(item)} item={item} />
-          ))}
+        <div className="qcols">
+          {QUEUE_COLUMNS.map((col) => {
+            const rows = items.filter(col.match);
+            return (
+              <section key={col.key} className="qcol">
+                <h2 className="qcol-head">
+                  {col.title}
+                  <span className="sec-n">{rows.length}</span>
+                </h2>
+                <p className="qcol-sub">{col.detail}</p>
+                {rows.length === 0 ? (
+                  <p className="qcol-empty">Nothing here.</p>
+                ) : (
+                  <div className="stack">
+                    {rows.map((item) => (
+                      <QueueRow key={rowKey(item)} item={item} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
       )}
     </>
   );
 }
+
+/** The three things an item can need. A run that is retrying needs nothing, which is why it is a
+ *  column of its own rather than mixed in with the work. */
+const QUEUE_COLUMNS: {
+  key: string;
+  title: string;
+  detail: string;
+  match: (i: QueueItem) => boolean;
+}[] = [
+  {
+    key: 'decide',
+    title: 'Needs your decision',
+    detail: 'Drafts and posts waiting on you.',
+    match: (i) => i.kind !== 'run',
+  },
+  {
+    key: 'clear',
+    title: 'Stopped, needs clearing',
+    detail: 'Runs that produced nothing and will not resume on their own.',
+    match: (i) => i.kind === 'run' && (i.run.state === 'quarantined' || i.run.state === 'parked_blocked'),
+  },
+  {
+    key: 'recovering',
+    title: 'Recovering on its own',
+    detail: 'No action needed unless these keep failing.',
+    match: (i) => i.kind === 'run' && i.run.state === 'parked_transient',
+  },
+];
 
 function rowKey(item: QueueItem): string {
   if (item.kind === 'draft') return `draft-${item.draft.id}`;
@@ -97,6 +155,12 @@ function rowKey(item: QueueItem): string {
 
 /** The opening sentence, capped. Falls back to a hard cut only if the text has no sentence break
  *  inside a reasonable length. */
+/** When this item is due to publish. A draft takes it from its slot; a returned post has its own
+ *  scheduled time. */
+function scheduledAt(item: Extract<QueueItem, { kind: 'draft' | 'post' }>): MinutesFromAnchor | null {
+  return item.kind === 'post' ? item.post.scheduled_at : item.publishAt;
+}
+
 function firstSentence(text: string): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   const stop = flat.search(/[.!?](\s|$)/);
@@ -151,9 +215,6 @@ function QueueRow({ item }: { item: QueueItem }) {
               : (item.run.park_reason ? PARK_LABEL[item.run.park_reason] : 'Waiting to resume.')}
           </p>
         </div>
-        <span className={`pill ${quarantined ? 'pill-stop' : 'pill-calm'}`}>
-          {quarantined ? 'stopped' : 'retrying'}
-        </span>
         <span className={`qcar${open ? ' is-open' : ''}`} aria-hidden>▶</span>
         </button>
 
@@ -202,9 +263,21 @@ function QueueRow({ item }: { item: QueueItem }) {
             which reads as broken rather than truncated. A post's opening sentence is also the thing
             it was written to be scanned by. */}
         <span className="qrow-excerpt">{firstSentence(version?.text ?? '')}</span>
-        <span className={`pill ${blocked ? 'pill-stop' : isPost ? 'pill-attend' : 'pill-go'}`}>
-          {blocked ? 'blocked' : isPost ? 'sent back' : 'needs you'}
-        </span>
+        {/* When it is due out. A queue of drafts with no dates gives no sense of what is urgent —
+            the one thing that actually orders this work. */}
+        {scheduledAt(item) !== null && (
+          <span className="qrow-when">{formatDateTime(scheduledAt(item)!)}</span>
+        )}
+        {/* The kind is the column now, so no pill. What stays is the one thing that is not
+            implied by position: whether this draft can be approved at all. */}
+        {blocked && <span className="pill pill-stop">blocked</span>}
+        <Link
+          href={`/approvals/${draft.id}`}
+          className="btn btn-primary qrow-review"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Review
+        </Link>
         <span className={`qcar${open ? ' is-open' : ''}`} aria-hidden>▶</span>
       </button>
 
@@ -212,9 +285,6 @@ function QueueRow({ item }: { item: QueueItem }) {
         <div className="qrow-full">
           {isPost && <p className="qrow-why">{item.post.invalidated_reason}</p>}
           <p className="post">{version?.text}</p>
-          <Link href={`/approvals/${draft.id}`} className="btn btn-primary qrow-go">
-            Review
-          </Link>
         </div>
       )}
     </div>

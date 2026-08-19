@@ -22,6 +22,7 @@ import Link from 'next/link';
 import type { BatchChild } from '@/lib/agentClient';
 import type { GuardrailRule, RejectionReasonEntry, RunStep } from '@/lib/types';
 import { ChannelMark } from '@/components/ChannelMark';
+import { formatDateTime } from '@/lib/time';
 import { DecisionBar } from './DecisionBar';
 import { StepTimeline, runDurationSeconds } from './StepTimeline';
 import { Verdict } from './Verdict';
@@ -61,6 +62,9 @@ export function DraftCard({
         <ChannelMark channel={draft.channel} withLabel />
         <span aria-hidden>·</span>
         <span>{child.slot?.angle ?? 'Untitled slot'}</span>
+        {/* When it goes out. A draft without its publish time gives the operator no sense of how
+            much runway a decision has. */}
+        {child.slot && <span className="card-when">{formatDateTime(child.slot.publish_at)}</span>}
         <span className="card-state">
           {blocked ? (
             <span className="pill pill-stop">blocked</span>

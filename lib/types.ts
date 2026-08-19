@@ -1485,6 +1485,15 @@ export type QueueItem =
       /** Null only before the run reaches the approval interrupt. */
       approval: Approval | null;
       events: GuardrailEvent[];
+      /**
+       * When the slot behind this draft publishes.
+       *
+       * Carried rather than looked up, for the same reason every other member of this union carries
+       * whole records: the row renders it, and a queue that handed back ids would make each row do
+       * the join the queue exists to have already done. Null only if the slot is missing, which is
+       * a broken fixture rather than a state.
+       */
+      publishAt: MinutesFromAnchor | null;
     }
   | {
       kind: 'run';

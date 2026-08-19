@@ -52,6 +52,7 @@ import {
   addBannedClaim,
   approve,
   landRun,
+  needsDecision,
   countBannedClaimMatches,
   escalate,
   labelEscalation,
@@ -283,7 +284,10 @@ export async function getSettingsScreen(): Promise<SettingsScreen> {
       settings: world.settings,
       guardrailRules: world.guardrailRules,
       reflectionRules: world.reflectionRules,
-      awaitingDecision: world.drafts.filter((d) => d.state === 'awaiting_approval'),
+      /** `needsDecision`, not `state === 'awaiting_approval'`. A blocked draft is still waiting on a
+       *  person — it simply cannot be approved — so leaving it out of the threshold preview showed
+       *  the operator a smaller population than the one the bar actually governs. */
+      awaitingDecision: world.drafts.filter(needsDecision),
       scheduledCount: world.posts.filter((p) => p.state === 'scheduled').length,
       budget: budgetPosture(world),
       evidence,
@@ -760,6 +764,7 @@ export async function getQueue(): Promise<QueueItem[]> {
             (a) => a.draft_version_id === draft.current_version_id && a.decided_at === null,
           ) ?? null,
         events: world.guardrailEvents.filter((e) => e.draft_id === draft.id),
+        publishAt: world.calendarSlots.find((s) => s.id === draft.slot_id)?.publish_at ?? null,
       }));
 
     /** Quarantined and parked runs. Both need clearing; neither is a draft. */
@@ -1168,7 +1173,7 @@ export type StreamHandle = {
  * work actually comes from — see `LiveRun`. Slower is not automatically better; what changed is that
  * there is now something to watch during a step rather than only between steps.
  */
-const PLAYBACK_SCALE = 4.2;
+export const PLAYBACK_SCALE = 4.2;
 
 export function streamRun(
   runId: RunId,
