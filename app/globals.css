@@ -869,3 +869,43 @@ a.wk-entry:hover { background: var(--accent-soft); }
 @media (max-width: 900px) {
   .wk-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ---- results: tiles ---- */
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 26px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 15px 16px; box-shadow: var(--shadow); }
+.tl2 { font-size: 13px; color: var(--text-muted); font-weight: 550; margin-bottom: 5px; }
+.tb { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1;
+  font-variant-numeric: tabular-nums; }
+.tb-muted { font-size: 18px; font-weight: 650; color: var(--text-faint); }
+.tv { font-size: 12.5px; margin-top: 4px; font-weight: 600; }
+.tv.go { color: var(--go); }
+.tv.at { color: var(--attend); }
+.tv.nd { color: var(--text-faint); font-weight: 500; }
+.tv-n { font-weight: 500; color: var(--text-faint); }
+
+/* ---- results: guardrail-by-layer chart + drill-down ---- */
+.chart { display: flex; flex-direction: column; gap: 8px; }
+.crow { appearance: none; border: 0; background: none; font: inherit; cursor: pointer;
+  display: grid; grid-template-columns: 50px 1fr 90px; gap: 12px; align-items: center;
+  padding: 5px 6px; border-radius: 6px; text-align: left; }
+.crow:hover { background: var(--surface-sunk); }
+.crow-on { background: var(--accent-soft); }
+.ctrack { height: 15px; background: var(--surface-sunk); border-radius: 4px; overflow: hidden; }
+.ctrack i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.crow-on .ctrack i { background: var(--accent-text); }
+.cval { font-size: 12.5px; color: var(--text-muted); text-align: right;
+  font-variant-numeric: tabular-nums; }
+.drill { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 13px; }
+.drill h5 { margin: 0 0 9px; font-size: 12.5px; font-weight: 650; color: var(--text-muted); }
+.dritem { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border);
+  font-size: 13px; }
+.dritem:last-child { border-bottom: none; }
+.dt2 { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); width: 74px;
+  flex: none; padding-top: 1px; }
+.dq { color: var(--text-muted); line-height: 1.5; }
+.dq b { color: var(--text); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .grid3 { grid-template-columns: 1fr; }
+}
