@@ -191,6 +191,7 @@ export default function SettingsPage() {
   return (
     <>
       <PageHead />
+      {error && <StaleWarning error={error} onRetry={() => void load()} />}
       {/* The only feedback for every settings write, including a locked control's refusal — and a
           locked switch correctly does not change `aria-checked`, so without this a screen-reader
           user clicking one got complete silence. */}

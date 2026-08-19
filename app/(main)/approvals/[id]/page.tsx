@@ -14,25 +14,19 @@
  * this safe to publish", and the trace is where an engineer's "why" goes when someone asks it.
  */
 
-import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getDraftDetail, getGuardrailRules, submitReview } from '@/lib/agentClient';
+import { getDraftDetail, getGuardrailRules, getSettings } from '@/lib/agentClient';
 import type { DraftDetail } from '@/lib/agentClient';
-import type { ConsoleError, DraftId, GuardrailRule, InterruptOption } from '@/lib/types';
-import { asConsoleError, errorCopy } from '@/lib/errorCopy';
+import type { ConsoleError, DraftId, GuardrailRule, Settings } from '@/lib/types';
+import { asConsoleError } from '@/lib/errorCopy';
+import { DecisionBar } from '@/components/console/DecisionBar';
 import { formatDateTime } from '@/lib/time';
 import { EmptyState, LoadError, LoadingState } from '@/components/ScreenState';
 import { StepTimeline } from '@/components/console/StepTimeline';
 import { Verdict } from '@/components/console/Verdict';
 
 const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
-
-const ACTION_LABEL: Partial<Record<InterruptOption, string>> = {
-  approve: 'Approve',
-  approve_with_edits: 'Edit',
-  reject: 'Send back',
-  escalate: 'Ask the owner',
-};
 
 const TAG_LABEL: Record<string, string> = {
   tightened: 'Tightened',
@@ -46,16 +40,15 @@ const TAG_LABEL: Record<string, string> = {
   client_example_added: "Client's own example added",
 };
 
-function elapsedSeconds(since: number): number {
-  return Math.round((Date.now() - since) / 1000);
-}
-
 export default function DraftDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const draftId = id as DraftId;
 
   const [detail, setDetail] = useState<DraftDetail | null>(null);
   const [rules, setRules] = useState<GuardrailRule[] | null>(null);
+  /** For the reject dialog's options. `Settings.rejection_reason_set` decides which members of the
+   *  fixed taxonomy are offered, so the picker is an operator control rather than a constant. */
+  const [settings, setSettings] = useState<Settings | null>(null);
   /**
    * One `ConsoleError` rather than a string plus a separate `notFound` boolean.
    *
@@ -64,19 +57,17 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
    * exactly as before.
    */
   const [error, setError] = useState<ConsoleError | null>(null);
-  /** Kept apart from `error` on purpose — see the catch in `decide`. */
-  const [writeError, setWriteError] = useState<ConsoleError | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  /** A ref, not state — the value is read once inside `decide()` and never rendered, so setting it
-   *  through state would cost a render for nothing and trip the same impure-during-render rule
-   *  `DraftCard` hits for the same reason. */
-  const openedAt = useRef(0);
 
   const load = useCallback(async () => {
     try {
-      const [d, r] = await Promise.all([getDraftDetail(draftId), getGuardrailRules()]);
+      const [d, r, st] = await Promise.all([
+        getDraftDetail(draftId),
+        getGuardrailRules(),
+        getSettings(),
+      ]);
       setDetail(d);
       setRules(r);
+      setSettings(st);
       setError(null);
     } catch (e) {
       setError(asConsoleError(e));
@@ -87,10 +78,6 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
     const timer = setTimeout(() => void load(), 0);
     return () => clearTimeout(timer);
   }, [load]);
-
-  useEffect(() => {
-    openedAt.current = Date.now();
-  }, [draftId]);
 
   if (error && error.kind === 'not_found') {
     return (
@@ -136,55 +123,6 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
   const offers = gate?.options ?? [];
   const history = [...draft.versions].sort((a, b) => b.version - a.version);
 
-  async function decide(option: InterruptOption) {
-    if (!version) return;
-    setBusy(option);
-    /** Cleared at the top of every attempt. It was only ever set, so one failed decision left the
-     *  red line on screen through every later success and reload. `DraftCard` already did this. */
-    setWriteError(null);
-    try {
-      const idempotencyKey = `review:${draft.id}:${version.id}:${option}`;
-      const secondsOpen = elapsedSeconds(openedAt.current);
-      if (option === 'approve') {
-        await submitReview(draft.id, version.id, { kind: 'approve' }, { idempotencyKey, secondsOpen });
-      } else if (option === 'reject') {
-        await submitReview(
-          draft.id,
-          version.id,
-          { kind: 'reject', reasonCode: 'claim_unsupported', note: null },
-          { idempotencyKey, secondsOpen },
-        );
-      } else if (option === 'escalate') {
-        await submitReview(
-          draft.id,
-          version.id,
-          { kind: 'escalate', tier: 'stakeholder', detail: 'Sent to the owner from the detail view.' },
-          { idempotencyKey, secondsOpen },
-        );
-      } else {
-        setBusy(null);
-        return;
-      }
-      await load();
-    } catch (e) {
-      /**
-       * A FAILED WRITE MUST NOT DESTROY THE SCREEN, WHICH IS WHAT IT USED TO DO.
-       *
-       * This wrote into the same `error` state the loader uses, and that state gates the whole
-       * render — so a rejected approve replaced the post, the verdict, the version history and the
-       * trace with a single retry panel. The operator lost the thing they were deciding about at
-       * exactly the moment they needed to look at it again.
-       *
-       * A read failing has nothing to show, so it earns the whole screen. A write failing has the
-       * entire screen still valid behind it, so it earns a line. `DraftCard` already drew this
-       * distinction with its own inline `.card-err`; this page did not.
-       */
-      setWriteError(asConsoleError(e));
-    } finally {
-      setBusy(null);
-    }
-  }
-
   return (
     <>
       <p className="crumb">
@@ -216,30 +154,14 @@ export default function DraftDetailPage({ params }: { params: Promise<{ id: stri
           <Verdict draft={draft} events={events} rules={rules} threshold={detail.threshold} />
         </div>
 
-        {writeError && (
-          <p className="card-err" role="alert">
-            {errorCopy(writeError)} <span className="mono">({writeError.kind})</span>
-          </p>
-        )}
-
-        {offers.length > 0 && (
-          <footer className="card-act">
-            {offers.map((option) => {
-              const label = ACTION_LABEL[option];
-              if (!label) return null;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  className={`btn${option === 'approve' ? ' btn-primary' : ''}`}
-                  disabled={busy !== null}
-                  onClick={() => decide(option)}
-                >
-                  {busy === option ? '…' : label}
-                </button>
-              );
-            })}
-          </footer>
+        {version && offers.length > 0 && (
+          <DecisionBar
+            draft={draft}
+            version={version}
+            options={offers}
+            reasons={settings?.rejection_reason_set ?? []}
+            onDecided={() => void load()}
+          />
         )}
       </article>
 

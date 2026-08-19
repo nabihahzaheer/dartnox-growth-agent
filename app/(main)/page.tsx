@@ -220,6 +220,7 @@ export default function ConsolePage() {
                 steps={steps.get(c.run.id) ?? []}
                 rules={rules}
                 threshold={threshold}
+                reasons={settings.rejection_reason_set}
                 onDecided={() => void load()}
               />
             ))}

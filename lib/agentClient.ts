@@ -71,7 +71,6 @@ import type {
   GuardrailEventId,
   GuardrailRule,
   GuardrailRuleId,
-  MetricDescriptor,
   Pillar,
   QueueItem,
   ReflectionRule,
@@ -616,8 +615,29 @@ export type Batch = {
  */
 export async function getBatch(): Promise<Batch> {
   return read(LATENCY_MS.list, () => {
+    /**
+     * A BATCH IS IDENTIFIED BY HAVING CHILDREN, NOT BY LACKING A PARENT.
+     *
+     * This filtered on `!r.parent_run_id` and took the most recent — and a redraft is parentless
+     * too, because `reject()` queues it directly with `type: 'draft'` and
+     * `trigger: 'schedule.weekly_draft'`, started *now*. So the first rejection made that one-run
+     * redraft the newest match, and the console replaced Wednesday's eight-child batch with it:
+     * "Finished next week's 0 posts", parent `RUN-R0141`, every card gone. Rejecting anything from
+     * the console destroyed the console.
+     *
+     * Found by clicking, not by reading — it needs a write to exist before it can be wrong, so no
+     * amount of staring at the cold fixtures produces it. `lib/week.ts`'s `describeRun` already had
+     * the correct test and this function did not, which is the tell: one file knew, the other
+     * guessed, and nothing made them agree.
+     */
     const parent = [...world.runs]
-      .filter((r) => r.type === 'draft' && r.trigger === 'schedule.weekly_draft' && !r.parent_run_id)
+      .filter(
+        (r) =>
+          r.type === 'draft' &&
+          r.trigger === 'schedule.weekly_draft' &&
+          !r.parent_run_id &&
+          world.runs.some((child) => child.parent_run_id === r.id),
+      )
       .sort((a, b) => b.started_at - a.started_at)[0];
 
     if (!parent) fail({ kind: 'not_found' });

@@ -934,6 +934,34 @@ body {
   display: grid; place-items: center; }
 .step-foldrow .trace-link { margin-left: auto; }
 
+/* ---- decision dialogs (D-040: the browser's own <dialog>) ----
+   No positioning, no focus trap, no inert-background rules and no z-index here — `showModal()`
+   gives all four correctly, which is the whole reason D-025's refusal of a component library is
+   affordable. What is left is what a dialog actually needs styling for: a box and its backdrop. */
+.dlg { border: 1px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); padding: 20px 22px; width: min(92vw, 460px);
+  box-shadow: 0 12px 40px rgb(21 26 30 / 18%); }
+.dlg-wide { width: min(94vw, 620px); }
+.dlg::backdrop { background: rgb(21 26 30 / 32%); }
+.dlg h2 { margin: 0; }
+.dlg-sub { margin: 5px 0 14px; }
+.dlg-reasons { border: 0; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column;
+  gap: 4px; }
+.dlg-reason { display: flex; align-items: center; gap: 9px; padding: 7px 10px; font-size: 13.5px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+.dlg-reason:hover { border-color: var(--border-strong); }
+.dlg-reason.is-picked { border-color: var(--accent); background: var(--accent-soft);
+  color: var(--accent-text); font-weight: 600; }
+.dlg-note { margin-top: 5px; resize: vertical; font-family: inherit; }
+.dlg-editor { margin-top: 4px; resize: vertical; font-family: inherit; font-size: 14px;
+  line-height: 1.6; }
+.dlg-act { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.tag-btn { appearance: none; font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 99px;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-muted);
+  cursor: pointer; }
+.tag-btn.is-on { border-color: var(--go); background: var(--go-soft); color: var(--go);
+  font-weight: 600; }
+
 /* ---- the live run: in-flight step, ending, halt ---- */
 .live-working { display: flex; align-items: center; gap: 8px; margin: 2px 0 0;
   font-size: 12.5px; font-weight: 550; color: var(--accent-text); }
