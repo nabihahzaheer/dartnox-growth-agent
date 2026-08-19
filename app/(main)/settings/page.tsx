@@ -670,8 +670,20 @@ function RuleSection({
 
   return (
     <section className="section">
-      <h2 className="t-section">{title}</h2>
-      <div className="panel" style={{ padding: '4px 18px' }}>
+      {/**
+       * Behind a disclosure, because these are onboarding decisions rather than daily controls.
+       *
+       * Eleven escalation triggers and four approval rules were presented as fifteen equal switches
+       * beside the tone field, which implies a marketing lead tunes "repeat rule failure" week to
+       * week. They do not — these are set when the client is onboarded and then left alone, and the
+       * screen should say so by how it presents them rather than by burying them.
+       */}
+      <details className="adv adv-flush">
+        <summary>
+          {title} <span className="adv-n">{rows.length}</span>
+        </summary>
+        <p className="adv-note">Set at onboarding. Changing one changes when the agent stops for a person.</p>
+        <div className="panel" style={{ padding: '4px 18px' }}>
         {rows.map((row) => (
           <div key={row.trigger} className="rule-row">
             <div className="rule-body">
@@ -689,7 +701,8 @@ function RuleSection({
             />
           </div>
         ))}
-      </div>
+        </div>
+      </details>
     </section>
   );
 }
@@ -697,6 +710,33 @@ function RuleSection({
 /* ================================================================================================
  * GUARDRAIL RULES — grouped by layer, mechanism shown honestly
  * ==============================================================================================*/
+
+/**
+ * WHICH CHECKS A MARKETING LEAD ACTUALLY HAS AN OPINION ABOUT.
+ *
+ * Nabihah's question: "is every setting actually a setting? does the marketer be needing to change
+ * each of those?" For most of this list, no. Thirteen guardrails were presented as thirteen equal
+ * dials, and the honest split is not the L1–L4 pipeline position but whether the decision is about
+ * *content* or about *plumbing*.
+ *
+ * A marketing lead has a view on banned phrases, competitor mentions, personal details and
+ * near-duplicates — those are brand judgements. Nobody in that seat is tuning an output-schema
+ * check, a content-hash comparison, a posting-window guard or a rate limiter; those are the
+ * system keeping its own promises, and showing them as switches invites a change nobody should
+ * make. They stay visible, because hiding what the agent checks would be worse, but they sit under
+ * a disclosure and read as information rather than as controls.
+ */
+const CONTENT_KINDS = new Set([
+  'banned_claim',
+  'regulated_claim',
+  'competitor_mention',
+  'pii',
+  'claim_entailment',
+  'similarity',
+  'prompt_injection',
+  'domain_allowlist',
+  'outbound_link_allowlist',
+]);
 
 function GuardrailSection({
   rules,
@@ -722,9 +762,31 @@ function GuardrailSection({
     }
   }
 
+  const content = rules.filter((r) => CONTENT_KINDS.has(r.kind));
+  const system = rules.filter((r) => !CONTENT_KINDS.has(r.kind));
+
+  const row = (rule: GuardrailRule) => (
+    <div key={rule.id} className="rule-row">
+      <div className="rule-body">
+        <p className="rule-title">{rule.display_name}</p>
+        <p className="rule-sub">
+          {rule.description}
+          {!rule.is_enabled && rule.disabled_at && ` Switched off ${formatDate(rule.disabled_at)}.`}
+        </p>
+      </div>
+      <Toggle
+        on={rule.is_enabled}
+        locked={rule.is_fixed}
+        busy={busy === rule.id}
+        label={rule.display_name}
+        onToggle={() => void flip(rule)}
+      />
+    </div>
+  );
+
   return (
     <section className="section">
-      <h2 className="t-section">Guardrail rules</h2>
+      <h2 className="t-section">What the agent checks</h2>
       <div className="panel" style={{ padding: '4px 18px 8px' }}>
         {/**
          * ONE FLAT LIST, NOT FOUR LAYERS.
@@ -739,27 +801,22 @@ function GuardrailSection({
          * Ordered by what a check protects rather than by pipeline position: content rules first,
          * because those are the ones an operator has an opinion about.
          */}
-        {[...rules]
-          .sort((a, b) => Number(a.is_fixed) - Number(b.is_fixed))
-          .map((rule) => (
-            <div key={rule.id} className="rule-row">
-              <div className="rule-body">
-                <p className="rule-title">{rule.display_name}</p>
-                <p className="rule-sub">
-                  {rule.description}
-                  {!rule.is_enabled && rule.disabled_at && ` Switched off ${formatDate(rule.disabled_at)}.`}
-                </p>
-              </div>
-              <Toggle
-                on={rule.is_enabled}
-                locked={rule.is_fixed}
-                busy={busy === rule.id}
-                label={rule.display_name}
-                onToggle={() => void flip(rule)}
-              />
-            </div>
-          ))}
+        {[...content].sort((a, b) => Number(a.is_fixed) - Number(b.is_fixed)).map(row)}
       </div>
+
+      {/* Visible, but not presented as a dial. See CONTENT_KINDS above. */}
+      <details className="adv">
+        <summary>
+          System checks <span className="adv-n">{system.length}</span>
+        </summary>
+        <p className="adv-note">
+          These keep the agent honest rather than shaping what it writes. They are set once and
+          rarely changed.
+        </p>
+        <div className="panel" style={{ padding: '4px 18px 8px' }}>
+          {system.map(row)}
+        </div>
+      </details>
     </section>
   );
 }

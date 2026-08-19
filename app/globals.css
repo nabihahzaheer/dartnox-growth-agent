@@ -1404,3 +1404,17 @@ a.wk-entry:hover { border-left-color: var(--accent); box-shadow: var(--shadow); 
 .tband { font-size: 11.5px; color: var(--text-faint); }
 .tn { font-size: 11px; color: var(--text-faint); }
 .tv.nd { font-size: 12px; color: var(--text-faint); font-weight: 400; }
+
+/* ---- settings: things you see but rarely change ---- */
+.adv { margin-top: 14px; }
+.adv-flush { margin-top: 0; }
+.adv > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--text-muted); padding: 8px 0; }
+.adv > summary::-webkit-details-marker { display: none; }
+.adv > summary::before { content: '›'; font-size: 15px; display: inline-block; transition: transform .15s;
+  color: var(--text-faint); }
+.adv[open] > summary::before { transform: rotate(90deg); }
+.adv > summary:hover { color: var(--text); }
+.adv-n { background: var(--surface-sunk); color: var(--text-faint); border-radius: 99px;
+  padding: 0 7px; font-size: 11px; font-weight: 600; }
+.adv-note { margin: 0 0 10px; font-size: 12.5px; color: var(--text-faint); max-width: 62ch; }
