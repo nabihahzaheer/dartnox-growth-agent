@@ -3,59 +3,105 @@
 /**
  * THE ONE CHILD THAT IS ACTUALLY MID-FLIGHT.
  *
- * The console's docblock claimed "the only thing that streams is the child that has not finished"
- * and nothing streamed: the page fetched every step of every child in one `Promise.all` and rendered
- * a static list under a pulsing "drafting" pill. `streamRun` existed in the seam, fully written, and
- * was called by v1 and by nothing in the rebuild.
+ * ---------------------------------------------------------------------------------------------
+ * WHAT "ALIVE" HAD TO MEAN, AFTER THE FIRST ATTEMPT DID NOT
  *
- * So the highest-weighted screen in the submission — the one the brief's own tiebreaker is about
- * ("if you are choosing between polishing a fifth screen or making the agent console feel genuinely
- * alive, choose alive") — was asserting liveness in a comment and not delivering it. This component
- * is that claim made true.
+ * The first version streamed correctly and still did not feel alive, and the reason is worth
+ * stating: the only motion was *arrival*. A finished step appeared every couple of seconds and
+ * nothing happened in between, so the screen read as a list being populated on a timer rather than
+ * as work being done. Nabihah's words: "that doesnt feel alive enough".
+ *
+ * Three changes, none of which invent data:
+ *
+ *   A step that is running is OPEN and shows its own sub-lines appearing one at a time, each derived
+ *   from a real field on the step — the sources it read, the rules it applied, the model it asked.
+ *   Nothing here is written prose; `subLinesFor` composes them from the record.
+ *
+ *   A running step carries a spinner and a clock counting its real `latency_ms`. Between arrivals
+ *   there is now something moving that means something.
+ *
+ *   A finished step COLLAPSES to one line — tick, label, duration — so the open step is the only
+ *   detailed thing on screen and the eye goes to the work in progress rather than to the history.
  *
  * ---------------------------------------------------------------------------------------------
- * WHY A STEP ARRIVES WHEN IT STARTS
+ * AND THE RUN NOW LANDS SOMEWHERE
  *
- * `streamRun` emits `step` when a step begins and `settled` when it ends, which is what lets the
- * agent be visibly *doing* something rather than producing finished facts at intervals. The
- * reasoning is on `streamRun` itself; what matters here is rendering the difference, so the newest
- * step reads as in progress until its own `playback_ms` has elapsed.
- *
- * `openRun` supplies `fromSeq` rather than this component knowing it. How far a run has already got
- * is a fact about the run (D-002 forbids a component importing the fixture that holds it), and the
- * seam already computes it for exactly this purpose.
+ * The stream used to end on "Waiting for a decision" while the draft it produced stayed in
+ * `drafting`, so the decision the run announced existed nowhere. On the terminal event this calls
+ * `landRunAtInterrupt`, which moves the draft into `awaiting_approval` and opens its Approval row —
+ * so the card hands off into a real decision at the top of the queue. See `landRun` in
+ * `lib/world.ts`.
  */
 
 import { useEffect, useState } from 'react';
-import { haltRun, openRun, streamRun, type StreamEndReason } from '@/lib/agentClient';
+import { haltRun, landRunAtInterrupt, openRun, streamRun, type StreamEndReason } from '@/lib/agentClient';
 import type { GuardrailEvent, GuardrailRule, RunId, RunStep, RunStepId } from '@/lib/types';
-import { StepTimeline } from './StepTimeline';
+import { ChannelMark } from '@/components/ChannelMark';
 
 const END_LABEL: Record<StreamEndReason, string> = {
-  interrupt: 'Stopped for a decision',
-  parked: 'Parked',
-  quarantined: 'Quarantined',
+  interrupt: 'Ready for your decision',
+  parked: 'Parked — it will retry on its own',
+  quarantined: 'Quarantined before drafting',
   completed: 'Finished',
-  halted: 'Halted',
+  halted: 'Stopped by you',
 };
+
+/**
+ * The lines a running step shows while it works, composed from what the record actually holds.
+ *
+ * This is the compose-from-values rule applied to motion: it would have been far easier to write
+ * three plausible sentences per step type, and they would have been prose that could drift from the
+ * step beside them. Every line below names a number or a label the step is carrying.
+ */
+function subLinesFor(
+  step: RunStep,
+  events: GuardrailEvent[],
+  rules: GuardrailRule[],
+): string[] {
+  const lines: string[] = [];
+
+  if (step.tool_name) lines.push(`calling ${step.tool_name.replace(/_/g, ' ')}`);
+  if (step.sources.length > 0)
+    lines.push(`read ${step.sources.length} source${step.sources.length === 1 ? '' : 's'}`);
+  for (const input of step.applied_inputs.slice(0, 3)) lines.push(input.label.toLowerCase());
+  if (step.model) lines.push(`asking ${step.model}`);
+  if (step.tokens_in > 0) lines.push(`${step.tokens_in.toLocaleString()} tokens in`);
+
+  /** A guardrail step carries none of the above — no model, no tool, no inputs — so without this it
+   *  was an open step with nothing under it. What it does carry is the rule it ran, which is the
+   *  honest description of the work: the check's own name and how it decides. */
+  const event = events.find((e) => e.id === step.guardrail_event_id);
+  const rule = event?.rule_id ? rules.find((r) => r.id === event.rule_id) : undefined;
+  if (rule) {
+    lines.push(`checking: ${rule.display_name.toLowerCase()}`);
+    lines.push(`by ${rule.mechanism}`);
+  }
+
+  return lines;
+}
 
 export function LiveRun({
   runId,
+  channel,
+  angle,
   events,
   rules,
   onEnded,
 }: {
   runId: RunId;
+  channel: 'linkedin' | 'x';
+  angle: string;
   events: GuardrailEvent[];
   rules: GuardrailRule[];
-  /** The batch's counts change when a run lands, so the page refetches — the fold rule from D-026's
-   *  amendment: in-flight steps live here, the world updates once, at the terminal transition. */
   onEnded: () => void;
 }) {
   const [steps, setSteps] = useState<RunStep[]>([]);
   const [settled, setSettled] = useState<Set<RunStepId>>(new Set());
   const [ended, setEnded] = useState<StreamEndReason | null>(null);
   const [halting, setHalting] = useState(false);
+  /** How many sub-lines of the running step are visible, and how long it has been running. */
+  const [revealed, setRevealed] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     let stop: (() => void) | undefined;
@@ -65,12 +111,26 @@ export function LiveRun({
       if (cancelled) return;
       const handle = streamRun(runId, attachment.fromSeq, (event) => {
         if (event.type === 'history') setSteps(event.steps);
-        else if (event.type === 'step') setSteps((prev) => [...prev, event.step]);
-        else if (event.type === 'settled')
-          setSettled((prev) => new Set(prev).add(event.id));
+        else if (event.type === 'step') {
+          setSteps((prev) => [...prev, event.step]);
+          setRevealed(0);
+          setElapsed(0);
+        } else if (event.type === 'settled') setSettled((prev) => new Set(prev).add(event.id));
         else {
           setEnded(event.reason);
-          onEnded();
+          /** The one write the console makes on the agent's behalf rather than the operator's: the
+           *  run reached its gate, so the world records that it is now waiting on a person. */
+          /**
+           * Land immediately, refresh a beat later.
+           *
+           * The write has to happen at once or the world is briefly wrong. The *refresh* is delayed
+           * because refreshing unmounts this card — the run is no longer `running`, so it drops out
+           * of the drafting filter — and without the pause the run simply vanished at the moment it
+           * finished. The operator saw a card disappear rather than a run hand its work over.
+           */
+          void landRunAtInterrupt(runId).then(() => {
+            window.setTimeout(onEnded, 2600);
+          });
         }
       });
       stop = handle.stop;
@@ -80,15 +140,24 @@ export function LiveRun({
       cancelled = true;
       stop?.();
     };
-    // `onEnded` is intentionally not a dependency: it is a fresh closure on every render of the
-    // page, and depending on it would tear down and restart the stream on each one.
+    // `onEnded` is a fresh closure each render; depending on it would restart the stream every time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 
-  /** The newest step is in progress until its `settled` event arrives. This is the only thing on the
-   *  screen that says the agent is working *now* rather than having worked. */
   const newest = steps.at(-1);
   const working = newest !== undefined && !settled.has(newest.id) && ended === null;
+  const subLines = newest ? subLinesFor(newest, events, rules) : [];
+
+  /** Reveal one sub-line at a time and tick the clock, only while a step is actually open. */
+  useEffect(() => {
+    if (!working) return;
+    const tick = setInterval(() => setElapsed((e) => e + 0.1), 100);
+    const reveal = setInterval(() => setRevealed((r) => Math.min(r + 1, subLines.length)), 700);
+    return () => {
+      clearInterval(tick);
+      clearInterval(reveal);
+    };
+  }, [working, newest?.id, subLines.length]);
 
   async function halt() {
     setHalting(true);
@@ -100,31 +169,88 @@ export function LiveRun({
     }
   }
 
+  const done = steps.filter((s) => settled.has(s.id) || s.id !== newest?.id);
+
   return (
-    <>
-      <StepTimeline steps={steps} events={events} rules={rules} />
+    <article className="card card-live live">
+      <header className="card-head">
+        <ChannelMark channel={channel} />
+        <span>{angle}</span>
+        <span className="card-state">
+          {ended ? (
+            <span className="pill pill-attend">{END_LABEL[ended]}</span>
+          ) : (
+            <span className="pill pill-live">
+              <i className="pulse" aria-hidden /> drafting
+            </span>
+          )}
+        </span>
+      </header>
 
-      {working && (
-        <p className="live-working" aria-live="polite">
-          <i className="pulse" aria-hidden />
-          {newest.label}
-        </p>
-      )}
+      <div className="card-body">
+        <ol className="lv">
+          {/* Finished steps, collapsed. One line each so the open step is the only detailed thing. */}
+          {done.map((s) => (
+            <li key={s.id} className="lv-row">
+              <span className="lv-node lv-ok" aria-hidden>✓</span>
+              <span className="lv-label">{s.label}</span>
+              <span className="sr-only">finished</span>
+              <span className="lv-dur">{(s.latency_ms / 1000).toFixed(1)}s</span>
+            </li>
+          ))}
 
-      {ended && <p className="live-ended">{END_LABEL[ended]}</p>}
+          {/* The step in progress, open, with its own lines arriving. */}
+          {working && newest && (
+            <li className="lv-row lv-open">
+              <span className="lv-node lv-now" aria-hidden>
+                <i className="lv-spin" />
+              </span>
+              <div className="lv-body">
+                <p className="lv-label lv-strong">{newest.label}</p>
+                <ul className="lv-sub">
+                  {subLines.slice(0, revealed).map((line) => (
+                    <li key={line}>
+                      <span className="lv-tick" aria-hidden>✓</span>
+                      {line}
+                    </li>
+                  ))}
+                  {revealed < subLines.length && (
+                    <li className="lv-pending">
+                      <span className="lv-tick lv-tick-run" aria-hidden>◍</span>
+                      working…
+                    </li>
+                  )}
+                </ul>
+              </div>
+              <span className="lv-dur lv-live-dur">{elapsed.toFixed(1)}s</span>
+            </li>
+          )}
 
-      {/**
-       * C6's operator halt, which had no surface in the rebuild at all.
-       *
-       * `haltRun` is the one producer of `abandoned` a person can reach, and the architecture named
-       * that state before anything could create one. It sits here rather than on every card because
-       * a run you can stop is by definition one that has not finished.
-       */}
+          {/* Where it ends up, so the run reads as going somewhere. */}
+          {ended && (
+            <li className="lv-row">
+              <span className="lv-node lv-end" aria-hidden>→</span>
+              <span className="lv-label lv-strong">{END_LABEL[ended]}</span>
+            </li>
+          )}
+        </ol>
+
+        {ended === 'interrupt' && (
+          <p className="lv-handoff" aria-live="polite">
+            This draft has moved to <b>Waiting on you</b> below.
+          </p>
+        )}
+      </div>
+
       {!ended && (
-        <button type="button" className="btn btn-sm live-halt" disabled={halting} onClick={() => void halt()}>
-          {halting ? '…' : 'Stop this run'}
-        </button>
+        <footer className="card-act">
+          {/* C6's operator halt — the one producer of `abandoned` a person can reach, and the
+              architecture named that state before anything could create one. */}
+          <button type="button" className="btn btn-sm" disabled={halting} onClick={() => void halt()}>
+            {halting ? '…' : 'Stop this run'}
+          </button>
+        </footer>
       )}
-    </>
+    </article>
   );
 }

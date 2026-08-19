@@ -1202,3 +1202,112 @@ a.wk-entry:hover { background: var(--accent-soft); }
 
 /* ---- settings: when a change takes effect (A-16) ---- */
 .timing { margin: 5px 0 0; font-size: 11px; color: var(--text-faint); }
+
+/* ================================================================================================
+ * CONSOLE, REBUILT — the live run is no longer the last thing on the page
+ * ==============================================================================================*/
+
+/**
+ * Two layouts behind one toggle. `split` runs the live column beside the work and sticks it, which
+ * is right while a batch is landing; `stacked` gives the posts the full column, which is right once
+ * drafting is done. Both put the live run first in the markup, so it is also first for a screen
+ * reader and on a narrow viewport regardless of which is chosen.
+ */
+.console-grid { display: grid; gap: 16px; align-items: start; }
+.console-split { grid-template-columns: 1fr 380px; }
+.console-split .console-live { order: 2; position: sticky; top: 20px; }
+.console-split .console-work { order: 1; min-width: 0; }
+.console-stacked { grid-template-columns: 1fr; }
+@media (max-width: 1020px) {
+  .console-split { grid-template-columns: 1fr; }
+  .console-split .console-live { order: 0; position: static; }
+  .console-split .console-work { order: 1; }
+}
+
+.lay-toggle { margin-left: auto; display: inline-flex; border: 1px solid var(--border-strong);
+  border-radius: 99px; overflow: hidden; background: var(--surface); }
+.lay-toggle button { appearance: none; border: 0; background: none; font: inherit; font-size: 12px;
+  font-weight: 600; padding: 4px 12px; color: var(--text-faint); cursor: pointer; }
+.lay-toggle button.is-on { background: var(--accent-soft); color: var(--accent-text); }
+.lay-toggle button + button { border-left: 1px solid var(--border); }
+
+/* ---- the live run ---- */
+.card-live.live { border-color: #bbd0ec; box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
+.lv { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.lv-row { display: flex; align-items: flex-start; gap: 10px; padding: 4px 0; font-size: 13px; }
+.lv-node { width: 18px; height: 18px; border-radius: 50%; flex: none; display: grid;
+  place-items: center; font-size: 9px; font-weight: 700; margin-top: 1px; }
+.lv-ok { background: var(--go-soft); color: var(--go); }
+.lv-now { background: var(--accent-soft); color: var(--accent); }
+.lv-end { background: var(--attend-soft); color: var(--attend); }
+.lv-label { color: var(--text-muted); }
+.lv-strong { color: var(--text); font-weight: 600; margin: 0; }
+.lv-body { flex: 1; min-width: 0; }
+.lv-dur { margin-left: auto; font-size: 11.5px; color: var(--text-faint);
+  font-variant-numeric: tabular-nums; flex: none; }
+.lv-live-dur { color: var(--accent-text); font-weight: 600; }
+.lv-open { background: var(--accent-soft); border-radius: var(--radius-sm); padding: 7px 9px;
+  margin: 3px -9px; }
+
+/* The sub-lines a running step reveals one at a time. Monospace because every one of them is a
+   value read off the record — a count, a model name, a tool name — not a sentence. */
+.lv-sub { list-style: none; margin: 5px 0 0; padding: 0; display: flex; flex-direction: column;
+  gap: 3px; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); }
+.lv-sub li { display: flex; align-items: center; gap: 7px; animation: lv-in 260ms ease-out; }
+.lv-tick { color: var(--go); font-size: 10px; flex: none; }
+.lv-tick-run { color: var(--accent); }
+.lv-pending { color: var(--text-faint); }
+@keyframes lv-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+.lv-spin { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--accent);
+  border-top-color: transparent; animation: lv-spin 0.75s linear infinite; display: block; }
+@keyframes lv-spin { to { transform: rotate(360deg); } }
+
+.lv-handoff { margin: 10px 0 0; font-size: 12.5px; color: var(--accent-text);
+  background: var(--accent-soft); border-radius: var(--radius-sm); padding: 8px 11px; }
+.lv-handoff b { font-weight: 650; }
+
+/* ---- a decided post: no section heading, the treatment carries it ---- */
+.done-stack { margin-top: 10px; }
+.card-done { box-shadow: none; background: var(--surface-sunk); }
+.card-done.is-open { background: var(--surface); box-shadow: var(--shadow); }
+.done-head { appearance: none; border: 0; background: none; font: inherit; width: 100%;
+  display: flex; align-items: center; gap: 9px; padding: 9px 14px; cursor: pointer;
+  text-align: left; font-size: 12.5px; color: var(--text-muted); }
+.done-head:hover { color: var(--text); }
+.done-angle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.done-edited { font-size: 11px; color: var(--text-faint); }
+.done-head .pill { margin-left: auto; }
+.done-car { font-size: 8px; color: var(--text-faint); transition: transform 0.16s; }
+.done-car.is-open { transform: rotate(90deg); }
+.done-body { border-top: 1px solid var(--border); padding-top: 13px; }
+
+/* ---- channel marks ---- */
+.ch-pair { display: inline-flex; align-items: center; gap: 7px; }
+
+/* ---- navigation icons ---- */
+.nav-ico { width: 17px; height: 17px; flex: none; opacity: 0.9; }
+.shell-nav a.is-here .nav-ico { opacity: 1; }
+
+/* ---- a decision landing (D-018 feedback: the click had no confirmation) ---- */
+.decided-msg { margin: 0; font-size: 13px; font-weight: 640; }
+.decided-approved { background: var(--go-soft); }
+.decided-approved .decided-msg { color: var(--go); }
+.decided-sent-back { background: var(--attend-soft); }
+.decided-sent-back .decided-msg { color: var(--attend); }
+/* The card settles rather than snapping. Short, and information-carrying: the tint says which way
+   the decision went before the card leaves. */
+.card:has(.decided-approved), .card:has(.decided-sent-back) { animation: card-settle 700ms ease-out forwards; }
+@keyframes card-settle {
+  0% { transform: none; opacity: 1; }
+  55% { transform: scale(0.995); opacity: 1; }
+  100% { transform: scale(0.985) translateY(-3px); opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card:has(.decided-approved), .card:has(.decided-sent-back) { animation: none; opacity: 0.6; }
+}
+
+/* A card arriving in the queue — used by the handoff from the live run. */
+.stack > * { animation: card-in 300ms ease-out; }
+@keyframes card-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .stack > * { animation: none; } }

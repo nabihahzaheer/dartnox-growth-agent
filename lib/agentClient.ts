@@ -44,6 +44,7 @@ import type { KeyedMetricDescriptor } from '@/lib/metrics';
 import {
   addBannedClaim,
   approve,
+  landRun,
   countBannedClaimMatches,
   escalate,
   labelEscalation,
@@ -521,6 +522,24 @@ export async function haltRun(id: RunId): Promise<Run> {
   run.end_reason = 'operator_halt';
   run.ended_at = NOW;
   return run;
+}
+
+/**
+ * Land a run that has reached its interrupt.
+ *
+ * Called by the console when the stream ends, which is the one moment the world should learn that a
+ * run stopped for a person — see `landRun` in `lib/world.ts` for what that costs in records and why
+ * the draft was previously invisible without it.
+ *
+ * Idempotent by construction rather than by a spent-key check: the transition only fires when the
+ * draft is still `drafting`, so a second call after the first has landed returns a patch that
+ * changes nothing.
+ */
+export async function landRunAtInterrupt(id: RunId): Promise<WorldPatch> {
+  await sleep(LATENCY_MS.config);
+  const patch = landRun(world, id, operatorContext(`land:${id}`));
+  applyPatch(patch);
+  return patch;
 }
 
 /**
@@ -1165,8 +1184,14 @@ export type StreamHandle = {
  *
  * One multiplier here rather than eighty edited fixture values: the ratio to `latency_ms` is a
  * property of the playback, not of any step, and it is the number the README quotes.
+ *
+ * RAISED 1.7 → 2.8. At 1.7 a ten-step run was over in about twenty seconds, and with each step
+ * arriving finished the screen read as a ticker rather than as work. Now a step stays open long
+ * enough for its own sub-lines to appear one at a time underneath it, which is where the sense of
+ * work actually comes from — see `LiveRun`. Slower is not automatically better; what changed is that
+ * there is now something to watch during a step rather than only between steps.
  */
-const PLAYBACK_SCALE = 1.7;
+const PLAYBACK_SCALE = 2.8;
 
 export function streamRun(
   runId: RunId,

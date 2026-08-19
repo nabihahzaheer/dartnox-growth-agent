@@ -41,6 +41,7 @@ import { asConsoleError } from '@/lib/errorCopy';
 import { EmptyState, LoadError, LoadingState, StaleWarning } from '@/components/ScreenState';
 import { DraftCard } from '@/components/console/DraftCard';
 import { LiveRun } from '@/components/console/LiveRun';
+import { DecidedCard } from '@/components/console/DecidedCard';
 import { BudgetNotice } from '@/components/BudgetNotice';
 
 type Loaded = {
@@ -57,6 +58,7 @@ const NEEDS_DECISION = new Set(['awaiting_approval', 'blocked_guardrail']);
 export default function ConsolePage() {
   const [state, setState] = useState<Loaded | null>(null);
   const [error, setError] = useState<ConsoleError | null>(null);
+  const [layout, setLayout] = useState<'split' | 'stacked'>('split');
 
   /**
    * Nothing here sets state before the first `await`. That is deliberate rather than incidental:
@@ -175,26 +177,47 @@ export default function ConsolePage() {
           ) : (
             <span className="pill pill-go">complete</span>
           )}
+
+          {/**
+           * TWO LAYOUTS, BECAUSE THEY SUIT DIFFERENT MOMENTS.
+           *
+           * Split puts the live run beside the queue, which is right while a batch is running and
+           * you want to watch it land. Stacked gives the posts the full column, which is right once
+           * drafting is done and the screen is only a review surface. Neither is correct all the
+           * time, so it is a control rather than a decision taken for the operator.
+           *
+           * The choice is component state and resets on reload. It is a view preference, not a
+           * fact about the world, so it does not belong in `agentClient` — putting it there would
+           * make the seam carry something a real backend would never store.
+           */}
+          <span className="lay-toggle" role="group" aria-label="Layout">
+            <button
+              type="button"
+              className={layout === 'split' ? 'is-on' : undefined}
+              aria-pressed={layout === 'split'}
+              onClick={() => setLayout('split')}
+            >
+              Split
+            </button>
+            <button
+              type="button"
+              className={layout === 'stacked' ? 'is-on' : undefined}
+              aria-pressed={layout === 'stacked'}
+              onClick={() => setLayout('stacked')}
+            >
+              Stacked
+            </button>
+          </span>
         </div>
 
         <p className="chips">
           <span className="chip mono">{batch.parent.id}</span>
-          <span className="chip mono">{batch.parent.trigger}</span>
           <span className="chip mono">
             slots <b>{batch.total}</b>
           </span>
           <span className="chip mono">
             settings <b>{settings.current_version_id}</b>
           </span>
-          {/**
-           * The spend chip that used to sit here is gone, deliberately: a console carrying a
-           * permanent budget strip spends its best pixels on a number that is fine almost always.
-           * `BudgetNotice` above speaks up at the alert and stop thresholds and is silent otherwise.
-           *
-           * Not "renders nothing anywhere", which is what this said and what `lib/budget.ts` still
-           * says of `under` — `BudgetLine` renders an "under cap" row on both Results and Settings,
-           * on purpose. The rule is about *this* screen.
-           */}
         </p>
 
         <div className="batch-prog">
@@ -207,103 +230,82 @@ export default function ConsolePage() {
         </div>
       </section>
 
-      {waiting.length > 0 && (
-        <section>
-          <h3 className="sec">
-            Waiting on you <span className="sec-n">{waiting.length}</span>
-          </h3>
-          <div className="stack">
-            {waiting.map((c) => (
-              <DraftCard
-                key={c.run.id}
-                child={c}
-                steps={steps.get(c.run.id) ?? []}
-                rules={rules}
-                threshold={threshold}
-                reasons={settings.rejection_reason_set}
-                onDecided={() => void load()}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Only when nothing is in flight either. It rendered "the next batch runs Wednesday" while a
-          child was visibly mid-flight in the section below and the batch pill read "running" — the
-          page telling the operator it was idle and showing it working, at once. */}
-      {waiting.length === 0 && drafting.length === 0 && (
-        <EmptyState
-          title="Nothing waiting on you."
-          detail="The next drafting batch runs Wednesday at 06:00."
-        />
-      )}
-      {waiting.length === 0 && drafting.length > 0 && (
-        <EmptyState
-          title="Nothing waiting on you yet."
-          detail="The agent is still drafting — anything that needs a decision will appear here."
-        />
-      )}
-
-      {drafting.length > 0 && (
-        <section>
-          <h3 className="sec">
-            Still drafting <span className="sec-n">{drafting.length}</span>
-          </h3>
-          <div className="stack">
-            {drafting.map((c) => (
-              <article key={c.run.id} className="card card-live">
-                <header className="card-head">
-                  <span
-                    className="ch-dot"
-                    style={{ background: `var(--ch-${c.draft?.channel ?? 'x'})` }}
-                    aria-hidden
-                  />
-                  <span>{c.slot?.angle ?? 'Untitled slot'}</span>
-                  <span className="card-state">
-                    <span className="pill pill-live">
-                      <i className="pulse" aria-hidden /> drafting
-                    </span>
-                  </span>
-                </header>
-                <div className="card-body">
-                  {/**
-                   * The one genuinely live region, and now actually live. It used to render the
-                   * same static `StepTimeline` as every settled card — see `LiveRun`'s docblock for
-                   * what that made the screen claim.
-                   */}
-                  <LiveRun
-                    runId={c.run.id}
-                    events={c.events}
-                    rules={rules}
-                    onEnded={() => void load()}
-                  />
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {settled.length > 0 && (
-        <section>
-          <h3 className="sec">
-            Already decided <span className="sec-n">{settled.length}</span>
-          </h3>
-          <ul className="settled">
-            {settled.map((c) => (
-              <li key={c.run.id}>
-                <span
-                  className="ch-dot"
-                  style={{ background: `var(--ch-${c.draft?.channel ?? 'x'})` }}
-                  aria-hidden
+      <div className={`console-grid console-${layout}`}>
+        {/* THE LIVE RUN COMES FIRST IN THE MARKUP in both layouts. It used to sit below the queue
+            and the decided list, so the only thing on the screen that moves was the last thing you
+            could reach. In `split` it is a sticky column; in `stacked` it is simply the first card. */}
+        {drafting.length > 0 && (
+          <section className="console-live">
+            <h2 className="sec">Drafting now</h2>
+            <div className="stack">
+              {drafting.map((c) => (
+                <LiveRun
+                  key={c.run.id}
+                  runId={c.run.id}
+                  channel={c.draft?.channel ?? 'x'}
+                  angle={c.slot?.angle ?? 'Next post'}
+                  events={c.events}
+                  rules={rules}
+                  onEnded={() => void load()}
                 />
-                <span className="settled-title">{c.slot?.angle}</span>
-                <span className="settled-state mono">{c.draft?.state}</span>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="console-work">
+          {waiting.length > 0 && (
+            <>
+              <h2 className="sec">
+                Waiting on you <span className="sec-n">{waiting.length}</span>
+              </h2>
+              <div className="stack">
+                {waiting.map((c) => (
+                  <DraftCard
+                    key={c.run.id}
+                    child={c}
+                    steps={steps.get(c.run.id) ?? []}
+                    rules={rules}
+                    threshold={threshold}
+                    reasons={settings.rejection_reason_set}
+                    onDecided={() => void load()}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {waiting.length === 0 && drafting.length === 0 && (
+            <EmptyState
+              title="Nothing waiting on you."
+              detail="The next drafting batch runs Wednesday at 06:00."
+            />
+          )}
+          {waiting.length === 0 && drafting.length > 0 && (
+            <EmptyState
+              title="Nothing waiting on you yet."
+              detail="The agent is still drafting. Anything that needs a decision will appear here."
+            />
+          )}
+
+          {/* No heading of its own. These are finished, so they sit at the foot of the same stack
+              and say so through their own treatment rather than through a section title. */}
+          {settled.length > 0 && (
+            <div className="stack done-stack">
+              {settled.map((c) =>
+                c.draft ? (
+                  <DecidedCard
+                    key={c.run.id}
+                    draft={c.draft}
+                    angle={c.slot?.angle ?? 'Untitled slot'}
+                  />
+                ) : null,
+              )}
+            </div>
+          )}
         </section>
-      )}
+      </div>
+
     </>
   );
 }
@@ -342,7 +344,7 @@ function AgentLine({
   blockedCount: number;
 }) {
   const said = batch.running
-    ? `Drafting next week now — ${batch.drafted} of ${batch.total} done so far.`
+    ? `Drafting next week now.`
     : waitingCount === 0
       ? `Finished next week's ${batch.total} posts. Nothing left for you to decide.`
       : `Finished next week's ${batch.total} posts. ${

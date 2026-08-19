@@ -69,7 +69,18 @@ const ACTION_LABEL: Partial<Record<InterruptOption, string>> = {
   /** Zendesk's distinction, and free provenance: the label records whether a human changed it. */
   approve_with_edits: 'Edit',
   reject: 'Send back',
-  escalate: 'Ask the owner',
+  /**
+   * `escalate` is deliberately absent, so no button renders for it.
+   *
+   * The gate still offers it — the interrupt's `options` are a record of what that gate permits, and
+   * rewriting the fixture to hide a control would make the trace lie about the architecture. What is
+   * removed is the *surface*: "Ask the owner" never said who the owner was, and a decision control
+   * whose consequence the operator cannot name is worse than one that is absent. The write path
+   * survives in `lib/world.ts` for when the escalation flow is designed properly.
+   *
+   * Rendering is driven by this map rather than by the gate, so an option with no label is simply
+   * not offered — which is why the blocked draft still correctly loses Approve.
+   */
 };
 
 /** The tags an operator can attach to their own edit. A closed set because `EditTag` is closed —
@@ -84,7 +95,7 @@ const TAG_OPTIONS: { tag: EditTag; label: string }[] = [
   { tag: 'length_cut', label: 'Cut for length' },
 ];
 
-type Mode = 'reject' | 'escalate' | 'edit';
+type Mode = 'reject' | 'edit';
 
 export function DecisionBar({
   draft,
@@ -104,6 +115,16 @@ export function DecisionBar({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode | null>(null);
+  /**
+   * What just happened to this card, held for long enough to be seen.
+   *
+   * A decision used to take effect instantly: the card was simply gone on the next render, with no
+   * confirmation that the click had landed. This holds the outcome on screen for a beat — the card
+   * tints and settles — before the parent refetches and moves it into the decided group. It is the
+   * one place in the console where an animation carries information rather than decoration, because
+   * the thing being confirmed is the highest-consequence write in the product.
+   */
+  const [landed, setLanded] = useState<'approved' | 'sent-back' | null>(null);
 
   /** Zero until mounted, then stamped in an effect — reading the clock during render is impure and
    *  ESLint is right to flag it. Feeds the "decided in under 15 seconds" rubber-stamp alarm, so it
@@ -113,12 +134,14 @@ export function DecisionBar({
     openedAt.current = Date.now();
   }, [draft.id]);
 
-  async function write(run: () => Promise<unknown>) {
+  async function write(run: () => Promise<unknown>, outcome: 'approved' | 'sent-back') {
     setError(null);
     try {
       await run();
       setMode(null);
-      onDecided();
+      setLanded(outcome);
+      /** Long enough to register, short enough not to feel like waiting. Matches `.decided-in`. */
+      window.setTimeout(onDecided, 750);
     } catch (e) {
       setError(errorCopy(asConsoleError(e)));
     } finally {
@@ -137,6 +160,7 @@ export function DecisionBar({
         idempotencyKey: keyFor('approve'),
         secondsOpen: secondsOpen(),
       }),
+      'approved',
     );
   }
 
@@ -147,16 +171,7 @@ export function DecisionBar({
         idempotencyKey: `${keyFor('reject')}:${reasonCode}`,
         secondsOpen: secondsOpen(),
       }),
-    );
-  }
-
-  function escalate(tier: 'operator' | 'stakeholder', detail: string) {
-    setBusy('escalate');
-    void write(() =>
-      submitReview(draft.id, version.id, { kind: 'escalate', tier, detail }, {
-        idempotencyKey: `${keyFor('escalate')}:${tier}`,
-        secondsOpen: secondsOpen(),
-      }),
+      'sent-back',
     );
   }
 
@@ -167,13 +182,19 @@ export function DecisionBar({
         idempotencyKey: `${keyFor('edit')}:${text.length}`,
         secondsOpen: secondsOpen(),
       }),
+      'approved',
     );
   }
 
   return (
     <>
-      <footer className="card-act">
-        {options.map((option) => {
+      <footer className={`card-act${landed ? ` decided-${landed}` : ''}`}>
+        {landed && (
+          <p className="decided-msg" role="status">
+            {landed === 'approved' ? '✓ Approved and scheduled' : '↩ Sent back for a redraft'}
+          </p>
+        )}
+        {!landed && options.map((option) => {
           const label = ACTION_LABEL[option];
           if (!label) return null;
           return (
@@ -185,7 +206,6 @@ export function DecisionBar({
               onClick={() => {
                 if (option === 'approve') approve();
                 else if (option === 'reject') setMode('reject');
-                else if (option === 'escalate') setMode('escalate');
                 else if (option === 'approve_with_edits') setMode('edit');
               }}
             >
@@ -208,9 +228,6 @@ export function DecisionBar({
           onCancel={() => setMode(null)}
           onConfirm={reject}
         />
-      )}
-      {mode === 'escalate' && (
-        <EscalateDialog busy={busy !== null} onCancel={() => setMode(null)} onConfirm={escalate} />
       )}
       {mode === 'edit' && (
         <EditDialog
@@ -304,79 +321,6 @@ function RejectDialog({
           onClick={() => code && onConfirm(code, note)}
         >
           {busy ? '…' : 'Send back'}
-        </button>
-      </div>
-    </dialog>
-  );
-}
-
-function EscalateDialog({
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: (tier: 'operator' | 'stakeholder', detail: string) => void;
-}) {
-  const ref = useModal(onCancel);
-  /** Both tiers, because the tier was hardcoded to `stakeholder` and the operator tier was
-   *  unreachable — and they are not the same act: the stakeholder tier starts N14's 72-hour
-   *  acknowledgement clock and the operator tier does not. */
-  const [tier, setTier] = useState<'operator' | 'stakeholder'>('stakeholder');
-  const [detail, setDetail] = useState('');
-
-  return (
-    <dialog ref={ref} className="dlg" aria-label="Escalate this draft">
-      <h2 className="t-section">Ask someone else</h2>
-      <p className="t-label dlg-sub">
-        The owner tier starts a 72-hour acknowledgement clock; the operator tier does not.
-      </p>
-
-      <fieldset className="dlg-reasons">
-        <legend className="sr-only">Who to ask</legend>
-        <label className={`dlg-reason${tier === 'stakeholder' ? ' is-picked' : ''}`}>
-          <input
-            type="radio"
-            name="tier"
-            checked={tier === 'stakeholder'}
-            onChange={() => setTier('stakeholder')}
-          />
-          The client owner
-        </label>
-        <label className={`dlg-reason${tier === 'operator' ? ' is-picked' : ''}`}>
-          <input
-            type="radio"
-            name="tier"
-            checked={tier === 'operator'}
-            onChange={() => setTier('operator')}
-          />
-          Another operator
-        </label>
-      </fieldset>
-
-      <label className="t-label" htmlFor="esc-detail">
-        What do they need to decide?
-      </label>
-      <textarea
-        id="esc-detail"
-        className="txt dlg-note"
-        rows={2}
-        value={detail}
-        onChange={(e) => setDetail(e.target.value)}
-      />
-
-      <div className="dlg-act">
-        <button type="button" className="btn" onClick={onCancel}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={busy || detail.trim().length === 0}
-          onClick={() => onConfirm(tier, detail.trim())}
-        >
-          {busy ? '…' : 'Send it up'}
         </button>
       </div>
     </dialog>

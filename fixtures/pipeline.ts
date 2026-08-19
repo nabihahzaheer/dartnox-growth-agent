@@ -2413,14 +2413,23 @@ export const runSteps: RunStep[] = [
 /**
  * WHERE THE LIVE RUN HAS ACTUALLY GOT TO.
  *
- * Steps 1–6 of RUN-0143 have happened; 7–10 have not. The console attaches mid-flight and streams
+ * Steps 1–2 of RUN-0143 have happened; 3–10 have not. The console attaches mid-flight and streams
  * the rest, which is the case §4.2 asks for and the reason the emitter cannot simply start at
  * step 1 and play forwards.
+ *
+ * MOVED 6 → 2. At 6 the run arrived with its whole interesting half already finished: sourcing,
+ * retrieval and drafting were all history, and the only steps left to watch were three guardrail
+ * checks and the stop. Those carry no model, no sources and no applied inputs, so the live card had
+ * nothing to show underneath them and the streaming read as a progress bar with labels.
+ *
+ * At 2 the drafting step itself streams, which is the one step that names a model, spends tokens and
+ * lists the rules and rejections it consumed — the things that make the sub-lines in `LiveRun` worth
+ * rendering. Nothing about the run changes; this only says how far along the operator arrives.
  *
  * Exported as data rather than hardcoded in the client so that the fixture, not the code, decides
  * where the story is up to.
  */
-export const LIVE_RUN_EMITTED_THROUGH_SEQ = 6;
+export const LIVE_RUN_EMITTED_THROUGH_SEQ = 2;
 
 /* ================================================================================================
  * GUARDRAIL EVENTS

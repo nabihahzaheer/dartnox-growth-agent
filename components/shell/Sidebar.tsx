@@ -22,15 +22,19 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getQueue, subscribeToWorld } from '@/lib/agentClient';
 import { BreakNextRead } from './BreakNextRead';
+import { NavIcon } from './NavIcon';
+import { ChannelMark } from '@/components/ChannelMark';
 
-type Dest = { href: string; label: string; glyph: string };
+type Dest = { href: string; label: string; icon: string };
 
+/** Renamed per Nabihah: "The week" said nothing about what it holds, and "Results" reads as an
+ *  outcome report rather than the instrument panel it is. */
 const DESTINATIONS: Dest[] = [
-  { href: '/', label: 'Console', glyph: '◉' },
-  { href: '/approvals', label: 'Approvals', glyph: '✓' },
-  { href: '/week', label: 'The week', glyph: '▤' },
-  { href: '/results', label: 'Results', glyph: '◔' },
-  { href: '/settings', label: 'Settings', glyph: '⚙' },
+  { href: '/', label: 'Console', icon: 'console' },
+  { href: '/approvals', label: 'Approvals', icon: 'approvals' },
+  { href: '/week', label: 'Content calendar', icon: 'calendar' },
+  { href: '/results', label: 'Metrics', icon: 'metrics' },
+  { href: '/settings', label: 'Settings', icon: 'settings' },
 ];
 
 export function Sidebar() {
@@ -82,9 +86,7 @@ export function Sidebar() {
           const active = d.href === '/' ? pathname === '/' : pathname.startsWith(d.href);
           return (
             <Link key={d.href} href={d.href} className={active ? 'is-here' : undefined}>
-              <span className="shell-glyph" aria-hidden>
-                {d.glyph}
-              </span>
+              <NavIcon name={d.icon} />
               {d.label}
               {d.href === '/approvals' && waiting > 0 && (
                 <span className="shell-badge">{waiting}</span>
@@ -96,11 +98,11 @@ export function Sidebar() {
 
       <p className="shell-group">Channels</p>
       <p className="shell-chan">
-        <span className="shell-dot" style={{ background: 'var(--ch-linkedin)' }} aria-hidden />
+        <ChannelMark channel="linkedin" size={15} />
         brightsill
       </p>
       <p className="shell-chan">
-        <span className="shell-dot" style={{ background: 'var(--ch-x)' }} aria-hidden />
+        <ChannelMark channel="x" size={15} />
         brightsill_nyc
       </p>
 
@@ -109,9 +111,6 @@ export function Sidebar() {
        *   reviewer must never have to guess whether a switch is a product feature (D-020). */}
       <BreakNextRead />
 
-      <p className="shell-foot">
-        <Link href="/v1/console">Version submitted 17 Aug →</Link>
-      </p>
     </aside>
   );
 }

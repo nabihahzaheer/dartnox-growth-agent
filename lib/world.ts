@@ -325,6 +325,70 @@ export function approve(
 }
 
 /* ================================================================================================
+ * LAND A RUN AT ITS INTERRUPT
+ *
+ * THE BUG THIS FIXES, WHICH WAS THE MOST SERIOUS ONE IN THE PROTOTYPE.
+ *
+ * The live run streams to a step called "Waiting for a decision" and stops. Its draft was left in
+ * `drafting`, which is not a state the queue renders — so the run announced that it was waiting for
+ * a person, and the thing it was waiting on appeared nowhere. Nabihah's words: "what does this mean,
+ * i dont see a decision anywhere."
+ *
+ * It is not a copy problem. A run reaching a `draft_approval` interrupt *is* the moment the draft
+ * enters review, and three records say so together: the draft moves to `awaiting_approval` and
+ * stamps `queued_at`, the run moves to `awaiting_human`, and an Approval row opens with
+ * `decided_at: null` — which §4.8 and `pendingApproval` both treat as the canonical test for
+ * "waiting". Without the third, `approve()` throws "No pending approval" and the draft could not be
+ * decided even if it were rendered.
+ *
+ * This is D-026's amendment-1 fold rule applied at the only point it applies: in-flight steps live
+ * in the stream, and the world updates once, at the terminal transition.
+ * ==============================================================================================*/
+
+export function landRun(world: FixtureSet, runId: RunId, ctx: DecisionContext): WorldPatch {
+  const run = world.runs.find((r) => r.id === runId);
+  if (!run) throw new Error(`No run ${runId}`);
+
+  const draft = run.target_draft_id
+    ? world.drafts.find((d) => d.id === run.target_draft_id)
+    : undefined;
+
+  /** Only a run that stopped at a *draft* gate lands a draft. A planning run's interrupt waits on
+   *  the client owner and produces no draft at all, so it moves the run and nothing else. */
+  const interrupt = world.runSteps.find((s) => s.run_id === runId && s.interrupt !== null)?.interrupt;
+  const landsADraft = interrupt?.gate === 'draft_approval' && draft?.state === 'drafting';
+
+  const patch: WorldPatch = {
+    runs: [{ ...run, state: 'awaiting_human' }],
+  };
+
+  if (landsADraft && draft) {
+    patch.drafts = [{ ...draft, state: 'awaiting_approval', queued_at: ctx.now }];
+    patch.approvals = [
+      {
+        id: `APR-${draft.id.replace('DRAFT-', '')}` as ApprovalId,
+        draft_version_id: draft.current_version_id,
+        decision: null,
+        reason_code: null,
+        reason_note: null,
+        /** The queue sorts on this, and queue-age p95 measures from it. The clock starts when the
+         *  run hit the interrupt, which is now — not when drafting began. */
+        queued_at: ctx.now,
+        decided_at: null,
+        seconds_open: null,
+        decided_by: null,
+        operator_id: ctx.operatorId,
+        superseded_by: null,
+        pillar_id: draft.pillar_id,
+        channel_at_decision: draft.channel,
+      },
+    ];
+  }
+
+  return patch;
+}
+
+/* ================================================================================================
  * REJECT
  *
  * §4.8: writes the Approval with its reason, moves the Draft to `rejected`, and moves the slot to

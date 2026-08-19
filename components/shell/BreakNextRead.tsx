@@ -79,11 +79,9 @@ export function BreakNextRead() {
       >
         {armed ? 'Armed — next read fails' : 'Break the next read'}
       </button>
-      <p className="demo-hint">
-        {armed
-          ? 'Open any screen to see its error state. It clears itself after one failure.'
-          : 'Not a product feature — it makes the recovery paths testable.'}
-      </p>
+      {armed && (
+        <p className="demo-hint">Open any screen to see its error state. It clears after one failure.</p>
+      )}
     </div>
   );
 }
