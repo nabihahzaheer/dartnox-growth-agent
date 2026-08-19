@@ -1228,7 +1228,7 @@ check('the default week is the one with work in it', buildWeek(fixtures, initial
 
 section('The budget gate');
 
-const { budgetPosture } = await import('../lib/budget.ts');
+const { budgetPosture, budgetStateAt } = await import('../lib/budget.ts');
 const posture = budgetPosture(fixtures);
 
 check('the shipped fixtures sit under the cap', posture.state === 'under',
@@ -1260,6 +1260,57 @@ if (capRange) {
   check('the cap can be dragged below current spend', capRange.min < posture.spent,
     `min ${capRange.min} vs spend ${posture.spent.toFixed(2)}`);
 }
+
+/**
+ * THE ALERT BAND HAS TO BE REACHABLE TOO, AND NOTHING CHECKED THAT.
+ *
+ * The assertion above proves `stopped` can be reached by dragging the cap under spend. `alert` is a
+ * narrower target — it needs a cap inside [spend, spend / (alert_pct/100)], which at these fixtures
+ * is roughly $122–$152 — and nothing established that any cap in the declared range lands in it. A
+ * band that is empty produces a control that jumps straight from `under` to `stopped`, so one of the
+ * three states the console now renders would be dead on arrival, silently and with nothing failing.
+ *
+ * Checked by walking the actual slider positions rather than by re-deriving the arithmetic: the
+ * control moves in steps of 10 between min and max, so this asks whether any position a person can
+ * actually stop on produces an alert. Re-deriving the bounds would prove a property of the formula;
+ * walking the steps proves a property of the control.
+ */
+const CAP_STEP = 10;
+if (capRange) {
+  let alertReachable = false;
+  let stoppedReachable = false;
+  for (let cap = capRange.min; cap <= capRange.max; cap += CAP_STEP) {
+    const state = budgetStateAt(
+      posture.spent,
+      cap,
+      fixtures.settings.budget.alert_pct,
+      fixtures.settings.budget.stop_pct,
+    );
+    if (state === 'alert') alertReachable = true;
+    if (state === 'stopped') stoppedReachable = true;
+  }
+  check('a cap on the slider reaches the alert band', alertReachable,
+    `no multiple of ${CAP_STEP} in ${capRange.min}–${capRange.max} alerts at spend ${posture.spent.toFixed(2)}`);
+  check('a cap on the slider reaches the stop band', stoppedReachable);
+}
+
+/** An inverted pair makes `alert` unreachable at every cap, because `budgetStateAt` tests the stop
+ *  threshold first. The values are tunable, so the ordering is an invariant rather than a given. */
+check('the alert threshold sits below the stop threshold',
+  fixtures.settings.budget.alert_pct < fixtures.settings.budget.stop_pct,
+  `alert ${fixtures.settings.budget.alert_pct} vs stop ${fixtures.settings.budget.stop_pct}`);
+
+/** The posture carries the thresholds it judged against, so a banner composing "pauses at 100%"
+ *  reads the number the decision actually used rather than a second copy from Settings. */
+check('the posture reports the thresholds it used',
+  posture.alert_pct === fixtures.settings.budget.alert_pct &&
+    posture.stop_pct === fixtures.settings.budget.stop_pct);
+
+/** `budgetStateAt` is the single rule, used by `budgetPosture` and by the Settings preview. If the
+ *  two ever disagree the preview lies about what saving would do — which is the one thing a preview
+ *  must not do. Asserted at the live cap rather than trusted. */
+check('the shared state rule agrees with the computed posture',
+  budgetStateAt(posture.spent, posture.cap, posture.alert_pct, posture.stop_pct) === posture.state);
 
 /** Same purity rule as every other transition: the function is handed the world and must not
  *  write to it. `budget` is a nested object, so a naive field write would reach through the

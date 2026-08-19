@@ -8,10 +8,15 @@
  * "tone, thresholds, approval rules, escalation triggers" — and D-018/D-044 add the guardrail rule
  * list and the auto-approve toggle on top because both are required elsewhere (A-09, A-16) and
  * both cost little once the seam exists. Cadence, domain allowlists, entities, terminology, the
- * weekend contact, budget cap and the reflection-rule history all have real fields on `Settings`
- * and are all left out on purpose — v1 built most of them and the microcopy pass (D-052) found the
- * result was nine panels doing nothing else was graded on. `getSettingsScreen()` still returns
+ * weekend contact and the reflection-rule history all have real fields on `Settings` and are all
+ * left out on purpose — v1 built most of them and the microcopy pass (D-052) found the result was
+ * nine panels doing nothing else was graded on. `getSettingsScreen()` still returns
  * `reflectionRules` and `evidence` for exactly that reason and neither is read here.
+ *
+ * The budget cap was on that cut list for one step and has been added back — see the block comment
+ * above `BudgetSection`. It does not belong with the others: cutting it made two of the three
+ * `BudgetState` values unreachable in the running product, which is a different kind of thing from
+ * declining to render a terminology list.
  *
  * ---------------------------------------------------------------------------------------------
  * FIXED CONTROLS STAY LIVE, NOT DISABLED (D-047, extended)
@@ -54,6 +59,8 @@ import type {
   GuardrailRule,
   Settings,
 } from '@/lib/types';
+import { budgetStateAt, type BudgetPosture } from '@/lib/budget';
+import { BudgetLine, BudgetNotice } from '@/components/BudgetNotice';
 import { formatDate } from '@/lib/time';
 
 const CHANNEL_LABEL: Record<string, string> = { linkedin: 'LinkedIn', x: 'X' };
@@ -200,6 +207,8 @@ export default function SettingsPage() {
         say={say}
         onSaved={load}
       />
+
+      <BudgetSection settings={data.settings} budget={data.budget} say={say} onSaved={load} />
 
       <RuleSection
         title="Approval rules"
@@ -463,6 +472,107 @@ function ThresholdSection({
             ))}
           </ul>
         )}
+      </div>
+    </section>
+  );
+}
+
+/* ================================================================================================
+ * BUDGET CAP — the control that makes the admission gate reachable
+ *
+ * ADDED AFTER THIS SCREEN SHIPPED WITHOUT IT, AND THE OMISSION WAS A REAL MISTAKE.
+ *
+ * The first version of Settings listed `budget.cap` among the fields deliberately left out under
+ * D-044's scope cut, alongside cadence, allowlists and terminology. That grouping was wrong, and
+ * `lib/budget.ts` had already written down why: spend against these fixtures is 30% of the cap, so
+ * no fixture edit reaches the alert or stop bands, and the cap moving is the *only* way a reviewer
+ * can put the system into its own gate. Cutting it did not trim a settings row — it made two of the
+ * three `BudgetState` values unreachable in the running product, which would have left the console
+ * and Results rendering states nobody could ever produce.
+ *
+ * The other cuts stand: none of them gates a behaviour the architecture spends a frame on.
+ *
+ * THE PREVIEW CALLS THE SAME FUNCTION THE COMMITTED POSTURE DOES. `budgetStateAt` is exported from
+ * `lib/budget.ts` and used both here and inside `budgetPosture`, so "what this cap would do" and
+ * "what this cap did" cannot drift. Re-deriving the comparison locally is the version that is right
+ * on the day it is written and silently wrong the first time a threshold moves.
+ * ==============================================================================================*/
+
+function BudgetSection({
+  settings,
+  budget,
+  say,
+  onSaved,
+}: {
+  settings: Settings;
+  budget: BudgetPosture;
+  say: (text: string, bad?: boolean) => void;
+  onSaved: () => void;
+}) {
+  const range = settings.field_meta['budget.cap']?.range ?? { min: 50, max: 2000 };
+  const [value, setValue] = useState(settings.budget.cap);
+  const [saving, setSaving] = useState(false);
+
+  /** The posture this cap would produce, through the same function that produced the live one. */
+  const pending: BudgetPosture = {
+    ...budget,
+    cap: value,
+    pct: value === 0 ? 0 : (budget.spent / value) * 100,
+    state: budgetStateAt(budget.spent, value, budget.alert_pct, budget.stop_pct),
+  };
+
+  async function save() {
+    setSaving(true);
+    try {
+      await updateSettings({ kind: 'budget_cap', value });
+      say(`Monthly cap set to $${value}.`);
+      onSaved();
+    } catch (e) {
+      say(reasonFrom(e, 'That did not go through. Nothing was changed.'), true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="section">
+      <h2 className="t-section">Monthly budget</h2>
+      <div className="panel" style={{ padding: '16px 18px' }}>
+        <BudgetLine budget={pending} />
+
+        <div className="field-row" style={{ marginTop: 14 }}>
+          <input
+            type="range"
+            className="rng"
+            min={range.min}
+            max={range.max}
+            step={10}
+            value={value}
+            onChange={(e) => setValue(Number(e.target.value))}
+            aria-label="Monthly cap"
+          />
+          <span className="t-metric" style={{ width: 76 }}>
+            ${value}
+          </span>
+          <button
+            type="button"
+            className="btn"
+            disabled={saving || value === settings.budget.cap}
+            onClick={() => void save()}
+          >
+            {saving ? '…' : 'Save'}
+          </button>
+        </div>
+
+        {pending.state !== budget.state && (
+          <p className="preview-line" style={{ marginTop: 10 }}>
+            Saving this would move the gate from {budget.state} to {pending.state}.
+          </p>
+        )}
+
+        <div style={{ marginTop: 12 }}>
+          <BudgetNotice budget={pending} />
+        </div>
       </div>
     </section>
   );

@@ -50,7 +50,39 @@ export type BudgetPosture = {
   period_start: MinutesFromAnchor;
   /** How many steps the sum is over, so the figure is auditable rather than asserted. */
   sample_n: number;
+  /**
+   * The two thresholds this posture was judged against, carried rather than left in Settings for
+   * a renderer to fetch separately.
+   *
+   * Same reasoning as `DraftDetail.threshold`, which carries the score bar so the detail view can
+   * say "below the 0.85 bar" instead of printing a bare number: a banner saying "new work pauses
+   * at 100%" is composing a sentence from a value, and the value has to travel with the posture or
+   * the sentence is a literal typed next to a number it does not come from.
+   */
+  alert_pct: number;
+  stop_pct: number;
 };
+
+/**
+ * The gate rule itself, extracted so it has exactly one home.
+ *
+ * The Settings cap slider has to answer "what would this cap do" *before* the write lands, which
+ * means the preview and the committed posture are two calls that must never disagree. Re-deriving
+ * `pct >= stop ? … : pct >= alert ? …` inside the settings screen is the version of that which is
+ * correct on the day it is written and silently wrong the first time a threshold moves.
+ *
+ * Ordered stop-first: at a cap below spend both comparisons are true, and `stopped` is the
+ * answer — a system that has blown its cap is not merely alerting.
+ */
+export function budgetStateAt(
+  spent: number,
+  cap: number,
+  alertPct: number,
+  stopPct: number,
+): BudgetState {
+  const pct = cap === 0 ? 0 : (spent / cap) * 100;
+  return pct >= stopPct ? 'stopped' : pct >= alertPct ? 'alert' : 'under';
+}
 
 /**
  * Live spend = the carried-forward opening balance + every step cost since the period began.
@@ -74,11 +106,13 @@ export function budgetPosture(world: FixtureSet): BudgetPosture {
   const pct = cap === 0 ? 0 : (spent / cap) * 100;
 
   return {
-    state: pct >= stop_pct ? 'stopped' : pct >= alert_pct ? 'alert' : 'under',
+    state: budgetStateAt(spent, cap, alert_pct, stop_pct),
     cap,
     spent,
     pct,
     period_start: since,
     sample_n: steps.length,
+    alert_pct,
+    stop_pct,
   };
 }

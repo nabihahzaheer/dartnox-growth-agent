@@ -43,6 +43,7 @@ import {
 } from '@/lib/metrics';
 import { getBudget, getWorld, subscribeToWorld } from '@/lib/agentClient';
 import { metricDescriptors } from '@/fixtures/metricDescriptors';
+import { BudgetLine, BudgetNotice } from '@/components/BudgetNotice';
 import { formatDate } from '@/lib/time';
 import type { BudgetPosture } from '@/lib/budget';
 import type { FixtureSet, GuardrailEvent, MetricResult } from '@/lib/types';
@@ -297,9 +298,29 @@ function Loaded({
         )}
       </div>
 
-      <p className="trace-foot mono" style={{ marginTop: 16 }}>
-        spend ${budget.spent.toFixed(2)} / {budget.cap} · {budget.state}
+      {/**
+       * WAS: `spend $121.59 / 400 · under` in monospace.
+       *
+       * Three defects in one line. It printed `budget.state` raw, so the screen showed an operator
+       * the enum member `under` — the same "a code is not a sentence" defect the approvals queue's
+       * `PARK_LABEL` map exists to prevent. It gave the two numbers no relationship, so nothing said
+       * whether 121.59 of 400 was comfortable or nearly spent. And it rendered identically in all
+       * three states, which made the gate's whole asymmetric branch invisible on the one screen
+       * whose job is reporting on the system.
+       */}
+      <p className="sec">
+        Budget <span className="sec-n">the admission gate</span>
       </p>
+      <div className="panel" style={{ padding: '15px 18px' }}>
+        <BudgetLine budget={budget} />
+        <p className="t-meta" style={{ margin: '9px 0 0' }}>
+          Alerts at {budget.alert_pct}%, pauses new planning and drafting at {budget.stop_pct}%.
+          Summed over {budget.sample_n} steps since {formatDate(budget.period_start)}.
+        </p>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <BudgetNotice budget={budget} />
+      </div>
     </>
   );
 }

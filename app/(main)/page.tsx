@@ -32,6 +32,7 @@ import {
 import type { GuardrailRule, RunStep, Settings } from '@/lib/types';
 import { DraftCard } from '@/components/console/DraftCard';
 import { StepTimeline } from '@/components/console/StepTimeline';
+import { BudgetNotice } from '@/components/BudgetNotice';
 
 type Loaded = {
   batch: Batch;
@@ -135,6 +136,10 @@ export default function ConsolePage() {
         <AgentLine batch={batch} waitingCount={waiting.length} blockedCount={blocked.length} />
       </PageHead>
 
+      {/** Above the batch, not inside it: at `stopped` the gate is the reason the batch looks the
+       *   way it does, so it has to be readable before the progress bar rather than after it. */}
+      <BudgetNotice budget={batch.budget} />
+
       <section className="batch panel">
         <div className="batch-top">
           <h2 className="batch-title">Wednesday drafting batch</h2>
@@ -156,9 +161,13 @@ export default function ConsolePage() {
           <span className="chip mono">
             settings <b>{settings.current_version_id}</b>
           </span>
-          <span className="chip mono">
-            spend <b>${batch.budget.spent.toFixed(2)}</b> / {batch.budget.cap}
-          </span>
+          {/**
+           * The spend chip that used to sit here is gone, deliberately. `lib/budget.ts` states the
+           * rule in its own type comment — `under` renders nothing anywhere, because a console
+           * carrying a permanent budget strip spends its best pixels on a number that is fine
+           * almost always. `BudgetNotice` above speaks up at the alert and stop thresholds and is
+           * silent otherwise; Results and Settings carry the standing figure.
+           */}
         </p>
 
         <div className="batch-prog">
